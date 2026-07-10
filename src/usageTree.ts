@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { UsageManager } from './usageManager';
 import type { UsageSnapshot, UsageWindow } from './usageTypes';
-import { formatResetDescription } from './usageFormatting';
+import { formatResetDescription, selectStatusWindow } from './usageFormatting';
 
 type UsageTreeValue =
   | { readonly kind: 'provider'; readonly snapshot: UsageSnapshot }
@@ -113,17 +113,18 @@ export class UsageStatusBar implements vscode.Disposable {
   private render(): void {
     const values = this.manager.list();
     const pieces = values.map((snapshot) => {
-      const highest = [...snapshot.windows].sort(
-        (a, b) => b.usedPercent - a.usedPercent
-      )[0];
-      if (!highest) {
+      const window = selectStatusWindow(snapshot);
+      if (!window) {
         return `${title(snapshot.provider)} —`;
       }
-      return `${title(snapshot.provider)} ${Math.round(highest.usedPercent)}%`;
+      return `${title(snapshot.provider)} ${Math.round(window.usedPercent)}%`;
     });
     const highestUsage = Math.max(
       0,
-      ...values.flatMap((snapshot) => snapshot.windows.map((window) => window.usedPercent))
+      ...values.flatMap((snapshot) => {
+        const window = selectStatusWindow(snapshot);
+        return window ? [window.usedPercent] : [];
+      })
     );
     this.item.text = `$(dashboard) ${pieces.join(' · ')}`;
     this.item.tooltip = 'Parful usage limits — click to open the cockpit';
