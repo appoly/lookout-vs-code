@@ -38,9 +38,9 @@ Sources: [VS Code terminal API](https://code.visualstudio.com/api/references/vsc
 
 ## Attention bridge
 
-Stable VS Code APIs do not allow an extension to inspect arbitrary interactive terminal scrollback. Parsing it would also be fragile and invasive. `src/attentionServer.ts` instead starts a loopback-only HTTP endpoint with a random bearer token. Every MultiTerm terminal receives the session ID, endpoint, and a bundled `notify.js` helper path in its environment.
+Stable VS Code APIs do not allow an extension to inspect arbitrary interactive terminal scrollback. Parsing it would also be fragile and invasive. `src/attentionServer.ts` instead starts a loopback-only HTTP endpoint with a random bearer token. Every Paraterm terminal receives the session ID, endpoint, and a bundled `notify.js` helper path in its environment.
 
-An agent hook can run the value copied by **MultiTerm: Copy Attention Hook Command**, for example:
+Claude sessions launched directly by Paraterm receive session-only `UserPromptSubmit`, `Notification`, `Stop`, and `StopFailure` hooks through their temporary `--settings` file. These report running, permission/idle attention, completion, and failure without modifying global Claude settings. Other agents can run the value copied by **Paraterm: Copy Attention Hook Command**, for example:
 
 ```bash
 node "$MULTITERM_NOTIFY_HELPER" attention "Please approve the database migration"

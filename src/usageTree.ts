@@ -97,7 +97,7 @@ export class UsageStatusBar implements vscode.Disposable {
   private readonly subscription: vscode.Disposable;
 
   public constructor(private readonly manager: UsageManager) {
-    this.item.name = 'MultiTerm Usage Limits';
+    this.item.name = 'Paraterm Usage Limits';
     this.item.command = 'workbench.view.extension.multiTerm';
     this.subscription = manager.onDidChange(() => this.render());
     this.render();
@@ -125,7 +125,7 @@ export class UsageStatusBar implements vscode.Disposable {
       ...values.flatMap((snapshot) => snapshot.windows.map((window) => window.usedPercent))
     );
     this.item.text = `$(dashboard) ${pieces.join(' · ')}`;
-    this.item.tooltip = 'MultiTerm usage limits — click to open the cockpit';
+    this.item.tooltip = 'Paraterm usage limits — click to open the cockpit';
     this.item.backgroundColor =
       highestUsage >= criticalThreshold()
         ? new vscode.ThemeColor('statusBarItem.errorBackground')

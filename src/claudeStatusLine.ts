@@ -1,24 +1,10 @@
 import { request } from 'node:http';
-
-interface ClaudeWindow {
-  readonly used_percentage?: number;
-  readonly resets_at?: number;
-}
-
-interface ClaudeStatusInput {
-  readonly rate_limits?: {
-    readonly five_hour?: ClaudeWindow;
-    readonly seven_day?: ClaudeWindow;
-  };
-}
+import { formatClaudeUsage, normalizeClaudeUsage } from './claudeUsage';
 
 async function main(): Promise<void> {
   const input = await readStdin();
-  const parsed = JSON.parse(input) as ClaudeStatusInput;
-  const windows = [
-    normalizeWindow('five_hour', '5 hour', 300, parsed.rate_limits?.five_hour),
-    normalizeWindow('seven_day', '7 day', 10080, parsed.rate_limits?.seven_day)
-  ].filter((value) => value !== undefined);
+  const parsed: unknown = JSON.parse(input);
+  const windows = normalizeClaudeUsage(parsed);
 
   if (windows.length > 0) {
     await postUsage({
@@ -27,29 +13,7 @@ async function main(): Promise<void> {
       windows
     });
   }
-  process.stdout.write(
-    windows.length > 0
-      ? `Claude · ${windows.map((window) => `${window.label} ${Math.round(window.usedPercent)}%`).join(' · ')}`
-      : 'Claude · usage waiting for first response'
-  );
-}
-
-function normalizeWindow(
-  id: string,
-  label: string,
-  windowMinutes: number,
-  value: ClaudeWindow | undefined
-): { id: string; label: string; usedPercent: number; resetsAt?: number; windowMinutes: number } | undefined {
-  if (!value || typeof value.used_percentage !== 'number') {
-    return undefined;
-  }
-  return {
-    id,
-    label,
-    usedPercent: Math.max(0, Math.min(100, value.used_percentage)),
-    windowMinutes,
-    ...(typeof value.resets_at === 'number' ? { resetsAt: value.resets_at } : {})
-  };
+  process.stdout.write(formatClaudeUsage(windows));
 }
 
 async function postUsage(body: object): Promise<void> {

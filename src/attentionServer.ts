@@ -10,6 +10,8 @@ const EVENT_STATUSES = new Set<SessionStatus>([
   'completed',
   'failed'
 ]);
+const MAX_BODY_BYTES = 64 * 1024;
+const REQUEST_TIMEOUT_MS = 5_000;
 
 export interface AttentionEndpoint {
   readonly url: string;
@@ -19,7 +21,7 @@ export interface AttentionEndpoint {
 export class AttentionServer {
   private server: Server | undefined;
   private endpointValue: AttentionEndpoint | undefined;
-  private readonly token = randomBytes(24).toString('hex');
+  private token = createToken();
 
   public constructor(
     private readonly onEvent: (event: AgentEvent) => void,
@@ -33,11 +35,44 @@ export class AttentionServer {
     return this.endpointValue;
   }
 
-  public async start(): Promise<AttentionEndpoint> {
+  public async start(preferred?: AttentionEndpoint): Promise<AttentionEndpoint> {
     if (this.endpointValue) {
       return this.endpointValue;
     }
 
+    let preferredPort = 0;
+    if (preferred && isReusableEndpoint(preferred)) {
+      preferredPort = Number(new URL(preferred.url).port);
+      this.token = preferred.token;
+    }
+
+    try {
+      await this.listen(preferredPort);
+    } catch (error) {
+      if (!preferredPort) {
+        throw error;
+      }
+      this.server?.close();
+      this.server = undefined;
+      this.token = createToken();
+      await this.listen(0);
+    }
+
+    const address = this.server?.address() as AddressInfo;
+    this.endpointValue = {
+      url: `http://127.0.0.1:${address.port}/events`,
+      token: this.token
+    };
+    return this.endpointValue;
+  }
+
+  public dispose(): void {
+    this.server?.close();
+    this.server = undefined;
+    this.endpointValue = undefined;
+  }
+
+  private async listen(port: number): Promise<void> {
     this.server = createServer((request, response) => {
       if (
         request.method !== 'POST' ||
@@ -49,8 +84,26 @@ export class AttentionServer {
       }
 
       const chunks: Buffer[] = [];
-      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      let size = 0;
+      let rejected = false;
+      request.setTimeout(REQUEST_TIMEOUT_MS, () => request.destroy());
+      request.on('data', (chunk: Buffer) => {
+        if (rejected) {
+          return;
+        }
+        size += chunk.length;
+        if (size > MAX_BODY_BYTES) {
+          rejected = true;
+          response.writeHead(413).end();
+          request.destroy();
+          return;
+        }
+        chunks.push(chunk);
+      });
       request.on('end', () => {
+        if (rejected) {
+          return;
+        }
         try {
           const value: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
           if (request.url === '/usage') {
@@ -64,24 +117,13 @@ export class AttentionServer {
         }
       });
     });
+    this.server.requestTimeout = REQUEST_TIMEOUT_MS;
+    this.server.headersTimeout = REQUEST_TIMEOUT_MS;
 
     await new Promise<void>((resolve, reject) => {
       this.server?.once('error', reject);
-      this.server?.listen(0, '127.0.0.1', () => resolve());
+      this.server?.listen(port, '127.0.0.1', () => resolve());
     });
-
-    const address = this.server.address() as AddressInfo;
-    this.endpointValue = {
-      url: `http://127.0.0.1:${address.port}/events`,
-      token: this.token
-    };
-    return this.endpointValue;
-  }
-
-  public dispose(): void {
-    this.server?.close();
-    this.server = undefined;
-    this.endpointValue = undefined;
   }
 }
 
@@ -111,6 +153,9 @@ function parseUsageEvent(value: unknown): UsageBridgeEvent {
   if (!isRecord(value) || value.provider !== 'claude' || !Array.isArray(value.windows)) {
     throw new Error('Invalid usage event');
   }
+  if (value.windows.length > 16) {
+    throw new Error('Too many usage windows');
+  }
   const windows = value.windows.map(parseUsageWindow);
   return {
     provider: 'claude',
@@ -129,10 +174,29 @@ function parseUsageWindow(value: unknown): UsageWindow {
     throw new Error('Invalid usage window');
   }
   return {
-    id: value.id,
-    label: value.label,
+    id: value.id.slice(0, 80),
+    label: value.label.slice(0, 80),
     usedPercent: Math.max(0, Math.min(100, value.usedPercent)),
     ...(typeof value.resetsAt === 'number' ? { resetsAt: value.resetsAt } : {}),
     ...(typeof value.windowMinutes === 'number' ? { windowMinutes: value.windowMinutes } : {})
   };
+}
+
+function createToken(): string {
+  return randomBytes(24).toString('hex');
+}
+
+function isReusableEndpoint(endpoint: AttentionEndpoint): boolean {
+  try {
+    const url = new URL(endpoint.url);
+    return (
+      url.protocol === 'http:' &&
+      url.hostname === '127.0.0.1' &&
+      Number.isInteger(Number(url.port)) &&
+      Number(url.port) > 0 &&
+      /^[a-f0-9]{48}$/.test(endpoint.token)
+    );
+  } catch {
+    return false;
+  }
 }

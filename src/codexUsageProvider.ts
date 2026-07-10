@@ -42,6 +42,7 @@ export class CodexUsageProvider {
     { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }
   >();
   private lastError = '';
+  private refreshPromise: Promise<void> | undefined;
 
   public constructor(
     private readonly executable: string,
@@ -53,6 +54,8 @@ export class CodexUsageProvider {
       return;
     }
     this.onSnapshot(waitingSnapshot('Starting Codex usage service…'));
+    this.stdoutBuffer = '';
+    this.lastError = '';
     try {
       const child = spawn(this.executable, ['app-server', '--stdio'], {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -80,20 +83,33 @@ export class CodexUsageProvider {
       await this.request('initialize', {
         clientInfo: {
           name: 'multi-term-vscode',
-          title: 'MultiTerm Agent Cockpit',
+          title: 'Paraterm Agent Cockpit',
           version: '0.1.0'
         },
         capabilities: { experimentalApi: false }
       });
       this.send({ method: 'initialized' });
       this.initialized = true;
-      await this.refresh();
+      await this.readRateLimits();
     } catch (error) {
       this.handleProcessError(error instanceof Error ? error : new Error(String(error)));
     }
   }
 
-  public async refresh(): Promise<void> {
+  public refresh(): Promise<void> {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+    const operation = this.performRefresh().finally(() => {
+      if (this.refreshPromise === operation) {
+        this.refreshPromise = undefined;
+      }
+    });
+    this.refreshPromise = operation;
+    return operation;
+  }
+
+  private async performRefresh(): Promise<void> {
     if (!this.process) {
       await this.start();
       return;
@@ -101,6 +117,10 @@ export class CodexUsageProvider {
     if (!this.initialized) {
       return;
     }
+    await this.readRateLimits();
+  }
+
+  private async readRateLimits(): Promise<void> {
     try {
       const result = (await this.request(
         'account/rateLimits/read',
@@ -108,9 +128,7 @@ export class CodexUsageProvider {
       )) as RateLimitResponsePayload;
       this.onSnapshot(normalizeRateLimits(result));
     } catch (error) {
-      this.onSnapshot(
-        errorSnapshot(error instanceof Error ? error.message : String(error))
-      );
+      this.onSnapshot(codexErrorSnapshot(error));
     }
   }
 
@@ -182,9 +200,11 @@ export class CodexUsageProvider {
   }
 
   private handleProcessError(error: Error): void {
+    const child = this.process;
     this.process = undefined;
     this.initialized = false;
     this.rejectPending(error);
+    child?.kill();
     const unsupported = error.message.includes('ENOENT');
     this.onSnapshot({
       provider: 'codex',
@@ -205,7 +225,9 @@ export class CodexUsageProvider {
   }
 }
 
-function normalizeRateLimits(payload: RateLimitResponsePayload): UsageSnapshot {
+export function normalizeRateLimits(
+  payload: RateLimitResponsePayload
+): UsageSnapshot {
   const entries = payload.rateLimitsByLimitId
     ? Object.entries(payload.rateLimitsByLimitId)
     : payload.rateLimits
@@ -261,7 +283,7 @@ function appendWindow(
   target.push({
     id,
     label,
-    usedPercent: value.usedPercent,
+    usedPercent: Math.max(0, Math.min(100, value.usedPercent)),
     ...(typeof value.resetsAt === 'number' ? { resetsAt: value.resetsAt } : {}),
     ...(typeof value.windowDurationMins === 'number'
       ? { windowMinutes: value.windowDurationMins }
@@ -306,6 +328,27 @@ function errorSnapshot(detail: string): UsageSnapshot {
     windows: [],
     detail: cleanError(detail)
   };
+}
+
+export function codexErrorSnapshot(error: unknown): UsageSnapshot {
+  const detail = cleanError(
+    error instanceof Error ? error.message : String(error)
+  );
+  if (
+    /(?:not logged in|login required|authentication|unauthorized|\b401\b|no account)/i.test(
+      detail
+    )
+  ) {
+    return {
+      provider: 'codex',
+      status: 'authRequired',
+      observedAt: Date.now(),
+      source: 'codex-app-server',
+      windows: [],
+      detail: 'Sign in to Codex to see usage limits'
+    };
+  }
+  return errorSnapshot(detail);
 }
 
 function cleanError(value: string): string {

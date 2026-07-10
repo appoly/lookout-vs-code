@@ -1,10 +1,18 @@
 {
-  "name": "multi-term",
-  "displayName": "MultiTerm Agent Cockpit",
+  "name": "paraterm",
+  "displayName": "Paraterm Agent Cockpit",
   "description": "Run and review multiple terminal coding agents without leaving VS Code.",
   "version": "0.1.0",
   "publisher": "adamh",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adamhulme/paraterm-vs-code.git"
+  },
+  "homepage": "https://github.com/adamhulme/paraterm-vs-code#readme",
+  "bugs": {
+    "url": "https://github.com/adamhulme/paraterm-vs-code/issues"
+  },
   "engines": {
     "vscode": "^1.96.0"
   },
@@ -23,15 +31,21 @@
   "main": "./out/src/extension.js",
   "capabilities": {
     "untrustedWorkspaces": {
-      "supported": false,
-      "description": "Launching configured terminal commands requires a trusted workspace."
+      "supported": "limited",
+      "description": "Review and usage views remain available; launching configured terminal commands requires a trusted workspace.",
+      "restrictedConfigurations": [
+        "multiTerm.codex.command",
+        "multiTerm.claude.command",
+        "multiTerm.usage.codex.executable"
+      ]
     }
   },
   "files": [
-    "out/**",
+    "out/src/**",
     "resources/**",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -41,12 +55,14 @@
     "clean": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\"",
     "lint": "eslint src test",
     "test": "npm run compile && node --test out/test/**/*.test.js",
-    "check": "npm run lint && npm test"
+    "check": "npm run lint && npm test",
+    "vsix": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@eslint/js": "^9.31.0",
     "@types/node": "^24.0.13",
     "@types/vscode": "^1.96.0",
+    "@vscode/vsce": "^3.9.2",
     "eslint": "^9.31.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.37.0"
@@ -56,99 +72,127 @@
       {
         "command": "multiTerm.launchCodex",
         "title": "Launch Codex Agent",
-        "category": "MultiTerm",
+        "category": "Paraterm",
         "icon": "$(add)"
       },
       {
         "command": "multiTerm.launchClaude",
         "title": "Launch Claude Code Agent",
-        "category": "MultiTerm",
+        "category": "Paraterm",
         "icon": "$(add)"
       },
       {
         "command": "multiTerm.launchCustom",
         "title": "Launch Custom Agent",
-        "category": "MultiTerm"
+        "category": "Paraterm"
       },
       {
         "command": "multiTerm.splitCodex",
         "title": "Split with Codex",
-        "category": "MultiTerm"
+        "category": "Paraterm"
       },
       {
         "command": "multiTerm.splitClaude",
         "title": "Split with Claude Code",
-        "category": "MultiTerm"
+        "category": "Paraterm"
+      },
+      {
+        "command": "multiTerm.splitSession",
+        "title": "Split with Same Agent",
+        "category": "Paraterm",
+        "icon": "$(split-horizontal)"
       },
       {
         "command": "multiTerm.focusSession",
         "title": "Focus Agent",
-        "category": "MultiTerm"
+        "category": "Paraterm"
       },
       {
         "command": "multiTerm.renameSession",
         "title": "Rename Agent",
-        "category": "MultiTerm"
+        "category": "Paraterm"
       },
       {
         "command": "multiTerm.closeSession",
         "title": "Close Agent",
-        "category": "MultiTerm"
+        "category": "Paraterm"
       },
       {
         "command": "multiTerm.markNeedsAttention",
         "title": "Mark as Needs Attention",
-        "category": "MultiTerm"
+        "category": "Paraterm"
       },
       {
         "command": "multiTerm.restartSession",
         "title": "Restart Agent Command",
-        "category": "MultiTerm"
+        "category": "Paraterm"
       },
       {
         "command": "multiTerm.copyNotifyCommand",
         "title": "Copy Attention Hook Command",
-        "category": "MultiTerm"
+        "category": "Paraterm"
       },
       {
         "command": "multiTerm.focusNextAttention",
         "title": "Focus Next Agent Needing Attention",
-        "category": "MultiTerm"
+        "category": "Paraterm"
+      },
+      {
+        "command": "multiTerm.pickSession",
+        "title": "Focus Agent…",
+        "category": "Paraterm",
+        "icon": "$(list-selection)"
+      },
+      {
+        "command": "multiTerm.focusNextSession",
+        "title": "Focus Next Agent",
+        "category": "Paraterm"
+      },
+      {
+        "command": "multiTerm.focusPreviousSession",
+        "title": "Focus Previous Agent",
+        "category": "Paraterm"
       },
       {
         "command": "multiTerm.refreshSessions",
         "title": "Refresh Agents",
-        "category": "MultiTerm",
+        "category": "Paraterm",
         "icon": "$(refresh)"
       },
       {
         "command": "multiTerm.refreshReview",
         "title": "Refresh Review Items",
-        "category": "MultiTerm",
+        "category": "Paraterm",
         "icon": "$(refresh)"
       },
       {
         "command": "multiTerm.refreshUsage",
         "title": "Refresh Usage Limits",
-        "category": "MultiTerm",
+        "category": "Paraterm",
         "icon": "$(refresh)"
       },
       {
         "command": "multiTerm.openBrowser",
         "title": "Open Browser",
-        "category": "MultiTerm",
+        "category": "Paraterm",
         "icon": "$(globe)"
       },
       {
         "command": "multiTerm.openSourceControl",
         "title": "Open Source Control",
-        "category": "MultiTerm",
+        "category": "Paraterm",
         "icon": "$(git-compare)"
+      },
+      {
+        "command": "multiTerm.runTask",
+        "title": "Run Workspace Task",
+        "category": "Paraterm",
+        "icon": "$(play)"
       },
       {
         "command": "multiTerm.openReviewItem",
         "title": "Open Review Item",
-        "category": "MultiTerm"
+        "category": "Paraterm"
       }
     ],
     "keybindings": [
@@ -177,7 +221,7 @@
       "activitybar": [
         {
           "id": "multiTerm",
-          "title": "MultiTerm",
+          "title": "Paraterm",
           "icon": "resources/multiterm.svg"
         }
       ]
@@ -215,9 +259,14 @@
           "group": "navigation@1"
         },
         {
-          "command": "multiTerm.refreshSessions",
+          "command": "multiTerm.pickSession",
           "when": "view == multiTerm.sessions",
           "group": "navigation@2"
+        },
+        {
+          "command": "multiTerm.refreshSessions",
+          "when": "view == multiTerm.sessions",
+          "group": "navigation@3"
         },
         {
           "command": "multiTerm.openBrowser",
@@ -230,9 +279,14 @@
           "group": "navigation@2"
         },
         {
-          "command": "multiTerm.refreshReview",
+          "command": "multiTerm.runTask",
           "when": "view == multiTerm.review",
           "group": "navigation@3"
+        },
+        {
+          "command": "multiTerm.refreshReview",
+          "when": "view == multiTerm.review",
+          "group": "navigation@4"
         },
         {
           "command": "multiTerm.refreshUsage",
@@ -242,7 +296,7 @@
       ],
       "view/item/context": [
         {
-          "command": "multiTerm.splitCodex",
+          "command": "multiTerm.splitSession",
           "when": "view == multiTerm.sessions && viewItem == multiTerm.session",
           "group": "inline@1"
         },
@@ -274,7 +328,7 @@
       ]
     },
     "configuration": {
-      "title": "MultiTerm",
+      "title": "Paraterm",
       "properties": {
         "multiTerm.codex.command": {
           "type": "string",
@@ -309,6 +363,11 @@
           "default": true,
           "description": "Show a VS Code notification when a background agent hook requests attention."
         },
+        "multiTerm.notifyOnTurnComplete": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a VS Code notification when a background agent hook reports a completed or failed turn."
+        },
         "multiTerm.usage.codex.executable": {
           "type": "string",
           "default": "codex",
@@ -317,7 +376,7 @@
         "multiTerm.usage.claude.statusLineIntegration": {
           "type": "boolean",
           "default": true,
-          "description": "Add a MultiTerm status-line bridge to extension-launched Claude sessions so subscription limits can be tracked."
+          "description": "Add a Paraterm status-line bridge to extension-launched Claude sessions so subscription limits can be tracked."
         },
         "multiTerm.usage.warningThreshold": {
           "type": "number",

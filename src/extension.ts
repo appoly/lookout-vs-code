@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ReviewTreeItem, ReviewTreeProvider } from './reviewTree';
@@ -9,16 +10,15 @@ import { UsageStatusBar, UsageTreeProvider } from './usageTree';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const sessions = new SessionManager(context);
+  context.subscriptions.push(sessions);
   await sessions.initialize();
   const sessionTree = new SessionTreeProvider(sessions);
-  const reviewTree = new ReviewTreeProvider();
-  await reviewTree.initialize();
+  const reviewTree = new ReviewTreeProvider(sessions);
   const usage = new UsageManager(context, sessions);
   const usageTree = new UsageTreeProvider(usage);
   const usageStatus = new UsageStatusBar(usage);
 
   context.subscriptions.push(
-    sessions,
     sessionTree,
     reviewTree,
     usage,
@@ -26,6 +26,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     usageStatus,
     vscode.window.registerTreeDataProvider('multiTerm.sessions', sessionTree),
     vscode.window.registerTreeDataProvider('multiTerm.review', reviewTree),
+    vscode.workspace.registerTextDocumentContentProvider(
+      'multiterm-baseline',
+      reviewTree
+    ),
     vscode.window.registerTreeDataProvider('multiTerm.usage', usageTree),
     register('multiTerm.launchCodex', () => launchAgent(sessions, 'codex')),
     register('multiTerm.launchClaude', () => launchAgent(sessions, 'claude')),
@@ -36,14 +40,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     register('multiTerm.splitClaude', (item?: SessionTreeItem) =>
       launchAgent(sessions, 'claude', sessionId(item))
     ),
+    register('multiTerm.splitSession', (item?: SessionTreeItem) =>
+      splitSession(sessions, item)
+    ),
     register('multiTerm.focusSession', (item?: SessionTreeItem) => {
       const id = sessionId(item);
       return id ? sessions.focus(id) : undefined;
     }),
     register('multiTerm.focusNextAttention', () => sessions.focusNextAttention()),
+    register('multiTerm.pickSession', () => pickSession(sessions)),
+    register('multiTerm.focusNextSession', () => sessions.focusAdjacent(1)),
+    register('multiTerm.focusPreviousSession', () => sessions.focusAdjacent(-1)),
     register('multiTerm.renameSession', async (item?: SessionTreeItem) => {
       const id = sessionId(item);
-      const session = id ? sessions.get(id) : undefined;
+      if (!id) {
+        return;
+      }
+      const session = sessions.get(id);
       if (!session) {
         return;
       }
@@ -76,19 +89,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (command) {
         await vscode.env.clipboard.writeText(command);
         void vscode.window.showInformationMessage('Agent attention hook command copied.');
+      } else {
+        void vscode.window.showWarningMessage(
+          'This restored terminal is not connected to the current attention bridge. Launch a new session to use hooks.'
+        );
       }
     }),
     register('multiTerm.refreshSessions', () => sessionTree.refresh()),
     register('multiTerm.refreshReview', () => reviewTree.refresh()),
     register('multiTerm.refreshUsage', () => usage.refresh()),
-    register('multiTerm.openReviewItem', (item?: ReviewTreeItem) => openReviewItem(item)),
+    register('multiTerm.openReviewItem', (item?: ReviewTreeItem) =>
+      item ? reviewTree.open(item) : undefined
+    ),
     register('multiTerm.openSourceControl', () =>
       vscode.commands.executeCommand('workbench.view.scm')
     ),
+    register('multiTerm.runTask', () => runWorkspaceTask()),
     register('multiTerm.openBrowser', () => openBrowser())
   );
 
-  await usage.initialize();
+  void reviewTree.initialize();
+  usage.initialize();
 }
 
 export function deactivate(): void {}
@@ -146,10 +167,70 @@ async function launchAgent(
   await sessions.launch(request);
 }
 
+async function splitSession(
+  sessions: SessionManager,
+  item: SessionTreeItem | undefined
+): Promise<void> {
+  if (!item || !vscode.workspace.isTrusted) {
+    return;
+  }
+  const session = item.session;
+  if (!session.command) {
+    void vscode.window.showWarningMessage(
+      'This restored custom session did not persist its command. Launch it again instead of splitting it.'
+    );
+    return;
+  }
+  await sessions.launch({
+    kind: session.kind,
+    label: `${session.label} split`,
+    command: session.command,
+    cwd: session.cwd,
+    parentSessionId: session.id
+  });
+}
+
+async function pickSession(sessions: SessionManager): Promise<void> {
+  const candidates = sessions.list().filter((session) => sessions.isOpen(session.id));
+  if (candidates.length === 0) {
+    void vscode.window.showInformationMessage('No agent terminals are open.');
+    return;
+  }
+  const selected = await vscode.window.showQuickPick(
+    candidates.map((session) => ({
+      label: session.label,
+      description: `${session.kind} · ${path.basename(session.cwd)}${
+        session.baseline?.branch ? ` · ${session.baseline.branch}` : ''
+      }`,
+      detail: session.latestEvent ?? session.status,
+      session
+    })),
+    {
+      title: 'Focus Agent',
+      placeHolder: 'Jump directly to an agent terminal'
+    }
+  );
+  if (selected) {
+    await sessions.focus(selected.session.id);
+  }
+}
+
 async function pickWorkingDirectory(): Promise<string | undefined> {
   const folders = vscode.workspace.workspaceFolders ?? [];
   if (folders.length === 0) {
-    return vscode.env.appRoot;
+    const activeUri = vscode.window.activeTextEditor?.document.uri;
+    if (activeUri?.scheme === 'file') {
+      return path.dirname(activeUri.fsPath);
+    }
+    const selected = await vscode.window.showOpenDialog({
+      title: 'Choose the agent working directory',
+      defaultUri: vscode.Uri.file(homedir()),
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: 'Use Folder'
+    });
+    return selected?.[0]?.fsPath;
   }
   if (folders.length === 1) {
     return folders[0].uri.fsPath;
@@ -163,16 +244,6 @@ async function pickWorkingDirectory(): Promise<string | undefined> {
     { title: 'Choose the agent working directory' }
   );
   return choice?.folder.uri.fsPath;
-}
-
-async function openReviewItem(item?: ReviewTreeItem): Promise<void> {
-  if (!item?.uri) {
-    return;
-  }
-  await vscode.commands.executeCommand('vscode.open', item.uri, {
-    viewColumn: vscode.ViewColumn.One,
-    preview: true
-  });
 }
 
 async function openBrowser(): Promise<void> {
@@ -198,10 +269,44 @@ async function openBrowser(): Promise<void> {
   }
   const uri = await vscode.env.asExternalUri(vscode.Uri.parse(value));
   const commands = await vscode.commands.getCommands(true);
-  if (commands.includes('simpleBrowser.show')) {
+  if (commands.includes('workbench.action.browser.open')) {
+    await vscode.commands.executeCommand(
+      'workbench.action.browser.open',
+      uri.toString()
+    );
+  } else if (commands.includes('simpleBrowser.show')) {
     await vscode.commands.executeCommand('simpleBrowser.show', uri.toString());
   } else {
     await vscode.env.openExternal(uri);
+  }
+}
+
+async function runWorkspaceTask(): Promise<void> {
+  if (!vscode.workspace.isTrusted) {
+    void vscode.window.showWarningMessage(
+      'Trust this workspace before running tasks.'
+    );
+    return;
+  }
+  const tasks = await vscode.tasks.fetchTasks();
+  if (tasks.length === 0) {
+    void vscode.window.showInformationMessage('No workspace tasks were found.');
+    return;
+  }
+  const selected = await vscode.window.showQuickPick(
+    tasks.map((task) => ({
+      label: task.name,
+      description: task.source,
+      detail: task.detail,
+      task
+    })),
+    {
+      title: 'Run Workspace Task',
+      placeHolder: 'Choose a VS Code task to run'
+    }
+  );
+  if (selected) {
+    await vscode.tasks.executeTask(selected.task);
   }
 }
 

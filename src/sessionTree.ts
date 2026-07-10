@@ -9,6 +9,7 @@ const STATUS_ICONS: Record<SessionStatus, vscode.ThemeIcon> = {
   attention: new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('list.warningForeground')),
   completed: new vscode.ThemeIcon('pass', new vscode.ThemeColor('charts.green')),
   failed: new vscode.ThemeIcon('error', new vscode.ThemeColor('list.errorForeground')),
+  unknown: new vscode.ThemeIcon('question'),
   closed: new vscode.ThemeIcon('circle-slash')
 };
 
@@ -18,17 +19,15 @@ export class SessionTreeItem extends vscode.TreeItem {
     this.id = session.id;
     this.contextValue = 'multiTerm.session';
     this.description = sessionDescription(session);
-    this.tooltip = new vscode.MarkdownString(
-      [
-        `**${session.label}**`,
-        '',
-        `- Agent: ${session.kind}`,
-        `- Status: ${session.status}`,
-        `- Directory: \`${session.cwd}\``,
-        `- Command: \`${session.command}\``,
-        ...(session.latestEvent ? [`- Latest: ${session.latestEvent}`] : [])
-      ].join('\n')
-    );
+    this.tooltip = [
+      session.label,
+      `Agent: ${session.kind}`,
+      `Status: ${session.status}`,
+      `Directory: ${session.cwd}`,
+      ...(session.baseline ? [`Branch: ${session.baseline.branch}`] : []),
+      `Attention bridge: ${session.bridgeAvailable ? 'connected' : 'unavailable'}`,
+      ...(session.latestEvent ? [`Latest: ${session.latestEvent}`] : [])
+    ].join('\n');
     this.iconPath = STATUS_ICONS[session.status];
     this.command = {
       command: 'multiTerm.focusSession',
@@ -74,5 +73,6 @@ function sessionDescription(session: AgentSession): string {
   const directory = path.basename(session.cwd);
   const unread = session.unread ? '● ' : '';
   const detail = session.latestEvent ?? session.status;
-  return `${unread}${directory} · ${detail}`;
+  const branch = session.baseline?.branch ? ` · ${session.baseline.branch}` : '';
+  return `${unread}${directory}${branch} · ${detail}`;
 }

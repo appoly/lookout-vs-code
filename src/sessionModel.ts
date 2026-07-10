@@ -24,6 +24,7 @@ export function createSession(
     createdAt: now,
     updatedAt: now,
     terminalName: terminalName(id, label),
+    bridgeAvailable: true,
     unread: false
   };
 }
@@ -34,7 +35,7 @@ export function createSessionId(kind: AgentKind, now = Date.now()): string {
 }
 
 export function terminalName(id: string, label: string): string {
-  return `MultiTerm: ${label.trim()} [${id}]`;
+  return `Paraterm: ${label.trim()} [${id}]`;
 }
 
 export function isActiveSession(session: AgentSession): boolean {

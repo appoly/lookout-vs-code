@@ -59,9 +59,9 @@ export class UsageManager implements vscode.Disposable {
     );
   }
 
-  public async initialize(): Promise<void> {
-    await this.codex.start();
+  public initialize(): void {
     this.refreshTimer = setInterval(() => void this.refresh(), 90_000);
+    void this.codex.start();
   }
 
   public list(): readonly UsageSnapshot[] {

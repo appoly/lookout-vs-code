@@ -40,7 +40,7 @@ async function main(): Promise<void> {
         response.resume();
         response.on('end', () => {
           if ((response.statusCode ?? 500) >= 300) {
-            reject(new Error(`MultiTerm notification failed: ${response.statusCode}`));
+            reject(new Error(`Paraterm notification failed: ${response.statusCode}`));
           } else {
             resolve();
           }

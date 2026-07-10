@@ -6,6 +6,7 @@ export type SessionStatus =
   | 'attention'
   | 'completed'
   | 'failed'
+  | 'unknown'
   | 'closed';
 
 export interface AgentSession {
@@ -18,9 +19,18 @@ export interface AgentSession {
   readonly createdAt: number;
   updatedAt: number;
   terminalName: string;
+  bridgeAvailable: boolean;
   unread: boolean;
   latestEvent?: string;
   exitCode?: number;
+  readonly baseline?: GitBaseline;
+}
+
+export interface GitBaseline {
+  readonly repoRoot: string;
+  readonly commit: string;
+  readonly branch: string;
+  readonly capturedAt: number;
 }
 
 export interface AgentEvent {
