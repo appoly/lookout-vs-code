@@ -1,0 +1,78 @@
+import * as path from 'node:path';
+import * as vscode from 'vscode';
+import type { SessionManager } from './sessionManager';
+import type { AgentSession, SessionStatus } from './types';
+
+const STATUS_ICONS: Record<SessionStatus, vscode.ThemeIcon> = {
+  starting: new vscode.ThemeIcon('loading~spin'),
+  running: new vscode.ThemeIcon('play', new vscode.ThemeColor('charts.green')),
+  attention: new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('list.warningForeground')),
+  completed: new vscode.ThemeIcon('pass', new vscode.ThemeColor('charts.green')),
+  failed: new vscode.ThemeIcon('error', new vscode.ThemeColor('list.errorForeground')),
+  closed: new vscode.ThemeIcon('circle-slash')
+};
+
+export class SessionTreeItem extends vscode.TreeItem {
+  public constructor(public readonly session: AgentSession) {
+    super(session.label, vscode.TreeItemCollapsibleState.None);
+    this.id = session.id;
+    this.contextValue = 'multiTerm.session';
+    this.description = sessionDescription(session);
+    this.tooltip = new vscode.MarkdownString(
+      [
+        `**${session.label}**`,
+        '',
+        `- Agent: ${session.kind}`,
+        `- Status: ${session.status}`,
+        `- Directory: \`${session.cwd}\``,
+        `- Command: \`${session.command}\``,
+        ...(session.latestEvent ? [`- Latest: ${session.latestEvent}`] : [])
+      ].join('\n')
+    );
+    this.iconPath = STATUS_ICONS[session.status];
+    this.command = {
+      command: 'multiTerm.focusSession',
+      title: 'Focus Agent',
+      arguments: [this]
+    };
+    this.accessibilityInformation = {
+      label: `${session.label}, ${session.status}${session.unread ? ', unread' : ''}`
+    };
+  }
+}
+
+export class SessionTreeProvider
+  implements vscode.TreeDataProvider<SessionTreeItem>, vscode.Disposable
+{
+  private readonly changedEmitter = new vscode.EventEmitter<void>();
+  private readonly managerSubscription: vscode.Disposable;
+  public readonly onDidChangeTreeData = this.changedEmitter.event;
+
+  public constructor(private readonly manager: SessionManager) {
+    this.managerSubscription = manager.onDidChange(() => this.changedEmitter.fire());
+  }
+
+  public getTreeItem(element: SessionTreeItem): vscode.TreeItem {
+    return element;
+  }
+
+  public getChildren(): SessionTreeItem[] {
+    return this.manager.list().map((session) => new SessionTreeItem(session));
+  }
+
+  public refresh(): void {
+    this.changedEmitter.fire();
+  }
+
+  public dispose(): void {
+    this.managerSubscription.dispose();
+    this.changedEmitter.dispose();
+  }
+}
+
+function sessionDescription(session: AgentSession): string {
+  const directory = path.basename(session.cwd);
+  const unread = session.unread ? '● ' : '';
+  const detail = session.latestEvent ?? session.status;
+  return `${unread}${directory} · ${detail}`;
+}

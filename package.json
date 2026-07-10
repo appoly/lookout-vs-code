@@ -1,0 +1,361 @@
+{
+  "name": "multi-term",
+  "displayName": "MultiTerm Agent Cockpit",
+  "description": "Run and review multiple terminal coding agents without leaving VS Code.",
+  "version": "0.1.0",
+  "publisher": "adamh",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "terminal",
+    "agents",
+    "codex",
+    "claude",
+    "multiplexer"
+  ],
+  "activationEvents": [],
+  "main": "./out/src/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Launching configured terminal commands requires a trusted workspace."
+    }
+  },
+  "files": [
+    "out/**",
+    "resources/**",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "npm run clean && npm run compile",
+    "clean": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\"",
+    "lint": "eslint src test",
+    "test": "npm run compile && node --test out/test/**/*.test.js",
+    "check": "npm run lint && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.31.0",
+    "@types/node": "^24.0.13",
+    "@types/vscode": "^1.96.0",
+    "eslint": "^9.31.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.37.0"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "multiTerm.launchCodex",
+        "title": "Launch Codex Agent",
+        "category": "MultiTerm",
+        "icon": "$(add)"
+      },
+      {
+        "command": "multiTerm.launchClaude",
+        "title": "Launch Claude Code Agent",
+        "category": "MultiTerm",
+        "icon": "$(add)"
+      },
+      {
+        "command": "multiTerm.launchCustom",
+        "title": "Launch Custom Agent",
+        "category": "MultiTerm"
+      },
+      {
+        "command": "multiTerm.splitCodex",
+        "title": "Split with Codex",
+        "category": "MultiTerm"
+      },
+      {
+        "command": "multiTerm.splitClaude",
+        "title": "Split with Claude Code",
+        "category": "MultiTerm"
+      },
+      {
+        "command": "multiTerm.focusSession",
+        "title": "Focus Agent",
+        "category": "MultiTerm"
+      },
+      {
+        "command": "multiTerm.renameSession",
+        "title": "Rename Agent",
+        "category": "MultiTerm"
+      },
+      {
+        "command": "multiTerm.closeSession",
+        "title": "Close Agent",
+        "category": "MultiTerm"
+      },
+      {
+        "command": "multiTerm.markNeedsAttention",
+        "title": "Mark as Needs Attention",
+        "category": "MultiTerm"
+      },
+      {
+        "command": "multiTerm.restartSession",
+        "title": "Restart Agent Command",
+        "category": "MultiTerm"
+      },
+      {
+        "command": "multiTerm.copyNotifyCommand",
+        "title": "Copy Attention Hook Command",
+        "category": "MultiTerm"
+      },
+      {
+        "command": "multiTerm.focusNextAttention",
+        "title": "Focus Next Agent Needing Attention",
+        "category": "MultiTerm"
+      },
+      {
+        "command": "multiTerm.refreshSessions",
+        "title": "Refresh Agents",
+        "category": "MultiTerm",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "multiTerm.refreshReview",
+        "title": "Refresh Review Items",
+        "category": "MultiTerm",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "multiTerm.refreshUsage",
+        "title": "Refresh Usage Limits",
+        "category": "MultiTerm",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "multiTerm.openBrowser",
+        "title": "Open Browser",
+        "category": "MultiTerm",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "multiTerm.openSourceControl",
+        "title": "Open Source Control",
+        "category": "MultiTerm",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "multiTerm.openReviewItem",
+        "title": "Open Review Item",
+        "category": "MultiTerm"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "multiTerm.launchCodex",
+        "key": "ctrl+alt+c",
+        "mac": "cmd+alt+c"
+      },
+      {
+        "command": "multiTerm.launchClaude",
+        "key": "ctrl+alt+a",
+        "mac": "cmd+alt+a"
+      },
+      {
+        "command": "multiTerm.openBrowser",
+        "key": "ctrl+alt+b",
+        "mac": "cmd+alt+b"
+      },
+      {
+        "command": "multiTerm.focusNextAttention",
+        "key": "ctrl+alt+n",
+        "mac": "cmd+alt+n"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "multiTerm",
+          "title": "MultiTerm",
+          "icon": "resources/multiterm.svg"
+        }
+      ]
+    },
+    "views": {
+      "multiTerm": [
+        {
+          "id": "multiTerm.sessions",
+          "name": "Agents",
+          "icon": "$(terminal)"
+        },
+        {
+          "id": "multiTerm.review",
+          "name": "Review",
+          "icon": "$(preview)"
+        },
+        {
+          "id": "multiTerm.usage",
+          "name": "Usage Limits",
+          "icon": "$(dashboard)"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "multiTerm.sessions",
+        "contents": "No agents are running.\n[Launch Codex](command:multiTerm.launchCodex)\n[Launch Claude Code](command:multiTerm.launchClaude)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "multiTerm.launchCodex",
+          "when": "view == multiTerm.sessions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "multiTerm.refreshSessions",
+          "when": "view == multiTerm.sessions",
+          "group": "navigation@2"
+        },
+        {
+          "command": "multiTerm.openBrowser",
+          "when": "view == multiTerm.review",
+          "group": "navigation@1"
+        },
+        {
+          "command": "multiTerm.openSourceControl",
+          "when": "view == multiTerm.review",
+          "group": "navigation@2"
+        },
+        {
+          "command": "multiTerm.refreshReview",
+          "when": "view == multiTerm.review",
+          "group": "navigation@3"
+        },
+        {
+          "command": "multiTerm.refreshUsage",
+          "when": "view == multiTerm.usage",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "multiTerm.splitCodex",
+          "when": "view == multiTerm.sessions && viewItem == multiTerm.session",
+          "group": "inline@1"
+        },
+        {
+          "command": "multiTerm.markNeedsAttention",
+          "when": "view == multiTerm.sessions && viewItem == multiTerm.session",
+          "group": "multiTerm@1"
+        },
+        {
+          "command": "multiTerm.restartSession",
+          "when": "view == multiTerm.sessions && viewItem == multiTerm.session",
+          "group": "multiTerm@2"
+        },
+        {
+          "command": "multiTerm.copyNotifyCommand",
+          "when": "view == multiTerm.sessions && viewItem == multiTerm.session",
+          "group": "multiTerm@3"
+        },
+        {
+          "command": "multiTerm.renameSession",
+          "when": "view == multiTerm.sessions && viewItem == multiTerm.session",
+          "group": "multiTerm@4"
+        },
+        {
+          "command": "multiTerm.closeSession",
+          "when": "view == multiTerm.sessions && viewItem == multiTerm.session",
+          "group": "multiTerm@5"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "MultiTerm",
+      "properties": {
+        "multiTerm.codex.command": {
+          "type": "string",
+          "default": "codex",
+          "description": "Command used to launch a Codex CLI session."
+        },
+        "multiTerm.claude.command": {
+          "type": "string",
+          "default": "claude",
+          "description": "Command used to launch a Claude Code session."
+        },
+        "multiTerm.terminals.location": {
+          "type": "string",
+          "enum": [
+            "editor",
+            "panel"
+          ],
+          "enumDescriptions": [
+            "Use the main editor area for terminal agents.",
+            "Use VS Code's terminal panel."
+          ],
+          "default": "editor",
+          "description": "Where new agent terminals open."
+        },
+        "multiTerm.notifyOnAgentExit": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a VS Code notification when an agent command exits."
+        },
+        "multiTerm.notifyOnAttention": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a VS Code notification when a background agent hook requests attention."
+        },
+        "multiTerm.usage.codex.executable": {
+          "type": "string",
+          "default": "codex",
+          "description": "Codex executable used for structured rate-limit queries."
+        },
+        "multiTerm.usage.claude.statusLineIntegration": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add a MultiTerm status-line bridge to extension-launched Claude sessions so subscription limits can be tracked."
+        },
+        "multiTerm.usage.warningThreshold": {
+          "type": "number",
+          "default": 80,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Usage percentage at which limit indicators turn to warning state."
+        },
+        "multiTerm.usage.criticalThreshold": {
+          "type": "number",
+          "default": 95,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Usage percentage at which limit indicators turn to critical state."
+        },
+        "multiTerm.review.imageGlob": {
+          "type": "string",
+          "default": "**/*.{png,jpg,jpeg,gif,webp}",
+          "description": "Glob used to find reviewable image artifacts."
+        },
+        "multiTerm.review.planGlob": {
+          "type": "string",
+          "default": "**/{plans,docs}/**/*.{md,mdx}",
+          "description": "Glob used to find plans and documentation for review."
+        },
+        "multiTerm.review.maxItemsPerGroup": {
+          "type": "number",
+          "default": 12,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Maximum recent review items shown in each group."
+        },
+        "multiTerm.browser.defaultUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "URL prefilled by the Open Browser command."
+        }
+      }
+    }
+  }
+}

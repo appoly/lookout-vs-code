@@ -1,0 +1,118 @@
+import * as vscode from 'vscode';
+import { CodexUsageProvider } from './codexUsageProvider';
+import type { SessionManager } from './sessionManager';
+import type { UsageSnapshot } from './usageTypes';
+
+const CLAUDE_STORAGE_KEY = 'multiTerm.usage.claude.v1';
+const STALE_AFTER_MS = 15 * 60 * 1000;
+
+export class UsageManager implements vscode.Disposable {
+  private readonly snapshots = new Map<UsageSnapshot['provider'], UsageSnapshot>();
+  private readonly changedEmitter = new vscode.EventEmitter<void>();
+  private readonly codex: CodexUsageProvider;
+  private readonly disposables: vscode.Disposable[] = [];
+  private refreshTimer: NodeJS.Timeout | undefined;
+  public readonly onDidChange = this.changedEmitter.event;
+
+  public constructor(
+    private readonly context: vscode.ExtensionContext,
+    sessions: SessionManager
+  ) {
+    const executable = vscode.workspace
+      .getConfiguration('multiTerm.usage.codex')
+      .get('executable', 'codex');
+    this.codex = new CodexUsageProvider(executable, (snapshot) => this.setSnapshot(snapshot));
+    const cachedClaude = context.globalState.get<UsageSnapshot>(CLAUDE_STORAGE_KEY);
+    this.snapshots.set(
+      'claude',
+      cachedClaude
+        ? withStaleness(cachedClaude)
+        : {
+            provider: 'claude',
+            status: 'waiting',
+            observedAt: Date.now(),
+            source: 'claude-statusline',
+            windows: [],
+            detail: 'Launch Claude and send a message to receive usage limits'
+          }
+    );
+    this.disposables.push(
+      sessions.onDidReceiveUsage((event) => {
+        const snapshot: UsageSnapshot = {
+          provider: 'claude',
+          status: event.windows.length > 0 ? 'available' : 'waiting',
+          observedAt: event.observedAt,
+          source: 'claude-statusline',
+          windows: event.windows,
+          ...(event.windows.length === 0
+            ? { detail: 'Claude did not report subscription quota windows' }
+            : {})
+        };
+        this.setSnapshot(snapshot);
+        void this.context.globalState.update(CLAUDE_STORAGE_KEY, snapshot);
+      }),
+      vscode.window.onDidChangeWindowState((state) => {
+        if (state.focused) {
+          void this.refresh();
+        }
+      })
+    );
+  }
+
+  public async initialize(): Promise<void> {
+    await this.codex.start();
+    this.refreshTimer = setInterval(() => void this.refresh(), 90_000);
+  }
+
+  public list(): readonly UsageSnapshot[] {
+    return (['codex', 'claude'] as const).map(
+      (provider) =>
+        withStaleness(this.snapshots.get(provider) ?? fallbackSnapshot(provider))
+    );
+  }
+
+  public async refresh(): Promise<void> {
+    await this.codex.refresh();
+    const claude = this.snapshots.get('claude');
+    if (claude) {
+      this.snapshots.set('claude', withStaleness(claude));
+      this.changedEmitter.fire();
+    }
+  }
+
+  public dispose(): void {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+    }
+    this.codex.dispose();
+    for (const disposable of this.disposables) {
+      disposable.dispose();
+    }
+    this.changedEmitter.dispose();
+  }
+
+  private setSnapshot(snapshot: UsageSnapshot): void {
+    this.snapshots.set(snapshot.provider, snapshot);
+    this.changedEmitter.fire();
+  }
+}
+
+function withStaleness(snapshot: UsageSnapshot): UsageSnapshot {
+  if (
+    snapshot.status === 'available' &&
+    Date.now() - snapshot.observedAt > STALE_AFTER_MS
+  ) {
+    return { ...snapshot, status: 'stale', detail: 'Last update is stale' };
+  }
+  return snapshot;
+}
+
+function fallbackSnapshot(provider: UsageSnapshot['provider']): UsageSnapshot {
+  return {
+    provider,
+    status: 'waiting',
+    observedAt: Date.now(),
+    source: provider === 'codex' ? 'codex-app-server' : 'claude-statusline',
+    windows: []
+  };
+}
