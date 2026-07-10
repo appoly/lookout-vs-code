@@ -83,7 +83,7 @@ VS Code has configurable internal accessibility signals but no public extension 
 
 **Decision:** the product name is **Parful**, a nod to Kneecap's “Parful” and to “powerful” in a strong Irish accent. It also signals the product's purpose: making it practical to fill your boots with parallel coding agents.
 
-Before the first public extension release, use `parful` consistently for the extension package, Activity Bar container, commands, settings, storage, virtual-document scheme, generated integration files, and `PARFUL_*` bridge variables. There is no compatibility alias for the unreleased prototype namespaces. The GitHub repository keeps its current `paraterm-vs-code` locator until that external repository is separately renamed.
+Before the first public extension release, use `parful` consistently for the extension package, Activity Bar container, commands, settings, storage, virtual-document scheme, generated integration files, `PARFUL_*` bridge variables, and the `parful-vs-code` GitHub repository. There is no compatibility alias for the unreleased prototype namespaces.
 
 ## Open decisions
 

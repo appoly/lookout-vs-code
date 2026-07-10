@@ -19,7 +19,7 @@
 - Parful synthesizes a 750 ms metallic PCM bell at the configured amplitude. It plays only when the session is unattended and newly enters attention. Volume is 0–100; enabled/mute is available in settings and from the Agents toolbar.
 - Artifact discovery now searches opened workspace folders plus every known agent root. Provider lifecycle events debounce a full refresh, so a completed Claude/Codex turn exposes new external-worktree plans without reloading the extension.
 - Canonical Workshop paths are labelled as research, brainstorm, plan, fleet, solution, changelog, todo, or design and remain excluded from ordinary code changes.
-- The full extension identity is now Parful: package and UI `Parful`, namespace/storage/scheme `parful`, bridge variables `PARFUL_*`, and generated integration filenames/resources under the same name. The current GitHub remote URL remains accurate until a separate repository rename.
+- The full extension identity is now Parful: package and UI `Parful`, namespace/storage/scheme `parful`, bridge variables `PARFUL_*`, generated integration filenames/resources, and the `parful-vs-code` GitHub repository.
 - The Workshop is documented as a separately released optional compatibility pack. Source-backed research and an in-progress staged integration plan cover installation awareness, artifact metadata, fleet state, and provider-native workflow entry points.
 
 ## Provider and platform boundaries
