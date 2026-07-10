@@ -16,8 +16,8 @@ export function withCodexLifecycleIntegration(
       `notify=${JSON.stringify([
         'node',
         helperPath,
-        'foreground-stop',
-        'Codex is waiting for input'
+        'turn-end',
+        'Codex finished'
       ])}`
     );
   }
@@ -44,8 +44,8 @@ export function withCodexLifecycleIntegration(
         'Stop',
         hookCommand(
           helperPath,
-          'foreground-stop',
-          'Codex is waiting for input',
+          'turn-end',
+          'Codex finished',
           platform
         )
       )

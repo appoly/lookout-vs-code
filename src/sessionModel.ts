@@ -5,7 +5,8 @@ const ACTIVE_STATUSES = new Set<SessionStatus>([
   'active',
   'running',
   'background',
-  'attention'
+  'attention',
+  'idle'
 ]);
 
 export function createSession(
@@ -53,7 +54,11 @@ export function transitionSession(
   exitCode?: number,
   latestEvent?: string
 ): AgentSession {
-  const unread = status === 'attention' || status === 'completed' || status === 'failed';
+  const unread =
+    status === 'attention' ||
+    status === 'idle' ||
+    status === 'completed' ||
+    status === 'failed';
   return {
     ...session,
     status,

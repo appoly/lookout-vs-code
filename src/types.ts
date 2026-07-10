@@ -6,6 +6,7 @@ export type SessionStatus =
   | 'running'
   | 'background'
   | 'attention'
+  | 'idle'
   | 'completed'
   | 'failed'
   | 'unknown'
@@ -61,6 +62,9 @@ export interface AgentForegroundStopEvent {
   readonly kind: 'foreground-stop';
   readonly sessionId: string;
   readonly message?: string;
+  // 'turn-end' marks a plain turn completion (nothing pending); absent means the
+  // stop is a genuine wait for input (a permission prompt or Claude's idle nudge).
+  readonly reason?: 'turn-end';
 }
 
 export interface AgentBackgroundEvent {

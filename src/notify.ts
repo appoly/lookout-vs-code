@@ -4,6 +4,7 @@ type EventStatus = 'running' | 'attention' | 'completed' | 'failed';
 type EventAction =
   | EventStatus
   | 'foreground-stop'
+  | 'turn-end'
   | 'background-start'
   | 'background-stop';
 type HookProvider = 'claude' | 'codex';
@@ -17,6 +18,7 @@ const statuses = new Set<EventStatus>([
 const actions = new Set<EventAction>([
   ...statuses,
   'foreground-stop',
+  'turn-end',
   'background-start',
   'background-stop'
 ]);
@@ -114,6 +116,14 @@ function normalizeEvent(
   explicitMessage: string,
   providerPayload: Record<string, unknown> | undefined
 ): Record<string, unknown> {
+  if (action === 'turn-end') {
+    return {
+      kind: 'foreground-stop',
+      sessionId,
+      reason: 'turn-end',
+      message: explicitMessage || 'Agent finished'
+    };
+  }
   if (action === 'foreground-stop') {
     return {
       kind: action,

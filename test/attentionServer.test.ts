@@ -74,6 +74,32 @@ test('accepts authenticated agent and usage events on loopback', async (context)
       agentLabel: 'Reviewer'
     });
 
+    const turnEndResult = await runNotify(
+      endpoint,
+      ['turn-end', 'Codex finished'],
+      {}
+    );
+    assert.equal(turnEndResult.code, 0);
+    assert.deepEqual(agentEvents[3], {
+      kind: 'foreground-stop',
+      sessionId: 'session-from-hook',
+      reason: 'turn-end',
+      message: 'Codex finished'
+    });
+
+    const waitingResponse = await post(endpoint.url, endpoint.token, {
+      kind: 'foreground-stop',
+      sessionId: 'session-1',
+      reason: 'bogus',
+      message: 'Agent is waiting for input'
+    });
+    assert.equal(waitingResponse.status, 204);
+    assert.deepEqual(agentEvents[4], {
+      kind: 'foreground-stop',
+      sessionId: 'session-1',
+      message: 'Agent is waiting for input'
+    });
+
     const usageResponse = await post(
       endpoint.url.replace(/\/events$/, '/usage'),
       endpoint.token,

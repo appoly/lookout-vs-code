@@ -45,6 +45,52 @@ test('does not request input while delegated agents are still running', () => {
   assert.equal(allFinished.unread, true);
 });
 
+test('a plain turn end goes idle rather than requesting input', () => {
+  const starting = createSession('claude', 'Quick task', 'claude', '/repo', 1, 's-idle');
+  const working = applyAgentEvent(
+    starting,
+    { kind: 'status', sessionId: 's-idle', status: 'running' },
+    2
+  );
+  const finished = applyAgentEvent(
+    working,
+    { kind: 'foreground-stop', sessionId: 's-idle', reason: 'turn-end', message: 'Claude finished' },
+    3
+  );
+
+  assert.equal(finished.status, 'idle');
+  assert.equal(finished.latestEvent, 'Claude finished');
+  assert.equal(finished.unread, true);
+});
+
+test('a turn end while delegated agents run still reports background', () => {
+  const starting = createSession('claude', 'Delegating', 'claude', '/repo', 1, 's-bg');
+  const working = applyAgentEvent(
+    starting,
+    { kind: 'status', sessionId: 's-bg', status: 'running' },
+    2
+  );
+  const delegated = applyAgentEvent(
+    working,
+    {
+      kind: 'background-start',
+      sessionId: 's-bg',
+      agentId: 'child-bg',
+      agentLabel: 'Explore'
+    },
+    3
+  );
+  const stopped = applyAgentEvent(
+    delegated,
+    { kind: 'foreground-stop', sessionId: 's-bg', reason: 'turn-end' },
+    4
+  );
+
+  assert.equal(stopped.status, 'background');
+  assert.equal(stopped.latestEvent, '1 delegated agent running');
+  assert.equal(stopped.unread, false);
+});
+
 test('permission attention wins over delegated-agent progress', () => {
   const starting = createSession('codex', 'Review', 'codex', '/repo', 1, 's2');
   const attention = applyAgentEvent(

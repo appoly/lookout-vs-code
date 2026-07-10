@@ -9,6 +9,7 @@ const STATUS_ICONS: Record<SessionStatus, vscode.ThemeIcon> = {
   running: new vscode.ThemeIcon('play', new vscode.ThemeColor('charts.green')),
   background: new vscode.ThemeIcon('run-all', new vscode.ThemeColor('charts.blue')),
   attention: new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('list.warningForeground')),
+  idle: new vscode.ThemeIcon('bell', new vscode.ThemeColor('charts.green')),
   completed: new vscode.ThemeIcon('pass', new vscode.ThemeColor('charts.green')),
   failed: new vscode.ThemeIcon('error', new vscode.ThemeColor('list.errorForeground')),
   unknown: new vscode.ThemeIcon('question'),
@@ -97,13 +98,20 @@ export class SessionStatusBar implements vscode.Disposable {
     const attention = sessions.filter(
       (session) => session.status === 'attention'
     ).length;
-    if (unread > 0) {
-      this.item.text = `$(bell-dot) ${unread} agent${unread === 1 ? '' : 's'}`;
-      this.item.tooltip = `${attention} waiting · ${unread} unread`;
+    if (attention > 0) {
+      this.item.text = `$(bell-dot) ${attention} agent${attention === 1 ? '' : 's'}`;
+      this.item.tooltip = `${attention} waiting for you · ${unread} unread`;
       this.item.command = 'lookout.focusNextAttention';
       this.item.backgroundColor = new vscode.ThemeColor(
         'statusBarItem.warningBackground'
       );
+      return;
+    }
+    if (unread > 0) {
+      this.item.text = `$(bell) ${unread} agent${unread === 1 ? '' : 's'}`;
+      this.item.tooltip = `${unread} finished · none waiting for input`;
+      this.item.command = 'lookout.pickSession';
+      this.item.backgroundColor = undefined;
       return;
     }
     this.item.text = `$(terminal) ${this.manager.activeCount}`;

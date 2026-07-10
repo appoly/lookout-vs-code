@@ -16,7 +16,7 @@ export function applyAgentEvent(
     case 'status':
       return applyStatusEvent(session, event.status, event.message, event.exitCode, now);
     case 'foreground-stop':
-      return applyForegroundStop(session, event.message, now);
+      return applyForegroundStop(session, event.message, event.reason, now);
     case 'background-start':
       return applyBackgroundStart(session, event.agentId, event.agentLabel, now);
     case 'background-stop':
@@ -61,6 +61,7 @@ function applyStatusEvent(
 function applyForegroundStop(
   session: AgentSession,
   message: string | undefined,
+  reason: 'turn-end' | undefined,
   now: number
 ): AgentSession {
   const stopped = { ...session, foregroundState: 'stopped' as const };
@@ -71,6 +72,15 @@ function applyForegroundStop(
       now,
       undefined,
       backgroundMessage(stopped.backgroundAgents.length)
+    );
+  }
+  if (reason === 'turn-end') {
+    return transitionSession(
+      stopped,
+      'idle',
+      now,
+      undefined,
+      message ?? 'Agent finished'
     );
   }
   return transitionSession(

@@ -12,8 +12,9 @@ test('adds session-only Codex turn and delegated-agent lifecycle events', () => 
     '/extension/notify.js',
     'linux'
   );
-  assert.match(command, /notify=.*foreground-stop/);
+  assert.match(command, /notify=.*turn-end/);
   assert.match(command, /features\.hooks=true/);
+  assert.match(command, /hooks\.Stop=.*--hook codex turn-end/);
   assert.match(command, /hooks\.UserPromptSubmit=/);
   assert.match(command, /hooks\.PermissionRequest=/);
   assert.match(command, /hooks\.SubagentStart=/);

@@ -339,7 +339,10 @@ export class SessionManager implements vscode.Disposable {
   }
 
   public async focusNextAttention(): Promise<void> {
-    const session = this.list().find((candidate) => candidate.unread);
+    const sessions = this.list();
+    const session =
+      sessions.find((candidate) => candidate.status === 'attention') ??
+      sessions.find((candidate) => candidate.unread);
     if (!session) {
       void vscode.window.showInformationMessage('No agents need attention.');
       return;
@@ -605,12 +608,16 @@ export class SessionManager implements vscode.Disposable {
     const shouldNotify =
       (updated.status === 'attention' &&
         configuration.get('notifyOnAttention', true)) ||
-      ((updated.status === 'completed' || updated.status === 'failed') &&
+      ((updated.status === 'idle' ||
+        updated.status === 'completed' ||
+        updated.status === 'failed') &&
         configuration.get('notifyOnTurnComplete', true));
     const enteredAttention =
       updated.status === 'attention' && session.status !== 'attention';
     const enteredTurnComplete =
-      (updated.status === 'completed' || updated.status === 'failed') &&
+      (updated.status === 'idle' ||
+        updated.status === 'completed' ||
+        updated.status === 'failed') &&
       updated.status !== session.status;
     const terminalIsUnattended =
       !vscode.window.state.focused || vscode.window.activeTerminal !== terminal;
@@ -710,8 +717,8 @@ export class SessionManager implements vscode.Disposable {
       Stop: [
         hookGroup(
           notifyHelperPath,
-          'foreground-stop',
-          'Claude is waiting for input'
+          'turn-end',
+          'Claude finished'
         )
       ],
       SubagentStart: [hookGroup(notifyHelperPath, 'background-start')],
@@ -765,6 +772,7 @@ function joinRisks(risks: readonly string[]): string {
 type HookAction =
   | AgentReportedStatus
   | 'foreground-stop'
+  | 'turn-end'
   | 'background-start'
   | 'background-stop';
 

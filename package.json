@@ -468,7 +468,7 @@
         "lookout.codex.lifecycleIntegration": {
           "type": "boolean",
           "default": true,
-          "description": "Add session-only Codex lifecycle hooks and a turn-complete fallback so Lookout can distinguish working, delegated agents, and waiting. Codex requires one-time review through /hooks."
+          "description": "Add session-only Codex lifecycle hooks and a turn-complete fallback so Lookout can distinguish working, delegated agents, permission prompts, and a finished turn. Codex requires one-time review through /hooks."
         },
         "lookout.claude.command": {
           "type": "string",
@@ -483,7 +483,7 @@
         "lookout.claude.lifecycleIntegration": {
           "type": "boolean",
           "default": true,
-          "description": "Add session-only Claude hooks so Lookout can distinguish working, delegated agents, permissions, and waiting for input."
+          "description": "Add session-only Claude hooks so Lookout can distinguish working, delegated agents, permissions, waiting for input, and turn completion."
         },
         "lookout.terminals.location": {
           "type": "string",
@@ -511,7 +511,7 @@
         "lookout.notifyOnTurnComplete": {
           "type": "boolean",
           "default": true,
-          "description": "Show a VS Code notification when a background agent hook reports a completed or failed turn."
+          "description": "Show a VS Code notification when a background agent hook reports a finished turn — the agent going idle at its prompt, or a completed or failed run."
         },
         "lookout.attentionSound.enabled": {
           "type": "boolean",

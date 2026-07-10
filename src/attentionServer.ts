@@ -138,6 +138,7 @@ function parseAgentEvent(value: unknown): AgentEvent {
     return {
       kind: 'foreground-stop',
       sessionId: value.sessionId,
+      ...(value.reason === 'turn-end' ? { reason: 'turn-end' as const } : {}),
       ...(typeof value.message === 'string'
         ? { message: value.message.slice(0, 240) }
         : {})
