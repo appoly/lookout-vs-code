@@ -27,3 +27,4 @@
 - Surface running tasks/debug sessions, add a native two-column review layout, and refresh worktree branch state while agents remain open.
 - Guard agent removal when its command is running or its shared worktree has unreviewed changes.
 - Add an optional New Agent in Isolated Worktree flow with explicit branch and sibling-folder choices.
+- Make existing-terminal adoption discoverable from terminal context menus and the empty Agents view, reusing the shell-integration working directory when available.

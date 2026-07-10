@@ -40,6 +40,7 @@ launch several agents → work in VS Code → see attention/finish state → jum
 6. [x] Ring for unattended completion/exit events and make mute state, volume configuration, and sound testing discoverable; manually retest the WSL backend.
 7. [x] Clarify command-not-found through guided missing-executable settings help rather than treating shell output as a VS Code diagnostic.
 8. [x] Investigate external-agent discovery: VS Code exposes neither terminal commands nor changing cwd through its public API, so provide explicit terminal adoption without output scraping.
+   - [x] Make adoption discoverable from terminal context menus and the empty Agents view; reuse the shell-integration cwd when VS Code provides it.
 9. [x] Put the remove action inline beside split; rerun the skipped custom-hook and restored-custom-session cases.
 10. Activate the parent terminal before requesting a native sibling split; manually retest placement in editor and panel modes.
 11. Rerun the full matrix and clear the release gates.

@@ -50,7 +50,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     register('parful.launchAgentInWorktree', () =>
       launchAgentInWorktree(sessions)
     ),
-    register('parful.adoptTerminal', () => adoptTerminal(sessions)),
+    register('parful.adoptTerminal', (terminal?: vscode.Terminal) =>
+      adoptTerminal(sessions, terminal)
+    ),
     register('parful.splitCodex', (item?: SessionTreeItem) =>
       launchAgent(sessions, 'codex', sessionId(item))
     ),
@@ -189,9 +191,9 @@ async function updateSoundContext(): Promise<void> {
   );
 }
 
-function register(
+function register<Args extends unknown[]>(
   command: string,
-  callback: (...args: never[]) => unknown
+  callback: (...args: Args) => unknown
 ): vscode.Disposable {
   return vscode.commands.registerCommand(command, callback);
 }
@@ -440,7 +442,10 @@ async function pickWorkingDirectory(): Promise<string | undefined> {
   return choice.cwd ?? chooseFolder(folders[0].uri.fsPath);
 }
 
-async function adoptTerminal(sessions: SessionManager): Promise<void> {
+async function adoptTerminal(
+  sessions: SessionManager,
+  requestedTerminal?: vscode.Terminal
+): Promise<void> {
   if (!vscode.workspace.isTrusted) {
     void vscode.window.showWarningMessage(
       'Trust this workspace before adopting an agent terminal.'
@@ -450,28 +455,43 @@ async function adoptTerminal(sessions: SessionManager): Promise<void> {
   const candidates = vscode.window.terminals.filter(
     (terminal) => !sessions.managesTerminal(terminal)
   );
-  const selected = await vscode.window.showQuickPick(
-    candidates.map((terminal) => ({ label: terminal.name, terminal })),
-    { title: 'Adopt Existing Terminal' }
-  );
+  const requestedCandidate = requestedTerminal && candidates.includes(requestedTerminal)
+    ? requestedTerminal
+    : undefined;
+  const selected = requestedCandidate
+    ? { label: requestedCandidate.name, terminal: requestedCandidate }
+    : await vscode.window.showQuickPick(
+        candidates.map((terminal) => ({ label: terminal.name, terminal })),
+        { title: 'Adopt Existing Terminal' }
+      );
   if (!selected) {
     if (candidates.length === 0) {
       void vscode.window.showInformationMessage('No unmanaged terminals are open.');
     }
     return;
   }
-  const kindChoice = await vscode.window.showQuickPick(
-    [
+  const kinds = [
       { label: 'Codex', agentKind: 'codex' as const },
       { label: 'Claude Code', agentKind: 'claude' as const },
       { label: 'Custom', agentKind: 'custom' as const }
-    ],
-    { title: 'Agent provider' }
+    ];
+  const suggestedKind = inferAgentKind(selected.terminal.name);
+  const kindChoice = await vscode.window.showQuickPick(
+    suggestedKind
+      ? [...kinds].sort((choice) => choice.agentKind === suggestedKind ? -1 : 1)
+      : kinds,
+    {
+      title: 'Agent provider',
+      placeHolder: suggestedKind
+        ? `${displayKind(suggestedKind)} suggested from the terminal name`
+        : 'Choose the agent running in this terminal'
+    }
   );
   if (!kindChoice) {
     return;
   }
-  const cwd = await pickWorkingDirectory();
+  const cwd = selected.terminal.shellIntegration?.cwd?.fsPath
+    ?? await pickWorkingDirectory();
   if (!cwd) {
     return;
   }
@@ -481,6 +501,17 @@ async function adoptTerminal(sessions: SessionManager): Promise<void> {
     selected.terminal.name,
     cwd
   );
+}
+
+function inferAgentKind(terminalName: string): AgentKind | undefined {
+  const normalized = terminalName.toLowerCase();
+  if (normalized.includes('codex')) {
+    return 'codex';
+  }
+  if (normalized.includes('claude')) {
+    return 'claude';
+  }
+  return undefined;
 }
 
 async function openBrowser(): Promise<void> {

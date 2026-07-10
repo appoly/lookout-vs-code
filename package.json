@@ -321,7 +321,7 @@
     "viewsWelcome": [
       {
         "view": "parful.sessions",
-        "contents": "No agents are running.\n[Launch Codex](command:parful.launchCodex)\n[Launch Claude Code](command:parful.launchClaude)"
+        "contents": "No agents are running.\n[Launch Codex](command:parful.launchCodex)\n[Launch Claude Code](command:parful.launchClaude)\n[Adopt an existing terminal](command:parful.adoptTerminal)"
       }
     ],
     "menus": {
@@ -390,6 +390,13 @@
           "command": "parful.refreshUsage",
           "when": "view == parful.usage",
           "group": "navigation@1"
+        }
+      ],
+      "terminal/context": [
+        {
+          "command": "parful.adoptTerminal",
+          "when": "terminalIsOpen",
+          "group": "navigation@10"
         }
       ],
       "view/item/context": [
