@@ -1,5 +1,5 @@
 ---
-title: Ship Parful with deep Workshop compatibility
+title: Ship Lookout with deep Workshop compatibility
 date: 2026-07-10
 status: in-progress
 tags:
@@ -14,9 +14,9 @@ related_research:
 
 ## Task summary
 
-Make Parful the strongest VS Code cockpit for the Compound Engineering patterns published separately by [The Workshop](https://github.com/adamhulme/the-workshop), while keeping ordinary Codex, Claude Code, and custom terminal agents fully supported.
+Make Lookout the strongest VS Code cockpit for the Compound Engineering patterns published separately by [The Workshop](https://github.com/adamhulme/the-workshop), while keeping ordinary Codex, Claude Code, and custom terminal agents fully supported.
 
-The integration boundary is the runtime-neutral workflow contract and its durable repository artifacts. Parful must not bundle, silently install, update, or impersonate the native Claude/Codex adapters.
+The integration boundary is the runtime-neutral workflow contract and its durable repository artifacts. Lookout must not bundle, silently install, update, or impersonate the native Claude/Codex adapters.
 
 ## Constraints and learned principles
 
@@ -48,7 +48,7 @@ The integration boundary is the runtime-neutral workflow contract and its durabl
    - Show stale, missing, and malformed metadata honestly rather than inferring workflow completion.
 
 4. **Fleet and worktree cockpit**
-   - Parse `docs/fleet/*.md` manifests and map rows to active Parful sessions, worktree roots, branches, and known PR results.
+   - Parse `docs/fleet/*.md` manifests and map rows to active Lookout sessions, worktree roots, branches, and known PR results.
    - Display dependency, queued/running/blocked/failed/completed state and preserve failed-worktree navigation.
    - Keep dispatch-order dependencies distinct from stacked-branch code dependencies.
    - Add optional worktree-per-agent launch and a safe-close review flow before any cleanup action.
@@ -75,7 +75,7 @@ The integration boundary is the runtime-neutral workflow contract and its durabl
 
 ## Verification plan
 
-1. Start Parful from a root repository and launch Codex and Claude agents in nested repositories and linked worktrees outside the opened workspace.
+1. Start Lookout from a root repository and launch Codex and Claude agents in nested repositories and linked worktrees outside the opened workspace.
 2. Create each canonical artifact path, including `docs/plans`, while the agent runs and after it switches branches; verify automatic discovery and native opening.
 3. Confirm artifact files never duplicate under Workspace Changes.
 4. Test no Workshop install, user-scope install, project-scope install, stale version, malformed manifest, and unavailable external installer.
@@ -84,6 +84,6 @@ The integration boundary is the runtime-neutral workflow contract and its durabl
 
 ## Open questions
 
-- Which independently versioned release channel will become the stable Workshop installation recommendation before Parful Marketplace publication?
+- Which independently versioned release channel will become the stable Workshop installation recommendation before Lookout Marketplace publication?
 - Should the first intelligent artifact UI remain one **Plans & Docs** group with type badges, or become a dedicated Compound Engineering view after user testing?
 - What explicit metadata should Workshop emit for trustworthy agent-to-artifact attribution beyond the worktree boundary?

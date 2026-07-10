@@ -15,7 +15,7 @@ import {
 import type { SessionManager } from './sessionManager';
 import type { AgentSession } from './types';
 
-const BASELINE_SCHEME = 'parful-baseline';
+const BASELINE_SCHEME = 'lookout-baseline';
 type ReviewKind =
   | 'group'
   | 'image'
@@ -201,7 +201,7 @@ export class ReviewTreeProvider
       vscode.debug.onDidStartDebugSession(() => this.refreshRuntime()),
       vscode.debug.onDidTerminateDebugSession(() => this.refreshRuntime()),
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (event.affectsConfiguration('parful.review')) {
+        if (event.affectsConfiguration('lookout.review')) {
           void this.refresh();
         }
       })
@@ -286,7 +286,7 @@ export class ReviewTreeProvider
   public async refresh(): Promise<void> {
     const generation = ++this.refreshGeneration;
     const changeGeneration = ++this.changeGeneration;
-    const config = vscode.workspace.getConfiguration('parful.review');
+    const config = vscode.workspace.getConfiguration('lookout.review');
     const max = config.get<number>('maxItemsPerGroup', 12);
     const showImages = config.get<boolean>('showRecentImages', false);
     const session = this.sessions.selectedSession;
@@ -360,7 +360,7 @@ export class ReviewTreeProvider
 
   public refreshDiagnostics(): void {
     const max = vscode.workspace
-      .getConfiguration('parful.review')
+      .getConfiguration('lookout.review')
       .get<number>('maxItemsPerGroup', 12);
     this.diagnostics = toDiagnosticItems(this.sessions.selectedSession, max);
     this.changedEmitter.fire();
@@ -823,7 +823,7 @@ function isImage(filePath: string): boolean {
 
 function imagesEnabled(): boolean {
   return vscode.workspace
-    .getConfiguration('parful.review')
+    .getConfiguration('lookout.review')
     .get('showRecentImages', false);
 }
 
@@ -897,7 +897,7 @@ function diagnosticIcon(severity: vscode.DiagnosticSeverity): vscode.ThemeIcon {
 
 function openCommand(item: ReviewTreeItem): vscode.Command {
   return {
-    command: 'parful.openReviewItem',
+    command: 'lookout.openReviewItem',
     title: 'Open Review Item',
     arguments: [item]
   };

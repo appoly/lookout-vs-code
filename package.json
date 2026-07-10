@@ -1,17 +1,17 @@
 {
-  "name": "parful",
-  "displayName": "Parful",
+  "name": "lookout",
+  "displayName": "Lookout",
   "description": "Run and review multiple terminal coding agents without leaving VS Code.",
   "version": "0.1.0",
   "publisher": "adamh",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/adamhulme/parful-vs-code.git"
+    "url": "https://github.com/adamhulme/lookout-vs-code.git"
   },
-  "homepage": "https://github.com/adamhulme/parful-vs-code#readme",
+  "homepage": "https://github.com/adamhulme/lookout-vs-code#readme",
   "bugs": {
-    "url": "https://github.com/adamhulme/parful-vs-code/issues"
+    "url": "https://github.com/adamhulme/lookout-vs-code/issues"
   },
   "engines": {
     "vscode": "^1.96.0"
@@ -34,9 +34,9 @@
       "supported": "limited",
       "description": "Review and usage views remain available; launching configured terminal commands requires a trusted workspace.",
       "restrictedConfigurations": [
-        "parful.codex.command",
-        "parful.claude.command",
-        "parful.usage.codex.executable"
+        "lookout.codex.command",
+        "lookout.claude.command",
+        "lookout.usage.codex.executable"
       ]
     }
   },
@@ -70,222 +70,222 @@
   "contributes": {
     "commands": [
       {
-        "command": "parful.launchAgent",
+        "command": "lookout.launchAgent",
         "title": "New Agent…",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(add)"
       },
       {
-        "command": "parful.launchCodex",
+        "command": "lookout.launchCodex",
         "title": "Launch Codex Agent",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(add)"
       },
       {
-        "command": "parful.launchClaude",
+        "command": "lookout.launchClaude",
         "title": "Launch Claude Code Agent",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(add)"
       },
       {
-        "command": "parful.launchCustom",
+        "command": "lookout.launchCustom",
         "title": "Launch Custom Agent",
-        "category": "Parful"
+        "category": "Lookout"
       },
       {
-        "command": "parful.launchAgentInWorktree",
+        "command": "lookout.launchAgentInWorktree",
         "title": "New Agent in Isolated Worktree…",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(git-branch-create)"
       },
       {
-        "command": "parful.splitCodex",
+        "command": "lookout.splitCodex",
         "title": "Split with Codex",
-        "category": "Parful"
+        "category": "Lookout"
       },
       {
-        "command": "parful.splitClaude",
+        "command": "lookout.splitClaude",
         "title": "Split with Claude Code",
-        "category": "Parful"
+        "category": "Lookout"
       },
       {
-        "command": "parful.splitSession",
+        "command": "lookout.splitSession",
         "title": "Split with Same Agent",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(split-horizontal)"
       },
       {
-        "command": "parful.focusSession",
+        "command": "lookout.focusSession",
         "title": "Focus Agent",
-        "category": "Parful"
+        "category": "Lookout"
       },
       {
-        "command": "parful.renameSession",
+        "command": "lookout.renameSession",
         "title": "Rename Agent",
-        "category": "Parful"
+        "category": "Lookout"
       },
       {
-        "command": "parful.closeSession",
+        "command": "lookout.closeSession",
         "title": "Remove Agent",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(trash)"
       },
       {
-        "command": "parful.markNeedsAttention",
+        "command": "lookout.markNeedsAttention",
         "title": "Mark as Needs Attention",
-        "category": "Parful"
+        "category": "Lookout"
       },
       {
-        "command": "parful.restartSession",
+        "command": "lookout.restartSession",
         "title": "Restart Agent Command",
-        "category": "Parful"
+        "category": "Lookout"
       },
       {
-        "command": "parful.copyNotifyCommand",
+        "command": "lookout.copyNotifyCommand",
         "title": "Copy Attention Hook Command",
-        "category": "Parful"
+        "category": "Lookout"
       },
       {
-        "command": "parful.focusNextAttention",
+        "command": "lookout.focusNextAttention",
         "title": "Focus Next Agent Needing Attention",
-        "category": "Parful"
+        "category": "Lookout"
       },
       {
-        "command": "parful.pickSession",
+        "command": "lookout.pickSession",
         "title": "Focus Agent…",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(list-selection)"
       },
       {
-        "command": "parful.focusNextSession",
+        "command": "lookout.focusNextSession",
         "title": "Focus Next Agent",
-        "category": "Parful"
+        "category": "Lookout"
       },
       {
-        "command": "parful.focusPreviousSession",
+        "command": "lookout.focusPreviousSession",
         "title": "Focus Previous Agent",
-        "category": "Parful"
+        "category": "Lookout"
       },
       {
-        "command": "parful.refreshSessions",
+        "command": "lookout.refreshSessions",
         "title": "Refresh Agents",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(refresh)"
       },
       {
-        "command": "parful.toggleAttentionSound",
+        "command": "lookout.toggleAttentionSound",
         "title": "Mute or Unmute Attention Sound",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(unmute)"
       },
       {
-        "command": "parful.adoptTerminal",
+        "command": "lookout.adoptTerminal",
         "title": "Adopt Existing Terminal as Agent…",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(link)"
       },
       {
-        "command": "parful.muteAttentionSound",
+        "command": "lookout.muteAttentionSound",
         "title": "Mute Attention Sound",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(unmute)"
       },
       {
-        "command": "parful.unmuteAttentionSound",
+        "command": "lookout.unmuteAttentionSound",
         "title": "Unmute Attention Sound",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(mute)"
       },
       {
-        "command": "parful.configureAttentionSound",
+        "command": "lookout.configureAttentionSound",
         "title": "Configure Attention Sound",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(settings-gear)"
       },
       {
-        "command": "parful.testAttentionSound",
+        "command": "lookout.testAttentionSound",
         "title": "Test Attention Sound",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(play)"
       },
       {
-        "command": "parful.refreshReview",
+        "command": "lookout.refreshReview",
         "title": "Refresh Review Items",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(refresh)"
       },
       {
-        "command": "parful.refreshUsage",
+        "command": "lookout.refreshUsage",
         "title": "Refresh Usage Limits",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(refresh)"
       },
       {
-        "command": "parful.openBrowser",
+        "command": "lookout.openBrowser",
         "title": "Open Browser",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(globe)"
       },
       {
-        "command": "parful.openSourceControl",
+        "command": "lookout.openSourceControl",
         "title": "Open Source Control",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(git-compare)"
       },
       {
-        "command": "parful.openTestExplorer",
+        "command": "lookout.openTestExplorer",
         "title": "Open Test Explorer",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(beaker)"
       },
       {
-        "command": "parful.runTestTask",
+        "command": "lookout.runTestTask",
         "title": "Run Test Task",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(run)"
       },
       {
-        "command": "parful.startDebug",
+        "command": "lookout.startDebug",
         "title": "Start Debugging…",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(debug-alt)"
       },
       {
-        "command": "parful.openReviewLayout",
+        "command": "lookout.openReviewLayout",
         "title": "Open Review Layout",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(layout-two-columns)"
       },
       {
-        "command": "parful.runTask",
+        "command": "lookout.runTask",
         "title": "Run Workspace Task",
-        "category": "Parful",
+        "category": "Lookout",
         "icon": "$(play)"
       },
       {
-        "command": "parful.openReviewItem",
+        "command": "lookout.openReviewItem",
         "title": "Open Review Item",
-        "category": "Parful"
+        "category": "Lookout"
       }
     ],
     "keybindings": [
       {
-        "command": "parful.launchCodex",
+        "command": "lookout.launchCodex",
         "key": "ctrl+alt+c",
         "mac": "cmd+alt+c"
       },
       {
-        "command": "parful.launchClaude",
+        "command": "lookout.launchClaude",
         "key": "ctrl+alt+a",
         "mac": "cmd+alt+a"
       },
       {
-        "command": "parful.openBrowser",
+        "command": "lookout.openBrowser",
         "key": "ctrl+alt+b",
         "mac": "cmd+alt+b"
       },
       {
-        "command": "parful.focusNextAttention",
+        "command": "lookout.focusNextAttention",
         "key": "ctrl+alt+n",
         "mac": "cmd+alt+n"
       }
@@ -293,26 +293,26 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "parful",
-          "title": "Parful",
-          "icon": "resources/parful.svg"
+          "id": "lookout",
+          "title": "Lookout",
+          "icon": "resources/lookout.svg"
         }
       ]
     },
     "views": {
-      "parful": [
+      "lookout": [
         {
-          "id": "parful.sessions",
+          "id": "lookout.sessions",
           "name": "Agents",
           "icon": "$(terminal)"
         },
         {
-          "id": "parful.review",
+          "id": "lookout.review",
           "name": "Review",
           "icon": "$(preview)"
         },
         {
-          "id": "parful.usage",
+          "id": "lookout.usage",
           "name": "Usage Limits",
           "icon": "$(dashboard)"
         }
@@ -320,177 +320,172 @@
     },
     "viewsWelcome": [
       {
-        "view": "parful.sessions",
-        "contents": "No agents are running.\n[Launch Codex](command:parful.launchCodex)\n[Launch Claude Code](command:parful.launchClaude)\n[Adopt an existing terminal](command:parful.adoptTerminal)"
+        "view": "lookout.sessions",
+        "contents": "No agents are running.\n[Launch Codex](command:lookout.launchCodex)\n[Launch Claude Code](command:lookout.launchClaude)\n[Adopt an existing terminal](command:lookout.adoptTerminal)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "parful.launchAgent",
-          "when": "view == parful.sessions",
+          "command": "lookout.launchAgent",
+          "when": "view == lookout.sessions",
           "group": "navigation@1"
         },
         {
-          "command": "parful.pickSession",
-          "when": "view == parful.sessions",
-          "group": "navigation@2"
-        },
-        {
-          "command": "parful.refreshSessions",
-          "when": "view == parful.sessions",
+          "command": "lookout.refreshSessions",
+          "when": "view == lookout.sessions",
           "group": "navigation@3"
         },
         {
-          "command": "parful.muteAttentionSound",
-          "when": "view == parful.sessions && parful.attentionSoundEnabled",
+          "command": "lookout.muteAttentionSound",
+          "when": "view == lookout.sessions && lookout.attentionSoundEnabled",
           "group": "navigation@4"
         },
         {
-          "command": "parful.adoptTerminal",
-          "when": "view == parful.sessions",
+          "command": "lookout.adoptTerminal",
+          "when": "view == lookout.sessions",
           "group": "navigation@3"
         },
         {
-          "command": "parful.launchAgentInWorktree",
-          "when": "view == parful.sessions",
+          "command": "lookout.launchAgentInWorktree",
+          "when": "view == lookout.sessions",
           "group": "navigation@4"
         },
         {
-          "command": "parful.unmuteAttentionSound",
-          "when": "view == parful.sessions && !parful.attentionSoundEnabled",
+          "command": "lookout.unmuteAttentionSound",
+          "when": "view == lookout.sessions && !lookout.attentionSoundEnabled",
           "group": "navigation@4"
         },
         {
-          "command": "parful.configureAttentionSound",
-          "when": "view == parful.sessions",
+          "command": "lookout.configureAttentionSound",
+          "when": "view == lookout.sessions",
           "group": "navigation@5"
         },
         {
-          "command": "parful.openBrowser",
-          "when": "view == parful.review",
+          "command": "lookout.openBrowser",
+          "when": "view == lookout.review",
           "group": "navigation@1"
         },
         {
-          "command": "parful.openSourceControl",
-          "when": "view == parful.review",
+          "command": "lookout.openSourceControl",
+          "when": "view == lookout.review",
           "group": "navigation@2"
         },
         {
-          "command": "parful.runTask",
-          "when": "view == parful.review",
+          "command": "lookout.runTask",
+          "when": "view == lookout.review",
           "group": "navigation@3"
         },
         {
-          "command": "parful.refreshReview",
-          "when": "view == parful.review",
+          "command": "lookout.refreshReview",
+          "when": "view == lookout.review",
           "group": "navigation@4"
         },
         {
-          "command": "parful.refreshUsage",
-          "when": "view == parful.usage",
+          "command": "lookout.refreshUsage",
+          "when": "view == lookout.usage",
           "group": "navigation@1"
         }
       ],
       "terminal/context": [
         {
-          "command": "parful.adoptTerminal",
+          "command": "lookout.adoptTerminal",
           "when": "terminalIsOpen",
           "group": "navigation@10"
         }
       ],
       "view/item/context": [
         {
-          "command": "parful.splitSession",
-          "when": "view == parful.sessions && viewItem == parful.session",
+          "command": "lookout.splitSession",
+          "when": "view == lookout.sessions && viewItem == lookout.session",
           "group": "inline@1"
         },
         {
-          "command": "parful.openTestExplorer",
-          "when": "view == parful.review",
-          "group": "parful@1"
+          "command": "lookout.openTestExplorer",
+          "when": "view == lookout.review",
+          "group": "lookout@1"
         },
         {
-          "command": "parful.runTestTask",
-          "when": "view == parful.review",
-          "group": "parful@2"
+          "command": "lookout.runTestTask",
+          "when": "view == lookout.review",
+          "group": "lookout@2"
         },
         {
-          "command": "parful.startDebug",
-          "when": "view == parful.review",
-          "group": "parful@3"
+          "command": "lookout.startDebug",
+          "when": "view == lookout.review",
+          "group": "lookout@3"
         },
         {
-          "command": "parful.openReviewLayout",
-          "when": "view == parful.review",
+          "command": "lookout.openReviewLayout",
+          "when": "view == lookout.review",
           "group": "navigation@5"
         },
         {
-          "command": "parful.closeSession",
-          "when": "view == parful.sessions && viewItem == parful.session",
+          "command": "lookout.closeSession",
+          "when": "view == lookout.sessions && viewItem == lookout.session",
           "group": "inline@2"
         },
         {
-          "command": "parful.markNeedsAttention",
-          "when": "view == parful.sessions && viewItem == parful.session",
-          "group": "parful@1"
+          "command": "lookout.markNeedsAttention",
+          "when": "view == lookout.sessions && viewItem == lookout.session",
+          "group": "lookout@1"
         },
         {
-          "command": "parful.restartSession",
-          "when": "view == parful.sessions && viewItem == parful.session",
-          "group": "parful@2"
+          "command": "lookout.restartSession",
+          "when": "view == lookout.sessions && viewItem == lookout.session",
+          "group": "lookout@2"
         },
         {
-          "command": "parful.copyNotifyCommand",
-          "when": "view == parful.sessions && viewItem == parful.session",
-          "group": "parful@3"
+          "command": "lookout.copyNotifyCommand",
+          "when": "view == lookout.sessions && viewItem == lookout.session",
+          "group": "lookout@3"
         },
         {
-          "command": "parful.renameSession",
-          "when": "view == parful.sessions && viewItem == parful.session",
-          "group": "parful@4"
+          "command": "lookout.renameSession",
+          "when": "view == lookout.sessions && viewItem == lookout.session",
+          "group": "lookout@4"
         },
         {
-          "command": "parful.closeSession",
-          "when": "view == parful.sessions && viewItem == parful.session",
-          "group": "parful@5"
+          "command": "lookout.closeSession",
+          "when": "view == lookout.sessions && viewItem == lookout.session",
+          "group": "lookout@5"
         }
       ]
     },
     "configuration": {
-      "title": "Parful",
+      "title": "Lookout",
       "properties": {
-        "parful.codex.command": {
+        "lookout.codex.command": {
           "type": "string",
           "default": "codex",
           "description": "Command used to launch a Codex CLI session."
         },
-        "parful.codex.enabled": {
+        "lookout.codex.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Show Codex in the new-agent picker."
         },
-        "parful.codex.lifecycleIntegration": {
+        "lookout.codex.lifecycleIntegration": {
           "type": "boolean",
           "default": true,
-          "description": "Add session-only Codex lifecycle hooks and a turn-complete fallback so Parful can distinguish working, delegated agents, and waiting. Codex requires one-time review through /hooks."
+          "description": "Add session-only Codex lifecycle hooks and a turn-complete fallback so Lookout can distinguish working, delegated agents, and waiting. Codex requires one-time review through /hooks."
         },
-        "parful.claude.command": {
+        "lookout.claude.command": {
           "type": "string",
           "default": "claude",
           "description": "Command used to launch a Claude Code session."
         },
-        "parful.claude.enabled": {
+        "lookout.claude.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Show Claude Code in the new-agent picker."
         },
-        "parful.claude.lifecycleIntegration": {
+        "lookout.claude.lifecycleIntegration": {
           "type": "boolean",
           "default": true,
-          "description": "Add session-only Claude hooks so Parful can distinguish working, delegated agents, permissions, and waiting for input."
+          "description": "Add session-only Claude hooks so Lookout can distinguish working, delegated agents, permissions, and waiting for input."
         },
-        "parful.terminals.location": {
+        "lookout.terminals.location": {
           "type": "string",
           "enum": [
             "editor",
@@ -503,83 +498,83 @@
           "default": "editor",
           "description": "Where new agent terminals open."
         },
-        "parful.notifyOnAgentExit": {
+        "lookout.notifyOnAgentExit": {
           "type": "boolean",
           "default": true,
           "description": "Show a VS Code notification when an agent command exits."
         },
-        "parful.notifyOnAttention": {
+        "lookout.notifyOnAttention": {
           "type": "boolean",
           "default": true,
           "description": "Show a VS Code notification when a background agent hook requests attention."
         },
-        "parful.notifyOnTurnComplete": {
+        "lookout.notifyOnTurnComplete": {
           "type": "boolean",
           "default": true,
           "description": "Show a VS Code notification when a background agent hook reports a completed or failed turn."
         },
-        "parful.attentionSound.enabled": {
+        "lookout.attentionSound.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Play Parful's bell when an unattended agent starts waiting for user input."
+          "description": "Play Lookout's bell when an unattended agent starts waiting for user input."
         },
-        "parful.attentionSound.volume": {
+        "lookout.attentionSound.volume": {
           "type": "number",
           "default": 35,
           "minimum": 0,
           "maximum": 100,
-          "description": "Volume of Parful's attention bell. Set to 0 to mute it."
+          "description": "Volume of Lookout's attention bell. Set to 0 to mute it."
         },
-        "parful.usage.codex.executable": {
+        "lookout.usage.codex.executable": {
           "type": "string",
           "default": "codex",
           "description": "Codex executable used for structured rate-limit queries."
         },
-        "parful.usage.codex.enabled": {
+        "lookout.usage.codex.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Show Codex usage and start its structured rate-limit provider. Reload the window after changing this setting."
         },
-        "parful.usage.codex.showSparkLimits": {
+        "lookout.usage.codex.showSparkLimits": {
           "type": "boolean",
           "default": false,
           "description": "Show separate GPT Codex Spark rate-limit buckets in the Usage Limits view."
         },
-        "parful.usage.claude.statusLineIntegration": {
+        "lookout.usage.claude.statusLineIntegration": {
           "type": "boolean",
           "default": true,
-          "description": "Add a Parful status-line bridge to extension-launched Claude sessions so subscription limits can be tracked."
+          "description": "Add a Lookout status-line bridge to extension-launched Claude sessions so subscription limits can be tracked."
         },
-        "parful.usage.claude.enabled": {
+        "lookout.usage.claude.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Show Claude usage limits."
         },
-        "parful.usage.warningThreshold": {
+        "lookout.usage.warningThreshold": {
           "type": "number",
           "default": 80,
           "minimum": 1,
           "maximum": 100,
           "description": "Usage percentage at which limit indicators turn to warning state."
         },
-        "parful.usage.criticalThreshold": {
+        "lookout.usage.criticalThreshold": {
           "type": "number",
           "default": 95,
           "minimum": 1,
           "maximum": 100,
           "description": "Usage percentage at which limit indicators turn to critical state."
         },
-        "parful.review.showRecentImages": {
+        "lookout.review.showRecentImages": {
           "type": "boolean",
           "default": false,
           "description": "Show and scan the Recent Images group in the Review view."
         },
-        "parful.review.imageGlob": {
+        "lookout.review.imageGlob": {
           "type": "string",
           "default": "**/*.{png,jpg,jpeg,gif,webp}",
           "description": "Glob used to find reviewable image artifacts."
         },
-        "parful.review.artifactGlobs": {
+        "lookout.review.artifactGlobs": {
           "type": "array",
           "items": {
             "type": "string"
@@ -591,14 +586,14 @@
           ],
           "description": "Globs used to find plans, documentation, and Compound Engineering artifacts for review."
         },
-        "parful.review.maxItemsPerGroup": {
+        "lookout.review.maxItemsPerGroup": {
           "type": "number",
           "default": 12,
           "minimum": 1,
           "maximum": 100,
           "description": "Maximum recent review items shown in each group."
         },
-        "parful.browser.defaultUrl": {
+        "lookout.browser.defaultUrl": {
           "type": "string",
           "default": "http://localhost:3000",
           "description": "URL prefilled by the Open Browser command."

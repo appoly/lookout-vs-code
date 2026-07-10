@@ -22,9 +22,9 @@ const actions = new Set<EventAction>([
 ]);
 
 async function main(): Promise<void> {
-  const url = process.env.PARFUL_NOTIFY_URL;
-  const token = process.env.PARFUL_NOTIFY_TOKEN;
-  const sessionId = process.env.PARFUL_SESSION_ID;
+  const url = process.env.LOOKOUT_NOTIFY_URL;
+  const token = process.env.LOOKOUT_NOTIFY_TOKEN;
+  const sessionId = process.env.LOOKOUT_SESSION_ID;
   if (!url || !token || !sessionId) {
     process.exitCode = 2;
     return;
@@ -59,7 +59,7 @@ async function main(): Promise<void> {
         response.resume();
         response.on('end', () => {
           if ((response.statusCode ?? 500) >= 300) {
-            reject(new Error(`Parful notification failed: ${response.statusCode}`));
+            reject(new Error(`Lookout notification failed: ${response.statusCode}`));
           } else {
             resolve();
           }

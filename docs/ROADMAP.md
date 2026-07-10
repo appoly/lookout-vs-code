@@ -6,6 +6,12 @@ The north-star loop is:
 launch several agents → work in VS Code → see attention/finish state → jump directly → review and run in native VS Code surfaces
 ```
 
+## Product direction
+
+Lookout is a terminal-native control plane for parallel coding work, not a replacement chat client. Its durable advantage is the complete loop around an agent: launch a real CLI session, route attention quickly, retain trustworthy worktree context, and review, test, debug, and run the result in VS Code's native surfaces.
+
+The implementation plan is in [the agent-cockpit plan](plans/agent-cockpit.md). It orders compatibility, session visibility, continuity, and isolated-worktree change history behind the core loop, without storing terminal transcripts or weakening the existing attribution and privacy guarantees.
+
 ## Current checkpoint
 
 - [x] Native editor-area Codex, Claude, and custom terminals.
@@ -29,6 +35,7 @@ launch several agents → work in VS Code → see attention/finish state → jum
 - [x] Deep product and extension namespace rename to Parful / `parful.*` / `PARFUL_*` before publication.
 - [x] Cross-worktree Compound Engineering artifact discovery and canonical path labels.
 - [x] Manual MVP smoke test executed and findings recorded in [the 2026-07-10 smoke report](sessions/2026-07-10-smoke.md).
+- [x] Deep product and extension namespace rename to Lookout / `lookout.*` / `LOOKOUT_*` before Marketplace preview, per [the rename plan](plans/lookout-rename.md).
 
 ## Next: close the manual smoke findings
 
@@ -51,7 +58,52 @@ launch several agents → work in VS Code → see attention/finish state → jum
 - [x] Per-provider launch and usage enablement so Claude-only users are not shown `Codex —` and no unused `codex app-server` is spawned.
 - [x] Default, skippable session labels with rename afterwards.
 - [x] Detect missing direct `codex`/`claude` executables at launch and show a guided message instead of a dead terminal.
-- Add a guided, non-mutating Workshop compatibility check once its independent release contract is stable.
+- Make the native terminal panel the default launch location while preserving editor-area terminals as an explicit preference, amending D2's recorded editor-column default.
+- Add a built-in, non-installing agent-profile catalog: detect supported local CLIs, explain their available Lookout integrations, and let users select a command/profile without hand-editing settings.
+- Make session templates the one-keystroke launch surface for the chosen profile, working-folder/worktree policy, task, browser URL, and preferred review resources.
+
+## Then: make parallel work legible and resumable
+
+- Add a persisted session inbox/timeline built only from explicit lifecycle, attention, review, and task events—never raw terminal output or prompts—with next/previous unread navigation.
+- Add per-session operational stats: elapsed time, attention events, delegated-agent count, worktree change count/diff stats, and known task/test/debug result.
+- Resume supported Codex/Claude sessions through provider-owned IDs; browse prior Lookout session metadata and clearly distinguish resumable, terminal-only, and unavailable records.
+- Offer a privacy-safe export of session metadata and event history, not a transcript.
+- Display session integration health in one place: lifecycle bridge state, hook-trust state, usage availability/staleness, and worktree baseline state.
+
+## Then: improve trustworthy change narratives
+
+- Add worktree diff summaries (`+added −removed`, file count) to review groups.
+- For isolated worktrees only, capture bounded event-linked change checkpoints and let users open the associated native diff; never infer a per-agent edit history for a shared worktree.
+- Make the isolated-worktree recommendation contextual when users start multiple agents in the same repository, while preserving shared-worktree workflows as an explicit supported choice.
+
+## Next: opt-in Compound Engineering
+
+The decision-complete design is in [the opt-in Compound Engineering plan](plans/compound-engineering-opt-in.md). Compound Engineering is credited to [Kieran Klaassen and Every](https://every.to/guides/compound-engineering). Integration is Workshop-first because [The Workshop](https://github.com/adamhulme/the-workshop)'s manifest contract is captured and verified; [Every's official plugin](https://github.com/EveryInc/compound-engineering-plugin) is credited and guided, and gains its own catalog once its contract is captured the same way. Lookout never silently installs either.
+
+### Foundation
+
+- [x] Define and document the product boundary, attribution, adoption decisions, Workshop-first compatibility, staged rollout, and acceptance criteria.
+- Keep Compound Engineering disabled by default as a user-level setting with standard workspace overrides, changeable later from commands/settings without reload.
+- Offer the module once through a contextual detection prompt (Workshop manifest or canonical artifacts in an open agent worktree's change set); never force a first-run choice, never re-prompt after decline.
+- Ship a passive Getting Started walkthrough for the core loop with one optional Compound Engineering step; do not auto-open it as a fork.
+- Hide Plans & Docs and stop artifact scanning when disabled; return matching files to ordinary Workspace Changes.
+- Add Enable/Disable commands plus a Configure quick pick covering the compatibility check, installation guidance, and the credited guide.
+- Detect bounded The Workshop manifests at user/project Claude and Codex targets without reading credentials or skill contents.
+- Guide provider-native Every/The Workshop installation without automatically executing installers or updates.
+- Record the opt-in module as D11 and amend D5's Plans & Docs behavior in the decision log.
+
+### Workflow-aware artifacts
+
+- Parse bounded artifact frontmatter and show honest lifecycle, relationship, stale, and malformed states.
+- Capture a pinned-commit research doc of Every's official plugin contract before adding Every-specific classifications.
+- Organize research, brainstorms, plans, solutions, learnings, todos, changelogs, and distribution-specific artifacts without flattening their contracts.
+- Open artifacts and relationships in native Markdown/diff editors; never infer approval from file existence.
+
+### Fleet and native workflows
+
+- Associate fleet-manifest state with physical worktrees and sessions without overstating agent attribution.
+- Show dependency, queued, running, blocked, failed, completed, verification, and PR-result state where the detected distribution's verified catalog advertises it.
+- Offer explicit provider-native workflow entry points only for advertised capabilities.
 
 ## Then: deepen VS Code integration
 
@@ -64,14 +116,12 @@ launch several agents → work in VS Code → see attention/finish state → jum
 ## Then: isolated parallel work
 
 - [x] Optional isolated Git worktree creation when launching an agent.
-- Session templates: agent, model/profile, worktree policy, task/browser URL, and preferred review resources.
-- Workshop fleet-manifest state associated with isolated agents/worktrees without overstating attribution.
+- Session templates: agent, command/profile override, worktree policy, task/browser URL, preferred review resources, and optional Compound Engineering expectation. Tracked in the first-run plan above.
+- Compound Engineering fleet-manifest state associated with isolated agents/worktrees without overstating attribution (tracked in the opt-in integration stages above).
 - [x] Safe close flow: running process or dirty worktree → review/keep/remove choices.
-- Resume supported Codex/Claude sessions using provider-owned IDs.
 
 ## Then: scale and polish
 
-- Notification feed and next/previous unread navigation.
 - Multi-root and Remote SSH/dev-container smoke matrix.
 - Extension-host integration tests on minimum and current VS Code, plus Windows and macOS CI legs for the platform-specific quoting/path branches.
 - Accessible icon polish, settings walkthrough, marketplace assets, and release automation.
@@ -80,7 +130,7 @@ launch several agents → work in VS Code → see attention/finish state → jum
 
 Details in [the 2026-07-10 review](sessions/2026-07-10-review.md):
 
-- Identity: publisher account, `parful` name availability, public repository at the manifest URL, and external repository rename decision.
+- Identity: publisher account, `lookout` name availability, public repository at the manifest URL, and external repository rename decision.
 - Listing: 128×128+ PNG `icon`, gallery banner, screenshots/GIF of the launch → attention → review loop, user-first README rewrite, `AI` category and agent-name keywords.
 - Build: esbuild bundling and `"preview": true`.
 - Publish: tag-driven `vsce publish` and Open VSX (Cursor/VSCodium/Windsurf users).

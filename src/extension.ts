@@ -20,7 +20,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(sessions);
   await sessions.initialize();
   const sessionTree = new SessionTreeProvider(sessions);
-  const sessionTreeView = vscode.window.createTreeView('parful.sessions', {
+  const sessionTreeView = vscode.window.createTreeView('lookout.sessions', {
     treeDataProvider: sessionTree
   });
   const sessionStatus = new SessionStatusBar(sessions);
@@ -37,40 +37,40 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     usage,
     usageTree,
     usageStatus,
-    vscode.window.registerTreeDataProvider('parful.review', reviewTree),
+    vscode.window.registerTreeDataProvider('lookout.review', reviewTree),
     vscode.workspace.registerTextDocumentContentProvider(
-      'parful-baseline',
+      'lookout-baseline',
       reviewTree
     ),
-    vscode.window.registerTreeDataProvider('parful.usage', usageTree),
-    register('parful.launchAgent', () => chooseAndLaunchAgent(sessions)),
-    register('parful.launchCodex', () => launchAgent(sessions, 'codex')),
-    register('parful.launchClaude', () => launchAgent(sessions, 'claude')),
-    register('parful.launchCustom', () => launchAgent(sessions, 'custom')),
-    register('parful.launchAgentInWorktree', () =>
+    vscode.window.registerTreeDataProvider('lookout.usage', usageTree),
+    register('lookout.launchAgent', () => chooseAndLaunchAgent(sessions)),
+    register('lookout.launchCodex', () => launchAgent(sessions, 'codex')),
+    register('lookout.launchClaude', () => launchAgent(sessions, 'claude')),
+    register('lookout.launchCustom', () => launchAgent(sessions, 'custom')),
+    register('lookout.launchAgentInWorktree', () =>
       launchAgentInWorktree(sessions)
     ),
-    register('parful.adoptTerminal', (terminal?: vscode.Terminal) =>
+    register('lookout.adoptTerminal', (terminal?: vscode.Terminal) =>
       adoptTerminal(sessions, terminal)
     ),
-    register('parful.splitCodex', (item?: SessionTreeItem) =>
+    register('lookout.splitCodex', (item?: SessionTreeItem) =>
       launchAgent(sessions, 'codex', sessionId(item))
     ),
-    register('parful.splitClaude', (item?: SessionTreeItem) =>
+    register('lookout.splitClaude', (item?: SessionTreeItem) =>
       launchAgent(sessions, 'claude', sessionId(item))
     ),
-    register('parful.splitSession', (item?: SessionTreeItem) =>
+    register('lookout.splitSession', (item?: SessionTreeItem) =>
       splitSession(sessions, item)
     ),
-    register('parful.focusSession', (item?: SessionTreeItem) => {
+    register('lookout.focusSession', (item?: SessionTreeItem) => {
       const id = sessionId(item);
       return id ? sessions.focus(id) : undefined;
     }),
-    register('parful.focusNextAttention', () => sessions.focusNextAttention()),
-    register('parful.pickSession', () => pickSession(sessions)),
-    register('parful.focusNextSession', () => sessions.focusAdjacent(1)),
-    register('parful.focusPreviousSession', () => sessions.focusAdjacent(-1)),
-    register('parful.renameSession', async (item?: SessionTreeItem) => {
+    register('lookout.focusNextAttention', () => sessions.focusNextAttention()),
+    register('lookout.pickSession', () => pickSession(sessions)),
+    register('lookout.focusNextSession', () => sessions.focusAdjacent(1)),
+    register('lookout.focusPreviousSession', () => sessions.focusAdjacent(-1)),
+    register('lookout.renameSession', async (item?: SessionTreeItem) => {
       const id = sessionId(item);
       if (!id) {
         return;
@@ -88,21 +88,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         await sessions.rename(id, label);
       }
     }),
-    register('parful.closeSession', (item?: SessionTreeItem) => {
+    register('lookout.closeSession', (item?: SessionTreeItem) => {
       const id = sessionId(item);
       return id ? sessions.close(id) : undefined;
     }),
-    register('parful.restartSession', (item?: SessionTreeItem) => {
+    register('lookout.restartSession', (item?: SessionTreeItem) => {
       const id = sessionId(item);
       return id ? sessions.restart(id) : undefined;
     }),
-    register('parful.markNeedsAttention', (item?: SessionTreeItem) => {
+    register('lookout.markNeedsAttention', (item?: SessionTreeItem) => {
       const id = sessionId(item);
       if (id) {
         sessions.markAttention(id);
       }
     }),
-    register('parful.copyNotifyCommand', async (item?: SessionTreeItem) => {
+    register('lookout.copyNotifyCommand', async (item?: SessionTreeItem) => {
       const id = sessionId(item);
       const command = id ? sessions.notifyCommand(id) : undefined;
       if (command) {
@@ -114,44 +114,44 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         );
       }
     }),
-    register('parful.refreshSessions', () => sessionTree.refresh()),
-    register('parful.toggleAttentionSound', async () => {
+    register('lookout.refreshSessions', () => sessionTree.refresh()),
+    register('lookout.toggleAttentionSound', async () => {
       await sessions.toggleAttentionSound();
       await updateSoundContext();
     }),
-    register('parful.muteAttentionSound', async () => {
+    register('lookout.muteAttentionSound', async () => {
       await sessions.setAttentionSoundEnabled(false);
       await updateSoundContext();
     }),
-    register('parful.unmuteAttentionSound', async () => {
+    register('lookout.unmuteAttentionSound', async () => {
       await sessions.setAttentionSoundEnabled(true);
       await updateSoundContext();
     }),
-    register('parful.configureAttentionSound', () =>
+    register('lookout.configureAttentionSound', () =>
       vscode.commands.executeCommand(
         'workbench.action.openSettings',
-        'parful.attentionSound'
+        'lookout.attentionSound'
       )
     ),
-    register('parful.testAttentionSound', () => sessions.testAttentionSound()),
-    register('parful.refreshReview', () => reviewTree.refresh()),
-    register('parful.refreshUsage', () => usage.refresh()),
-    register('parful.openReviewItem', (item?: ReviewTreeItem) =>
+    register('lookout.testAttentionSound', () => sessions.testAttentionSound()),
+    register('lookout.refreshReview', () => reviewTree.refresh()),
+    register('lookout.refreshUsage', () => usage.refresh()),
+    register('lookout.openReviewItem', (item?: ReviewTreeItem) =>
       item ? reviewTree.open(item) : undefined
     ),
-    register('parful.openSourceControl', () =>
+    register('lookout.openSourceControl', () =>
       vscode.commands.executeCommand('workbench.view.scm')
     ),
-    register('parful.openTestExplorer', () =>
+    register('lookout.openTestExplorer', () =>
       vscode.commands.executeCommand('workbench.view.testing.focus')
     ),
-    register('parful.runTestTask', () => runTestTask()),
-    register('parful.startDebug', () =>
+    register('lookout.runTestTask', () => runTestTask()),
+    register('lookout.startDebug', () =>
       vscode.commands.executeCommand('workbench.action.debug.selectandstart')
     ),
-    register('parful.openReviewLayout', () => openReviewLayout(sessions)),
-    register('parful.runTask', () => runWorkspaceTask()),
-    register('parful.openBrowser', () => openBrowser())
+    register('lookout.openReviewLayout', () => openReviewLayout(sessions)),
+    register('lookout.runTask', () => runWorkspaceTask()),
+    register('lookout.openBrowser', () => openBrowser())
   );
 
   const updateSessionBadge = (): void => {
@@ -166,7 +166,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     sessions.onDidChange(updateSessionBadge),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('parful.attentionSound.enabled')) {
+      if (event.affectsConfiguration('lookout.attentionSound.enabled')) {
         void updateSoundContext();
       }
     })
@@ -182,11 +182,11 @@ export function deactivate(): void {}
 
 async function updateSoundContext(): Promise<void> {
   const enabled = vscode.workspace
-    .getConfiguration('parful.attentionSound')
+    .getConfiguration('lookout.attentionSound')
     .get('enabled', true);
   await vscode.commands.executeCommand(
     'setContext',
-    'parful.attentionSoundEnabled',
+    'lookout.attentionSoundEnabled',
     enabled
   );
 }
@@ -220,7 +220,7 @@ async function launchAgent(
           validateInput: nonEmpty
         })
       : vscode.workspace
-          .getConfiguration('parful')
+          .getConfiguration('lookout')
           .get<string>(`${kind}.command`, kind);
   if (!command) {
     return;
@@ -231,13 +231,13 @@ async function launchAgent(
     !(await executableAvailable(command))
   ) {
     const choice = await vscode.window.showErrorMessage(
-      `${displayKind(kind)} could not be found. Install it or configure parful.${kind}.command.`,
+      `${displayKind(kind)} could not be found. Install it or configure lookout.${kind}.command.`,
       'Open Settings'
     );
     if (choice) {
       await vscode.commands.executeCommand(
         'workbench.action.openSettings',
-        `parful.${kind}.command`
+        `lookout.${kind}.command`
       );
     }
     return;
@@ -283,7 +283,7 @@ async function chooseAndLaunchAgent(
       (provider) =>
         provider.agentKind === 'custom' ||
         vscode.workspace
-          .getConfiguration(`parful.${provider.agentKind}`)
+          .getConfiguration(`lookout.${provider.agentKind}`)
           .get('enabled', true)
     ),
     {
@@ -321,7 +321,7 @@ async function launchAgentInWorktree(sessions: SessionManager): Promise<void> {
   const suffix = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 12);
   const branch = await vscode.window.showInputBox({
     title: 'New Agent Worktree Branch',
-    value: `parful/agent-${suffix}`,
+    value: `lookout/agent-${suffix}`,
     validateInput: nonEmpty
   });
   if (!branch) {
@@ -516,7 +516,7 @@ function inferAgentKind(terminalName: string): AgentKind | undefined {
 
 async function openBrowser(): Promise<void> {
   const defaultUrl = vscode.workspace
-    .getConfiguration('parful.browser')
+    .getConfiguration('lookout.browser')
     .get('defaultUrl', 'http://localhost:3000');
   const value = await vscode.window.showInputBox({
     title: 'Open Browser',
@@ -639,7 +639,7 @@ async function openReviewLayout(sessions: SessionManager): Promise<void> {
   if (selected && sessions.isOpen(selected.id)) {
     await sessions.focus(selected.id);
   }
-  await vscode.commands.executeCommand('workbench.view.extension.parful');
+  await vscode.commands.executeCommand('workbench.view.extension.lookout');
 }
 
 async function executableAvailable(command: string): Promise<boolean> {

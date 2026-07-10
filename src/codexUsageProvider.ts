@@ -87,8 +87,8 @@ export class CodexUsageProvider {
 
       await this.request('initialize', {
         clientInfo: {
-          name: 'parful-vscode',
-          title: 'Parful Agent Cockpit',
+          name: 'lookout-vscode',
+          title: 'Lookout Agent Cockpit',
           version: '0.1.0'
         },
         capabilities: { experimentalApi: false }

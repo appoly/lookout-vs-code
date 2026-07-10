@@ -6,7 +6,7 @@ This document records the source-backed product decisions made during the initia
 
 VS Code's default integrated terminal panel is a poor control surface for several concurrent coding agents: it consumes a shallow strip at the bottom, hides agent context, and makes it expensive to jump between a request for approval, a finished task, a screenshot, a plan, and the corresponding code review.
 
-Parful should make the core loop fast:
+Lookout should make the core loop fast:
 
 ```text
 launch agents → return to code/review → notice attention → jump to agent → review output beside it
@@ -38,18 +38,18 @@ Sources: [VS Code terminal API](https://code.visualstudio.com/api/references/vsc
 
 ## Attention bridge
 
-Stable VS Code APIs do not allow an extension to inspect arbitrary interactive terminal scrollback. Parsing it would also be fragile and invasive. `src/attentionServer.ts` instead starts a loopback-only HTTP endpoint with a random bearer token. Every Parful terminal receives the session ID, endpoint, and a bundled `notify.js` helper path in its environment.
+Stable VS Code APIs do not allow an extension to inspect arbitrary interactive terminal scrollback. Parsing it would also be fragile and invasive. `src/attentionServer.ts` instead starts a loopback-only HTTP endpoint with a random bearer token. Every Lookout terminal receives the session ID, endpoint, and a bundled `notify.js` helper path in its environment.
 
-Claude sessions launched directly by Parful receive session-only `UserPromptSubmit`, `Notification`, `SubagentStart`, `SubagentStop`, `Stop`, and `StopFailure` hooks through their temporary `--settings` file. These report working, permission attention, delegated-agent IDs, foreground stop, and failure without modifying global Claude settings. Current hook input identifies agent ID/type but does not say whether the child was foregrounded or backgrounded, so Parful uses the honest umbrella term “delegated.”
+Claude sessions launched directly by Lookout receive session-only `UserPromptSubmit`, `Notification`, `SubagentStart`, `SubagentStop`, `Stop`, and `StopFailure` hooks through their temporary `--settings` file. These report working, permission attention, delegated-agent IDs, foreground stop, and failure without modifying global Claude settings. Current hook input identifies agent ID/type but does not say whether the child was foregrounded or backgrounded, so Lookout uses the honest umbrella term “delegated.”
 
-The Codex CLI's external `notify` setting currently emits `agent-turn-complete`. Direct Codex sessions receive command-line-only lifecycle hooks for prompt, permission, delegated-agent, and stop events plus that notifier as a fallback. Codex requires non-managed hooks to be reviewed through `/hooks`; Parful does not bypass that security boundary. Commands with shell operators or wrappers are not rewritten, and explicit hook/notifier overrides are preserved.
+The Codex CLI's external `notify` setting currently emits `agent-turn-complete`. Direct Codex sessions receive command-line-only lifecycle hooks for prompt, permission, delegated-agent, and stop events plus that notifier as a fallback. Codex requires non-managed hooks to be reviewed through `/hooks`; Lookout does not bypass that security boundary. Commands with shell operators or wrappers are not rewritten, and explicit hook/notifier overrides are preserved.
 
 Sources: [Codex advanced notifications](https://developers.openai.com/codex/config-advanced#notifications), [Codex lifecycle hooks](https://learn.chatgpt.com/docs/hooks), [Claude Code hooks](https://code.claude.com/docs/en/hooks).
 
-Other agents can run the value copied by **Parful: Copy Attention Hook Command**, for example:
+Other agents can run the value copied by **Lookout: Copy Attention Hook Command**, for example:
 
 ```bash
-node "$PARFUL_NOTIFY_HELPER" attention "Please approve the database migration"
+node "$LOOKOUT_NOTIFY_HELPER" attention "Please approve the database migration"
 ```
 
 This updates the session tree, keeps an unread marker until focus, and offers a VS Code notification when the terminal is not active.

@@ -29,9 +29,9 @@ import type {
 } from './types';
 import type { UsageBridgeEvent } from './usageTypes';
 
-const STORAGE_KEY = 'parful.sessions.v1';
-const BRIDGE_STORAGE_KEY = 'parful.attentionEndpoint.v1';
-const CODEX_HOOK_NOTICE_KEY = 'parful.codexHookNotice.v1';
+const STORAGE_KEY = 'lookout.sessions.v1';
+const BRIDGE_STORAGE_KEY = 'lookout.attentionEndpoint.v1';
+const CODEX_HOOK_NOTICE_KEY = 'lookout.codexHookNotice.v1';
 
 export class SessionManager implements vscode.Disposable {
   private readonly sessions = new Map<string, AgentSession>();
@@ -161,7 +161,7 @@ export class SessionManager implements vscode.Disposable {
               : 'Agent command finished'
         );
         if (
-          vscode.workspace.getConfiguration('parful').get('notifyOnAgentExit', true) &&
+          vscode.workspace.getConfiguration('lookout').get('notifyOnAgentExit', true) &&
           (!vscode.window.state.focused ||
             vscode.window.activeTerminal !== event.terminal)
         ) {
@@ -246,7 +246,7 @@ export class SessionManager implements vscode.Disposable {
       ? this.terminals.get(request.parentSessionId)
       : undefined;
     const configuredLocation = vscode.workspace
-      .getConfiguration('parful')
+      .getConfiguration('lookout')
       .get<'editor' | 'panel'>('terminals.location', 'editor');
     const endpoint = this.attentionEndpoint;
     const location: vscode.TerminalOptions['location'] = parentTerminal
@@ -266,18 +266,18 @@ export class SessionManager implements vscode.Disposable {
       location,
       iconPath: new vscode.ThemeIcon(request.kind === 'claude' ? 'sparkle' : 'terminal'),
       env: {
-        PARFUL_SESSION_ID: session.id,
+        LOOKOUT_SESSION_ID: session.id,
         ...(endpoint
           ? {
-              PARFUL_NOTIFY_URL: endpoint.url,
-              PARFUL_NOTIFY_TOKEN: endpoint.token,
-              PARFUL_NOTIFY_HELPER: path.join(
+              LOOKOUT_NOTIFY_URL: endpoint.url,
+              LOOKOUT_NOTIFY_TOKEN: endpoint.token,
+              LOOKOUT_NOTIFY_HELPER: path.join(
                 this.context.extensionPath,
                 'out',
                 'src',
                 'notify.js'
               ),
-              PARFUL_USAGE_URL: endpoint.url.replace(/\/events$/, '/usage')
+              LOOKOUT_USAGE_URL: endpoint.url.replace(/\/events$/, '/usage')
             }
           : {})
       }
@@ -298,7 +298,7 @@ export class SessionManager implements vscode.Disposable {
     if (!endpoint && !this.bridgeWarningShown) {
       this.bridgeWarningShown = true;
       void vscode.window.showWarningMessage(
-        'Parful could not start its local attention bridge. Terminals still work, but agent hooks and Claude usage updates are unavailable.'
+        'Lookout could not start its local attention bridge. Terminals still work, but agent hooks and Claude usage updates are unavailable.'
       );
     }
     return session;
@@ -393,7 +393,7 @@ export class SessionManager implements vscode.Disposable {
         );
         if (choice === 'Review Changes') {
           this.selectSession(id);
-          await vscode.commands.executeCommand('workbench.view.extension.parful');
+          await vscode.commands.executeCommand('workbench.view.extension.lookout');
           return;
         }
         if (choice !== 'Remove Agent') {
@@ -601,7 +601,7 @@ export class SessionManager implements vscode.Disposable {
     }
     this.sessions.set(event.sessionId, updated);
     await this.persistAndNotify();
-    const configuration = vscode.workspace.getConfiguration('parful');
+    const configuration = vscode.workspace.getConfiguration('lookout');
     const shouldNotify =
       (updated.status === 'attention' &&
         configuration.get('notifyOnAttention', true)) ||
@@ -653,7 +653,7 @@ export class SessionManager implements vscode.Disposable {
     if (
       request.kind === 'codex' &&
       vscode.workspace
-        .getConfiguration('parful.codex')
+        .getConfiguration('lookout.codex')
         .get('lifecycleIntegration', true)
     ) {
       return withCodexLifecycleIntegration(request.command, notifyHelperPath);
@@ -666,10 +666,10 @@ export class SessionManager implements vscode.Disposable {
       return request.command;
     }
     const statusLineIntegration = vscode.workspace
-      .getConfiguration('parful.usage.claude')
+      .getConfiguration('lookout.usage.claude')
       .get('statusLineIntegration', true);
     const lifecycleIntegration = vscode.workspace
-      .getConfiguration('parful.claude')
+      .getConfiguration('lookout.claude')
       .get('lifecycleIntegration', true);
     if (!statusLineIntegration && !lifecycleIntegration) {
       return request.command;
@@ -683,7 +683,7 @@ export class SessionManager implements vscode.Disposable {
     );
     const settingsUri = vscode.Uri.joinPath(
       this.context.globalStorageUri,
-      'claude-parful-settings.json'
+      'claude-lookout-settings.json'
     );
     const hooks = {
       UserPromptSubmit: [
@@ -741,7 +741,7 @@ export class SessionManager implements vscode.Disposable {
       return;
     }
     const choice = await vscode.window.showInformationMessage(
-      'To track delegated Codex agents, run /hooks in this Codex terminal and trust the Parful lifecycle hooks once.',
+      'To track delegated Codex agents, run /hooks in this Codex terminal and trust the Lookout lifecycle hooks once.',
       'Focus Agent',
       "Don't Remind Me"
     );
@@ -798,7 +798,7 @@ function sessionIdFromTerminal(terminal: vscode.Terminal): string | undefined {
   if (!('env' in options) || !options.env) {
     return undefined;
   }
-  const sessionId = options.env.PARFUL_SESSION_ID;
+  const sessionId = options.env.LOOKOUT_SESSION_ID;
   return typeof sessionId === 'string' ? sessionId : undefined;
 }
 

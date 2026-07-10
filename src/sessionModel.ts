@@ -39,7 +39,7 @@ export function createSessionId(kind: AgentKind, now = Date.now()): string {
 }
 
 export function terminalName(id: string, label: string): string {
-  return `Parful: ${label.trim()} [${id}]`;
+  return `Lookout: ${label.trim()} [${id}]`;
 }
 
 export function isActiveSession(session: AgentSession): boolean {

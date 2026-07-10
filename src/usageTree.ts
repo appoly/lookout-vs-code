@@ -98,8 +98,8 @@ export class UsageStatusBar implements vscode.Disposable {
   private readonly subscription: vscode.Disposable;
 
   public constructor(private readonly manager: UsageManager) {
-    this.item.name = 'Parful Usage Limits';
-    this.item.command = 'workbench.view.extension.parful';
+    this.item.name = 'Lookout Usage Limits';
+    this.item.command = 'workbench.view.extension.lookout';
     this.subscription = manager.onDidChange(() => this.render());
     this.render();
     this.item.show();
@@ -127,7 +127,7 @@ export class UsageStatusBar implements vscode.Disposable {
       })
     );
     this.item.text = `$(dashboard) ${pieces.join(' · ')}`;
-    this.item.tooltip = 'Parful usage limits — click to open the cockpit';
+    this.item.tooltip = 'Lookout usage limits — click to open the cockpit';
     this.item.backgroundColor =
       highestUsage >= criticalThreshold()
         ? new vscode.ThemeColor('statusBarItem.errorBackground')
@@ -178,12 +178,12 @@ function usageIcon(percent: number): vscode.ThemeIcon {
 
 function warningThreshold(): number {
   return vscode.workspace
-    .getConfiguration('parful.usage')
+    .getConfiguration('lookout.usage')
     .get('warningThreshold', 80);
 }
 
 function criticalThreshold(): number {
   return vscode.workspace
-    .getConfiguration('parful.usage')
+    .getConfiguration('lookout.usage')
     .get('criticalThreshold', 95);
 }

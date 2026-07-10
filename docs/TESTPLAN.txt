@@ -1,4 +1,4 @@
-PARFUL 0.1.0 — INTERACTIVE SMOKE TEST PLAN
+LOOKOUT 0.1.0 — INTERACTIVE SMOKE TEST PLAN
 Plan written 2026-07-10 against commit b43bfcb. Record results in
 docs/sessions/2026-07-10-smoke.md (one line per numbered item).
 
@@ -10,32 +10,32 @@ SETUP (once)
   - Desktop VS Code, plus the WSL remote as a second pass.
   - Signed-in codex and claude CLIs; node on PATH.
   - A scratch git repo opened as a trusted workspace.
-  - Test BOTH install paths: F5 "Run Parful" (Extension Development
+  - Test BOTH install paths: F5 "Run Lookout" (Extension Development
     Host), then npm run vsix -> Extensions: Install from VSIX. The
     installed-VSIX path has never been exercised.
 
 A. RENAME INTEGRITY (~5 min)
-  1. Activity bar shows a Parful icon; Agents, Review, and Usage
+  1. Activity bar shows a Lookout icon; Agents, Review, and Usage
      Limits views all render.
-  2. Command palette: typing "Parful" lists every command under that
+  2. Command palette: typing "Lookout" lists every command under that
      category; nothing appears under "Paraterm" or "MultiTerm".
-  3. Settings UI: searching "parful" shows every contributed setting,
+  3. Settings UI: searching "lookout" shows every contributed setting,
      titled correctly.
   4. Inside a launched agent terminal:
      env | grep -i 'multiterm\|paraterm'  -> nothing
-     env | grep PARFUL                    -> the 5 PARFUL_* vars
+     env | grep LOOKOUT                    -> the 5 LOOKOUT_* vars
 
 B. LAUNCH AND LAYOUT (~10 min)
   5. "+" picker offers Codex / Claude Code / Custom. Launch two Codex
      and one Claude: terminals open in editor column two; column one
      stays free for review.
-  6. Terminal tab names read "Parful: <label> [<id>]"; tree rows show
+  6. Terminal tab names read "Lookout: <label> [<id>]"; tree rows show
      directory - branch - state.
   7. Split an agent (inline action): native split beside its parent,
      not a new column.
-  8. Set parful.terminals.location = panel, launch -> lands in the
+  8. Set lookout.terminals.location = panel, launch -> lands in the
      panel. Reset to editor.
-  9. Launch with parful.codex.command = "nonexistent-cli": no dead
+  9. Launch with lookout.codex.command = "nonexistent-cli": no dead
      terminal is created; guided help offers the command setting.
 
 C. LIFECYCLE, ATTENTION, AND THE BELL (~20 min — the heart of it)
@@ -44,7 +44,7 @@ C. LIFECYCLE, ATTENTION, AND THE BELL (~20 min — the heart of it)
      turn finish while another terminal is focused -> "waiting for
      input" + unread dot; focusing clears unread.
  11. Codex first launch: the one-time /hooks trust review flow
-     appears as designed (D8) — Parful instructs, never bypasses.
+     appears as designed (D8) — Lookout instructs, never bypasses.
      Before trusting, turn-complete attention still arrives via the
      notify fallback. After /hooks trust, full working / waiting /
      permission events flow.
@@ -55,16 +55,16 @@ C. LIFECYCLE, ATTENTION, AND THE BELL (~20 min — the heart of it)
  13. Bell and notification: with the window unfocused, let the terminal
      that was last active hit attention -> both are delivered and the
      row remains unread. Repeat while a different terminal is focused.
-     parful.attentionSound.volume = 0 and the
+     lookout.attentionSound.volume = 0 and the
      Agents toolbar speaker toggle each mute it and changes icon. Use
-     Parful: Test Attention Sound and Configure Attention Sound. On WSL, confirm the
+     Lookout: Test Attention Sound and Configure Attention Sound. On WSL, confirm the
      PowerShell fallback produces sound, or a one-time "missing audio
      backend" message — never unexplained silence.
  14. Custom agent: run the copied attention hook command inside its
      terminal -> attention + unread. Pipe a JSON payload into it via
      stdin to check message extraction.
  15. Exit an unattended agent (exit / ctrl-d) -> completed/failed with
-     exit code and bell; notification honors parful.notifyOnAgentExit.
+     exit code and bell; notification honors lookout.notifyOnAgentExit.
 
 D. NAVIGATION (~5 min)
  16. Tree click focuses the exact terminal. Focus Agent quick-pick
@@ -85,10 +85,10 @@ E. REVIEW VIEW (~15 min)
      workspace, launch an agent there -> its changes and artifacts
      appear with canonical path labels.
  21. Files changed since an open agent launched and matching
-     parful.review.artifactGlobs appear under that worktree's agent
+     lookout.review.artifactGlobs appear under that worktree's agent
      labels in Plans & Docs and are EXCLUDED from Workspace Changes.
      Unchanged and older pre-existing documents stay hidden.
- 22. Recent Images stays hidden until parful.review.showRecentImages;
+ 22. Recent Images stays hidden until lookout.review.showRecentImages;
      then a fresh screenshot appears and opens in the image editor in
      column one.
  23. Diagnostics are scoped to the selected agent's root; opening one
@@ -99,7 +99,7 @@ E. REVIEW VIEW (~15 min)
 F. USAGE LIMITS (~10 min)
  24. Codex windows show percentages/reset countdowns — verify the
      numbers against Codex's own UI before trusting them. Spark
-     buckets hidden until parful.usage.codex.showSparkLimits.
+     buckets hidden until lookout.usage.codex.showSparkLimits.
  25. Claude shows waiting until the first response, then 5h/7d
      windows — verify against /usage. An API-key session shows
      waiting/unavailable, NEVER 0%.

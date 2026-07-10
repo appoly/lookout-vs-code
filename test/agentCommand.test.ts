@@ -28,7 +28,7 @@ test('preserves explicit Codex notifier and hook overrides', () => {
     '/extension/notify.js',
     'linux'
   );
-  assert.doesNotMatch(explicitNotifier, /Parful is waiting/);
+  assert.doesNotMatch(explicitNotifier, /Lookout is waiting/);
   assert.match(explicitNotifier, /hooks\.SubagentStart=/);
 
   const explicitHooks = withCodexLifecycleIntegration(

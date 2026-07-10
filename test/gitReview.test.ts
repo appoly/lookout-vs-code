@@ -43,11 +43,11 @@ test('removes discovered plans and docs from ordinary workspace changes', () => 
 });
 
 test('captures a Git baseline and lists working tree changes', async () => {
-  const directory = mkdtempSync(path.join(tmpdir(), 'parful-git-'));
+  const directory = mkdtempSync(path.join(tmpdir(), 'lookout-git-'));
   try {
     git(directory, ['init', '-q']);
-    git(directory, ['config', 'user.name', 'Parful Tests']);
-    git(directory, ['config', 'user.email', 'parful@example.invalid']);
+    git(directory, ['config', 'user.name', 'Lookout Tests']);
+    git(directory, ['config', 'user.email', 'lookout@example.invalid']);
     writeFileSync(path.join(directory, 'tracked.txt'), 'baseline\n');
     git(directory, ['add', 'tracked.txt']);
     git(directory, ['commit', '-qm', 'baseline']);

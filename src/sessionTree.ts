@@ -19,7 +19,7 @@ export class SessionTreeItem extends vscode.TreeItem {
   public constructor(public readonly session: AgentSession) {
     super(session.label, vscode.TreeItemCollapsibleState.None);
     this.id = session.id;
-    this.contextValue = 'parful.session';
+    this.contextValue = 'lookout.session';
     this.description = sessionDescription(session);
     this.tooltip = [
       session.label,
@@ -34,7 +34,7 @@ export class SessionTreeItem extends vscode.TreeItem {
     ].join('\n');
     this.iconPath = STATUS_ICONS[session.status];
     this.command = {
-      command: 'parful.focusSession',
+      command: 'lookout.focusSession',
       title: 'Focus Agent',
       arguments: [this]
     };
@@ -100,7 +100,7 @@ export class SessionStatusBar implements vscode.Disposable {
     if (unread > 0) {
       this.item.text = `$(bell-dot) ${unread} agent${unread === 1 ? '' : 's'}`;
       this.item.tooltip = `${attention} waiting · ${unread} unread`;
-      this.item.command = 'parful.focusNextAttention';
+      this.item.command = 'lookout.focusNextAttention';
       this.item.backgroundColor = new vscode.ThemeColor(
         'statusBarItem.warningBackground'
       );
@@ -108,7 +108,7 @@ export class SessionStatusBar implements vscode.Disposable {
     }
     this.item.text = `$(terminal) ${this.manager.activeCount}`;
     this.item.tooltip = `${this.manager.activeCount} active agents`;
-    this.item.command = 'parful.pickSession';
+    this.item.command = 'lookout.pickSession';
     this.item.backgroundColor = undefined;
   }
 }

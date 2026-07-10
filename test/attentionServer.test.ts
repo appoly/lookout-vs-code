@@ -124,9 +124,9 @@ async function runNotify(
     {
       env: {
         ...process.env,
-        PARFUL_NOTIFY_URL: endpoint.url,
-        PARFUL_NOTIFY_TOKEN: endpoint.token,
-        PARFUL_SESSION_ID: 'session-from-hook'
+        LOOKOUT_NOTIFY_URL: endpoint.url,
+        LOOKOUT_NOTIFY_TOKEN: endpoint.token,
+        LOOKOUT_SESSION_ID: 'session-from-hook'
       },
       stdio: ['pipe', 'pipe', 'pipe']
     }

@@ -3,7 +3,7 @@ import { CodexUsageProvider } from './codexUsageProvider';
 import type { SessionManager } from './sessionManager';
 import type { UsageSnapshot } from './usageTypes';
 
-const CLAUDE_STORAGE_KEY = 'parful.usage.claude.v1';
+const CLAUDE_STORAGE_KEY = 'lookout.usage.claude.v1';
 const STALE_AFTER_MS = 15 * 60 * 1000;
 
 export class UsageManager implements vscode.Disposable {
@@ -19,10 +19,10 @@ export class UsageManager implements vscode.Disposable {
     sessions: SessionManager
   ) {
     const executable = vscode.workspace
-      .getConfiguration('parful.usage.codex')
+      .getConfiguration('lookout.usage.codex')
       .get('executable', 'codex');
     const includeSparkLimits = vscode.workspace
-      .getConfiguration('parful.usage.codex')
+      .getConfiguration('lookout.usage.codex')
       .get('showSparkLimits', false);
     this.codex = new CodexUsageProvider(
       executable,
@@ -65,15 +65,15 @@ export class UsageManager implements vscode.Disposable {
       }),
       vscode.workspace.onDidChangeConfiguration((event) => {
         if (
-          event.affectsConfiguration('parful.usage.codex.enabled') ||
-          event.affectsConfiguration('parful.usage.claude.enabled')
+          event.affectsConfiguration('lookout.usage.codex.enabled') ||
+          event.affectsConfiguration('lookout.usage.claude.enabled')
         ) {
           this.changedEmitter.fire();
         }
-        if (event.affectsConfiguration('parful.usage.codex.showSparkLimits')) {
+        if (event.affectsConfiguration('lookout.usage.codex.showSparkLimits')) {
           this.codex.setIncludeSparkLimits(
             vscode.workspace
-              .getConfiguration('parful.usage.codex')
+              .getConfiguration('lookout.usage.codex')
               .get('showSparkLimits', false)
           );
           void this.refresh();
@@ -128,7 +128,7 @@ export class UsageManager implements vscode.Disposable {
 
 function providerEnabled(provider: UsageSnapshot['provider']): boolean {
   return vscode.workspace
-    .getConfiguration(`parful.usage.${provider}`)
+    .getConfiguration(`lookout.usage.${provider}`)
     .get('enabled', true);
 }
 

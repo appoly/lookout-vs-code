@@ -10,7 +10,7 @@ export class AttentionSound implements vscode.Disposable {
 
   public async play(): Promise<void> {
     const configuration = vscode.workspace.getConfiguration(
-      'parful.attentionSound'
+      'lookout.attentionSound'
     );
     const enabled = configuration.get('enabled', true);
     const volume = Math.round(
@@ -36,14 +36,14 @@ export class AttentionSound implements vscode.Disposable {
     if (!played && !this.unavailableWarningShown) {
       this.unavailableWarningShown = true;
       void vscode.window.showWarningMessage(
-        'Parful attention sound is enabled, but no supported local audio player was found.'
+        'Lookout attention sound is enabled, but no supported local audio player was found.'
       );
     }
   }
 
   public async toggle(): Promise<void> {
     const configuration = vscode.workspace.getConfiguration(
-      'parful.attentionSound'
+      'lookout.attentionSound'
     );
     const enabled = configuration.get('enabled', true);
     await configuration.update(
@@ -54,14 +54,14 @@ export class AttentionSound implements vscode.Disposable {
     const volume = configuration.get('volume', 35);
     void vscode.window.showInformationMessage(
       enabled
-        ? 'Parful attention sound muted.'
-        : `Parful attention sound enabled at ${volume}%.`
+        ? 'Lookout attention sound muted.'
+        : `Lookout attention sound enabled at ${volume}%.`
     );
   }
 
   public async setEnabled(enabled: boolean): Promise<void> {
     const configuration = vscode.workspace.getConfiguration(
-      'parful.attentionSound'
+      'lookout.attentionSound'
     );
     await configuration.update(
       'enabled',
@@ -71,8 +71,8 @@ export class AttentionSound implements vscode.Disposable {
     const volume = configuration.get('volume', 35);
     void vscode.window.showInformationMessage(
       enabled
-        ? `Parful attention sound enabled at ${volume}%.`
-        : 'Parful attention sound muted.'
+        ? `Lookout attention sound enabled at ${volume}%.`
+        : 'Lookout attention sound muted.'
     );
   }
 
