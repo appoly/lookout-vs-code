@@ -35,3 +35,18 @@ test('uses Claude five-hour usage in the compact status summary', () => {
 
   assert.equal(window?.usedPercent, 3);
 });
+
+test('uses Codex primary usage in the compact status summary', () => {
+  const window = selectStatusWindow({
+    provider: 'codex',
+    status: 'available',
+    observedAt: 0,
+    source: 'codex-app-server',
+    windows: [
+      { id: 'codex:primary', label: '5 hour', usedPercent: 3 },
+      { id: 'codex:secondary', label: '1 week', usedPercent: 46 }
+    ]
+  });
+
+  assert.equal(window?.usedPercent, 3);
+});

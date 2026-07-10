@@ -32,8 +32,8 @@ export function formatResetDescription(
 
 /**
  * Returns the quota window shown in the compact status bar.
- * Claude's short rolling window is the actionable limit, while other providers
- * continue to show their most-used window.
+ * The short rolling window is the actionable limit for Claude and Codex, while
+ * other providers continue to show their most-used window.
  */
 export function selectStatusWindow(
   snapshot: UsageSnapshot
@@ -42,6 +42,12 @@ export function selectStatusWindow(
     const fiveHour = snapshot.windows.find((window) => window.id === 'five_hour');
     if (fiveHour) {
       return fiveHour;
+    }
+  }
+  if (snapshot.provider === 'codex') {
+    const primary = snapshot.windows.find((window) => window.id.endsWith(':primary'));
+    if (primary) {
+      return primary;
     }
   }
   return [...snapshot.windows].sort((a, b) => b.usedPercent - a.usedPercent)[0];
