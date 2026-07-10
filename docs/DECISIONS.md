@@ -79,3 +79,4 @@ Codex's external `notify` channel currently exposes turn completion, not turn st
 4. How should existing Claude status-line commands be composed without executing arbitrary global configuration implicitly?
 5. Should Paraterm expose a notification feed view, or keep unread/latest-event state only in agent rows?
 6. How should a user's global Codex `notify` command be composed with Paraterm's session-only notifier?
+7. Should the internal `multiTerm.*` command/settings/storage namespace be renamed to `paraterm.*` before the first Marketplace publish? There are no external users yet, so the first release is the last cheap moment; keeping it must be an explicit permanent choice, not a default.

@@ -32,6 +32,15 @@ launch several agents → work in VS Code → see attention/finish state → jum
 5. Change, add, rename, and delete files; verify native diff behavior.
 6. Open a Playwright screenshot, a plan, a diagnostic, a workspace task, SCM, and a localhost URL.
 7. Reload the extension host and verify terminal/bridge restoration.
+8. Fix the known defect from [the 2026-07-10 review](sessions/2026-07-10-review.md): Restart Agent Command must refuse or confirm while the tracked shell execution is still running, instead of typing the command into a live agent.
+
+## Then: make the first stranger's run succeed
+
+- Unread-count badge on the activity-bar icon via `createTreeView`, and attention-first status-bar text.
+- Per-provider usage enablement so Claude-only users are not shown `Codex —` and no unused `codex app-server` is spawned.
+- Default, skippable session labels with rename afterwards.
+- Detect missing `codex`/`claude`/`node` executables at launch and show a guided message instead of a dead terminal.
+- Decide open decision 7 (the `multiTerm.*` → `paraterm.*` namespace) before anything is published.
 
 ## Then: deepen VS Code integration
 
@@ -52,8 +61,17 @@ launch several agents → work in VS Code → see attention/finish state → jum
 
 - Notification feed and next/previous unread navigation.
 - Multi-root and Remote SSH/dev-container smoke matrix.
-- Extension-host integration tests on minimum and current VS Code.
+- Extension-host integration tests on minimum and current VS Code, plus Windows and macOS CI legs for the platform-specific quoting/path branches.
 - Accessible icon polish, settings walkthrough, marketplace assets, and release automation.
+
+## Then: Marketplace release (0.1, preview)
+
+Details in [the 2026-07-10 review](sessions/2026-07-10-review.md):
+
+- Identity: publisher account, `paraterm` name availability, public repository at the manifest URL, namespace decision executed.
+- Listing: 128×128+ PNG `icon`, gallery banner, screenshots/GIF of the launch → attention → review loop, user-first README rewrite, `AI` category and agent-name keywords.
+- Build: esbuild bundling and `"preview": true`.
+- Publish: tag-driven `vsce publish` and Open VSX (Cursor/VSCodium/Windsurf users).
 
 ## Release gates
 
