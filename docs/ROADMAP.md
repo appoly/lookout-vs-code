@@ -21,36 +21,40 @@ launch several agents → work in VS Code → see attention/finish state → jum
 - [x] Token-authenticated, size-limited loopback event bridge.
 - [x] Git changes grouped by worktree with attached agents and native diff editors.
 - [x] Agent-first worktree labels with live grey branch state and branch-switch warnings.
-- [x] Pre-existing and new plans/docs classified separately from worktree changes, plus optional recent images, diagnostics, Tasks, SCM, and browser commands.
+- [x] Recently changed plans/docs classified separately and grouped by open agent worktree, plus optional recent images, diagnostics, Tasks, SCM, and browser commands.
 - [x] Codex and Claude account usage windows with reset times/stale states.
 - [x] User-configurable Spark quota and recent-image visibility, both quiet by default.
 - [x] Lint, strict TypeScript, ten automated test files, CI, and clean VSIX packaging.
 - [x] Initial interactive Extension Development Host review.
 - [x] Deep product and extension namespace rename to Parful / `parful.*` / `PARFUL_*` before publication.
 - [x] Cross-worktree Compound Engineering artifact discovery and canonical path labels.
+- [x] Manual MVP smoke test executed and findings recorded in [the 2026-07-10 smoke report](sessions/2026-07-10-smoke.md).
 
-## Next: prove the MVP loop
+## Next: close the manual smoke findings
 
-1. Install the VSIX or press F5 in a stable desktop/remote VS Code environment.
-2. Launch two Codex sessions and one Claude session; confirm column-one review remains available.
-3. Exercise Claude and Codex working/delegated/waiting/permission events, the bell volume/mute control, and unread/focus lifecycle.
-4. Compare Codex/Claude usage percentages against each provider's own UI.
-5. Change, add, rename, and delete files; verify native diff behavior.
-6. Open a Playwright screenshot, a plan, a diagnostic, a workspace task, SCM, and a localhost URL.
-7. Reload the extension host and verify terminal/bridge restoration.
-8. Fix the known defect from [the 2026-07-10 review](sessions/2026-07-10-review.md): Restart Agent Command must refuse or confirm while the tracked shell execution is still running, instead of typing the command into a live agent.
+1. [x] Refuse Restart Agent Command while its tracked shell execution is still running.
+2. [x] Keep manually closed terminals closed when a late provider event arrives.
+3. [x] Let every new-agent flow choose a folder outside the current workspace.
+4. [x] Classify text plans such as `docs/TESTPLAN.txt` under Plans & Docs by default.
+5. [x] Rework Plans & Docs around active-session changes and honest worktree-level attribution; stop showing unrelated pre-existing documents.
+6. [x] Ring for unattended completion/exit events and make mute state, volume configuration, and sound testing discoverable; manually retest the WSL backend.
+7. [x] Clarify command-not-found through guided missing-executable settings help rather than treating shell output as a VS Code diagnostic.
+8. [x] Investigate external-agent discovery: VS Code exposes neither terminal commands nor changing cwd through its public API, so provide explicit terminal adoption without output scraping.
+9. [x] Put the remove action inline beside split; rerun the skipped custom-hook and restored-custom-session cases.
+10. Activate the parent terminal before requesting a native sibling split; manually retest placement in editor and panel modes.
+11. Rerun the full matrix and clear the release gates.
 
 ## Then: make the first stranger's run succeed
 
-- Unread-count badge on the activity-bar icon via `createTreeView`, and attention-first status-bar text.
-- Per-provider usage enablement so Claude-only users are not shown `Codex —` and no unused `codex app-server` is spawned.
-- Default, skippable session labels with rename afterwards.
-- Detect missing `codex`/`claude`/`node` executables at launch and show a guided message instead of a dead terminal.
+- [x] Unread-count badge on the activity-bar icon via `createTreeView`, and attention-first status-bar text.
+- [x] Per-provider launch and usage enablement so Claude-only users are not shown `Codex —` and no unused `codex app-server` is spawned.
+- [x] Default, skippable session labels with rename afterwards.
+- [x] Detect missing direct `codex`/`claude` executables at launch and show a guided message instead of a dead terminal.
 - Add a guided, non-mutating Workshop compatibility check once its independent release contract is stable.
 
 ## Then: deepen VS Code integration
 
-- Add “Open Test Explorer” and default-test/debug-task actions without recreating test discovery.
+- [x] Add “Open Test Explorer” and native test-task/debug actions without recreating test discovery.
 - Surface active debug sessions and task state next to the selected agent where stable APIs allow it.
 - Add an optional “Review session” editor layout command using native editor groups.
 - Track repository/branch/worktree changes after launch and clearly show stale baselines.

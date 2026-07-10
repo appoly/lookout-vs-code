@@ -162,8 +162,10 @@ export class SessionManager implements vscode.Disposable {
         );
         if (
           vscode.workspace.getConfiguration('parful').get('notifyOnAgentExit', true) &&
-          vscode.window.activeTerminal !== event.terminal
+          (!vscode.window.state.focused ||
+            vscode.window.activeTerminal !== event.terminal)
         ) {
+          void this.attentionSound.play();
           const session = this.sessions.get(id);
           if (session) {
             void vscode.window.showInformationMessage(
@@ -218,6 +220,10 @@ export class SessionManager implements vscode.Disposable {
     return this.terminals.has(id);
   }
 
+  public managesTerminal(terminal: vscode.Terminal): boolean {
+    return this.sessionIdsByTerminal.has(terminal);
+  }
+
   public get selectedSession(): AgentSession | undefined {
     return this.selectedSessionId
       ? this.sessions.get(this.selectedSessionId)
@@ -248,6 +254,10 @@ export class SessionManager implements vscode.Disposable {
       : configuredLocation === 'editor'
         ? { viewColumn: vscode.ViewColumn.Two, preserveFocus: false }
         : vscode.TerminalLocation.Panel;
+
+    if (parentTerminal) {
+      parentTerminal.show(false);
+    }
 
     const launchCommand = await this.prepareLaunchCommand(request);
     const terminal = vscode.window.createTerminal({
@@ -291,6 +301,29 @@ export class SessionManager implements vscode.Disposable {
         'Parful could not start its local attention bridge. Terminals still work, but agent hooks and Claude usage updates are unavailable.'
       );
     }
+    return session;
+  }
+
+  public async adopt(
+    terminal: vscode.Terminal,
+    kind: AgentSession['kind'],
+    label: string,
+    cwd: string
+  ): Promise<AgentSession> {
+    const baseline = await captureGitBaseline(cwd);
+    const created = createSession(kind, label, '', cwd);
+    const session: AgentSession = {
+      ...created,
+      status: 'active',
+      bridgeAvailable: false,
+      latestEvent: 'Adopted terminal · lifecycle hooks unavailable',
+      ...(baseline ? { baseline } : {})
+    };
+    this.sessions.set(session.id, session);
+    this.attachTerminal(session.id, terminal);
+    this.topologyEmitter.fire();
+    this.selectSession(session.id);
+    await this.persistAndNotify();
     return session;
   }
 
@@ -365,6 +398,12 @@ export class SessionManager implements vscode.Disposable {
       );
       return;
     }
+    if (this.agentExecutions.has(id)) {
+      void vscode.window.showWarningMessage(
+        'Stop the running agent command before restarting it.'
+      );
+      return;
+    }
     session.status = 'starting';
     session.unread = false;
     session.backgroundAgents = [];
@@ -406,6 +445,14 @@ export class SessionManager implements vscode.Disposable {
 
   public toggleAttentionSound(): Promise<void> {
     return this.attentionSound.toggle();
+  }
+
+  public setAttentionSoundEnabled(enabled: boolean): Promise<void> {
+    return this.attentionSound.setEnabled(enabled);
+  }
+
+  public testAttentionSound(): Promise<void> {
+    return this.attentionSound.play();
   }
 
   public dispose(): void {
@@ -485,7 +532,11 @@ export class SessionManager implements vscode.Disposable {
       exitCode,
       message
     );
-    if (this.terminals.get(id) === vscode.window.activeTerminal && updated.unread) {
+    if (
+      vscode.window.state.focused &&
+      this.terminals.get(id) === vscode.window.activeTerminal &&
+      updated.unread
+    ) {
       updated = markSessionRead(updated);
     }
     this.sessions.set(id, updated);
@@ -502,12 +553,16 @@ export class SessionManager implements vscode.Disposable {
 
   private async handleAgentEvent(event: AgentEvent): Promise<void> {
     const session = this.sessions.get(event.sessionId);
-    if (!session) {
+    if (!session || !this.terminals.has(event.sessionId)) {
       return;
     }
     let updated = applyAgentEvent(session, event);
     const terminal = this.terminals.get(event.sessionId);
-    if (terminal === vscode.window.activeTerminal && updated.unread) {
+    if (
+      vscode.window.state.focused &&
+      terminal === vscode.window.activeTerminal &&
+      updated.unread
+    ) {
       updated = markSessionRead(updated);
     }
     this.sessions.set(event.sessionId, updated);
@@ -520,12 +575,15 @@ export class SessionManager implements vscode.Disposable {
         configuration.get('notifyOnTurnComplete', true));
     const enteredAttention =
       updated.status === 'attention' && session.status !== 'attention';
+    const enteredTurnComplete =
+      (updated.status === 'completed' || updated.status === 'failed') &&
+      updated.status !== session.status;
     const terminalIsUnattended =
       !vscode.window.state.focused || vscode.window.activeTerminal !== terminal;
-    if (enteredAttention && terminalIsUnattended) {
+    if ((enteredAttention || enteredTurnComplete) && terminalIsUnattended) {
       void this.attentionSound.play();
     }
-    if (shouldNotify && vscode.window.activeTerminal !== terminal) {
+    if (shouldNotify && terminalIsUnattended) {
       const choice = await vscode.window.showInformationMessage(
         `${session.label}: ${updated.latestEvent ?? updated.status}`,
         'Focus Agent'

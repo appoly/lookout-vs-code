@@ -1,9 +1,16 @@
 import { homedir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { access } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { isDirectAgentCommand } from './agentCommand';
 import { ReviewTreeItem, ReviewTreeProvider } from './reviewTree';
 import { SessionManager } from './sessionManager';
-import { SessionTreeItem, SessionTreeProvider } from './sessionTree';
+import {
+  SessionStatusBar,
+  SessionTreeItem,
+  SessionTreeProvider
+} from './sessionTree';
 import type { AgentKind, LaunchRequest } from './types';
 import { UsageManager } from './usageManager';
 import { UsageStatusBar, UsageTreeProvider } from './usageTree';
@@ -13,6 +20,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(sessions);
   await sessions.initialize();
   const sessionTree = new SessionTreeProvider(sessions);
+  const sessionTreeView = vscode.window.createTreeView('parful.sessions', {
+    treeDataProvider: sessionTree
+  });
+  const sessionStatus = new SessionStatusBar(sessions);
   const reviewTree = new ReviewTreeProvider(sessions);
   const usage = new UsageManager(context, sessions);
   const usageTree = new UsageTreeProvider(usage);
@@ -20,11 +31,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push(
     sessionTree,
+    sessionTreeView,
+    sessionStatus,
     reviewTree,
     usage,
     usageTree,
     usageStatus,
-    vscode.window.registerTreeDataProvider('parful.sessions', sessionTree),
     vscode.window.registerTreeDataProvider('parful.review', reviewTree),
     vscode.workspace.registerTextDocumentContentProvider(
       'parful-baseline',
@@ -35,6 +47,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     register('parful.launchCodex', () => launchAgent(sessions, 'codex')),
     register('parful.launchClaude', () => launchAgent(sessions, 'claude')),
     register('parful.launchCustom', () => launchAgent(sessions, 'custom')),
+    register('parful.adoptTerminal', () => adoptTerminal(sessions)),
     register('parful.splitCodex', (item?: SessionTreeItem) =>
       launchAgent(sessions, 'codex', sessionId(item))
     ),
@@ -97,9 +110,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     }),
     register('parful.refreshSessions', () => sessionTree.refresh()),
-    register('parful.toggleAttentionSound', () =>
-      sessions.toggleAttentionSound()
+    register('parful.toggleAttentionSound', async () => {
+      await sessions.toggleAttentionSound();
+      await updateSoundContext();
+    }),
+    register('parful.muteAttentionSound', async () => {
+      await sessions.setAttentionSoundEnabled(false);
+      await updateSoundContext();
+    }),
+    register('parful.unmuteAttentionSound', async () => {
+      await sessions.setAttentionSoundEnabled(true);
+      await updateSoundContext();
+    }),
+    register('parful.configureAttentionSound', () =>
+      vscode.commands.executeCommand(
+        'workbench.action.openSettings',
+        'parful.attentionSound'
+      )
     ),
+    register('parful.testAttentionSound', () => sessions.testAttentionSound()),
     register('parful.refreshReview', () => reviewTree.refresh()),
     register('parful.refreshUsage', () => usage.refresh()),
     register('parful.openReviewItem', (item?: ReviewTreeItem) =>
@@ -108,15 +137,53 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     register('parful.openSourceControl', () =>
       vscode.commands.executeCommand('workbench.view.scm')
     ),
+    register('parful.openTestExplorer', () =>
+      vscode.commands.executeCommand('workbench.view.testing.focus')
+    ),
+    register('parful.runTestTask', () => runTestTask()),
+    register('parful.startDebug', () =>
+      vscode.commands.executeCommand('workbench.action.debug.selectandstart')
+    ),
     register('parful.runTask', () => runWorkspaceTask()),
     register('parful.openBrowser', () => openBrowser())
   );
+
+  const updateSessionBadge = (): void => {
+    const unread = sessions.list().filter((session) => session.unread).length;
+    sessionTreeView.badge = unread > 0
+      ? {
+          value: unread,
+          tooltip: `${unread} unread agent update${unread === 1 ? '' : 's'}`
+        }
+      : undefined;
+  };
+  context.subscriptions.push(
+    sessions.onDidChange(updateSessionBadge),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('parful.attentionSound.enabled')) {
+        void updateSoundContext();
+      }
+    })
+  );
+  updateSessionBadge();
+  await updateSoundContext();
 
   void reviewTree.initialize();
   usage.initialize();
 }
 
 export function deactivate(): void {}
+
+async function updateSoundContext(): Promise<void> {
+  const enabled = vscode.workspace
+    .getConfiguration('parful.attentionSound')
+    .get('enabled', true);
+  await vscode.commands.executeCommand(
+    'setContext',
+    'parful.attentionSoundEnabled',
+    enabled
+  );
+}
 
 function register(
   command: string,
@@ -151,16 +218,25 @@ async function launchAgent(
   if (!command) {
     return;
   }
-  const ordinal = sessions.list().filter((session) => session.kind === kind).length + 1;
-  const label = await vscode.window.showInputBox({
-    title: `New ${displayKind(kind)} Agent`,
-    prompt: 'A short task name makes parallel sessions easy to scan',
-    value: `${displayKind(kind)} ${ordinal}`,
-    validateInput: nonEmpty
-  });
-  if (!label) {
+  if (
+    kind !== 'custom' &&
+    isDirectAgentCommand(command, kind) &&
+    !(await executableAvailable(command))
+  ) {
+    const choice = await vscode.window.showErrorMessage(
+      `${displayKind(kind)} could not be found. Install it or configure parful.${kind}.command.`,
+      'Open Settings'
+    );
+    if (choice) {
+      await vscode.commands.executeCommand(
+        'workbench.action.openSettings',
+        `parful.${kind}.command`
+      );
+    }
     return;
   }
+  const ordinal = sessions.list().filter((session) => session.kind === kind).length + 1;
+  const label = `${displayKind(kind)} ${ordinal}`;
   const request: LaunchRequest = {
     kind,
     label,
@@ -172,8 +248,7 @@ async function launchAgent(
 }
 
 async function chooseAndLaunchAgent(sessions: SessionManager): Promise<void> {
-  const selected = await vscode.window.showQuickPick(
-    [
+  const providers = [
       {
         label: 'Codex',
         description: 'OpenAI Codex CLI',
@@ -192,7 +267,15 @@ async function chooseAndLaunchAgent(sessions: SessionManager): Promise<void> {
         iconPath: new vscode.ThemeIcon('tools'),
         agentKind: 'custom' as const
       }
-    ],
+    ];
+  const selected = await vscode.window.showQuickPick(
+    providers.filter(
+      (provider) =>
+        provider.agentKind === 'custom' ||
+        vscode.workspace
+          .getConfiguration(`parful.${provider.agentKind}`)
+          .get('enabled', true)
+    ),
     {
       title: 'New Agent',
       placeHolder: 'Choose the agent to launch'
@@ -253,33 +336,88 @@ async function pickSession(sessions: SessionManager): Promise<void> {
 
 async function pickWorkingDirectory(): Promise<string | undefined> {
   const folders = vscode.workspace.workspaceFolders ?? [];
-  if (folders.length === 0) {
-    const activeUri = vscode.window.activeTextEditor?.document.uri;
-    if (activeUri?.scheme === 'file') {
-      return path.dirname(activeUri.fsPath);
-    }
+  const chooseFolder = async (defaultPath: string): Promise<string | undefined> => {
     const selected = await vscode.window.showOpenDialog({
       title: 'Choose the agent working directory',
-      defaultUri: vscode.Uri.file(homedir()),
+      defaultUri: vscode.Uri.file(defaultPath),
       canSelectFiles: false,
       canSelectFolders: true,
       canSelectMany: false,
       openLabel: 'Use Folder'
     });
     return selected?.[0]?.fsPath;
-  }
-  if (folders.length === 1) {
-    return folders[0].uri.fsPath;
+  };
+  if (folders.length === 0) {
+    const activeUri = vscode.window.activeTextEditor?.document.uri;
+    return chooseFolder(
+      activeUri?.scheme === 'file' ? path.dirname(activeUri.fsPath) : homedir()
+    );
   }
   const choice = await vscode.window.showQuickPick(
-    folders.map((folder) => ({
-      label: folder.name,
-      description: folder.uri.fsPath,
-      folder
-    })),
-    { title: 'Choose the agent working directory' }
+    [
+      ...folders.map((folder) => ({
+        label: folder.name,
+        description: folder.uri.fsPath,
+        cwd: folder.uri.fsPath
+      })),
+      {
+        label: 'Choose another folder…',
+        description: 'Launch an agent outside the open workspace',
+        cwd: undefined
+      }
+    ],
+    {
+      title: 'Choose the agent working directory',
+      placeHolder: 'Use a workspace root or browse to another folder'
+    }
   );
-  return choice?.folder.uri.fsPath;
+  if (!choice) {
+    return undefined;
+  }
+  return choice.cwd ?? chooseFolder(folders[0].uri.fsPath);
+}
+
+async function adoptTerminal(sessions: SessionManager): Promise<void> {
+  if (!vscode.workspace.isTrusted) {
+    void vscode.window.showWarningMessage(
+      'Trust this workspace before adopting an agent terminal.'
+    );
+    return;
+  }
+  const candidates = vscode.window.terminals.filter(
+    (terminal) => !sessions.managesTerminal(terminal)
+  );
+  const selected = await vscode.window.showQuickPick(
+    candidates.map((terminal) => ({ label: terminal.name, terminal })),
+    { title: 'Adopt Existing Terminal' }
+  );
+  if (!selected) {
+    if (candidates.length === 0) {
+      void vscode.window.showInformationMessage('No unmanaged terminals are open.');
+    }
+    return;
+  }
+  const kindChoice = await vscode.window.showQuickPick(
+    [
+      { label: 'Codex', agentKind: 'codex' as const },
+      { label: 'Claude Code', agentKind: 'claude' as const },
+      { label: 'Custom', agentKind: 'custom' as const }
+    ],
+    { title: 'Agent provider' }
+  );
+  if (!kindChoice) {
+    return;
+  }
+  const cwd = await pickWorkingDirectory();
+  if (!cwd) {
+    return;
+  }
+  await sessions.adopt(
+    selected.terminal,
+    kindChoice.agentKind,
+    selected.terminal.name,
+    cwd
+  );
 }
 
 async function openBrowser(): Promise<void> {
@@ -359,4 +497,65 @@ function displayKind(kind: AgentKind): string {
 
 function nonEmpty(value: string): string | undefined {
   return value.trim() ? undefined : 'Enter a value';
+}
+
+async function runTestTask(): Promise<void> {
+  if (!vscode.workspace.isTrusted) {
+    void vscode.window.showWarningMessage(
+      'Trust this workspace before running test tasks.'
+    );
+    return;
+  }
+  const tasks = (await vscode.tasks.fetchTasks()).filter(
+    (task) => task.group === vscode.TaskGroup.Test
+  );
+  if (tasks.length === 0) {
+    const choice = await vscode.window.showInformationMessage(
+      'No VS Code test tasks were found.',
+      'Open Test Explorer'
+    );
+    if (choice) {
+      await vscode.commands.executeCommand('workbench.view.testing.focus');
+    }
+    return;
+  }
+  const selected = tasks.length === 1
+    ? tasks[0]
+    : (
+        await vscode.window.showQuickPick(
+          tasks.map((task) => ({
+            label: task.name,
+            description: task.source,
+            task
+          })),
+          { title: 'Run Test Task' }
+        )
+      )?.task;
+  if (selected) {
+    await vscode.tasks.executeTask(selected);
+  }
+}
+
+async function executableAvailable(command: string): Promise<boolean> {
+  const token = command.trim().match(/^(?:"([^"]+)"|'([^']+)'|(\S+))/);
+  const executable = token?.[1] ?? token?.[2] ?? token?.[3];
+  if (!executable) {
+    return false;
+  }
+  if (path.isAbsolute(executable) || executable.includes('/') || executable.includes('\\')) {
+    try {
+      await access(executable);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return new Promise((resolve) => {
+    execFile(
+      process.platform === 'win32' ? 'where.exe' : 'which',
+      [executable],
+      { windowsHide: true },
+      (error) => resolve(!error)
+    );
+  });
 }

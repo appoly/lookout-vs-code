@@ -4,7 +4,7 @@ Parful—say “powerful” with a strong Irish accent—is a VS Code-native coc
 
 It takes the useful interaction model from cmux—named agent sessions, fast attention routing, split terminals, and review surfaces—but lets VS Code remain the code editor, diff viewer, image viewer, source-control client, and browser host.
 
-> **Development status:** TypeScript, lint, unit/integration tests, and VSIX packaging pass. The first Extension Development Host review is complete; live provider lifecycle and reload smoke checks remain.
+> **Development status:** TypeScript, lint, unit/integration tests, and VSIX packaging pass. The first full manual smoke run is complete; its fixes now need a focused Extension Development Host rerun.
 
 ## Product principle: use VS Code
 
@@ -24,9 +24,9 @@ That keeps the rest of the editor ecosystem—navigation, themes, accessibility,
 
 The extension contributes a **Parful** activity-bar container with:
 
-- **Agents** — the `+` action chooses Codex, Claude Code, or a custom agent, then supports focus, split, rename, restart, removal, and attention state. A live CLI process is neutrally “active”; provider events distinguish foreground work, delegated agents, permission attention, and waiting for input. An unattended waiting agent plays a volume-controlled bell; use the speaker toolbar action or `parful.attentionSound.enabled` to mute it.
-- **Review** — Git changes grouped by worktree as native diffs, with **agent name → repository** prominent and the live branch in grey description text. A branch switch is shown as `launch → current` with a stale-baseline warning. Current VS Code diagnostics, plans/docs, Source Control, Tasks, and integrated-browser shortcuts remain native. Configured artifacts appear in **Plans & Docs**, including files that predate the agent or live in an external agent worktree, instead of being duplicated under workspace changes. Canonical Compound Engineering paths are labelled as research, brainstorm, plan, fleet, solution, changelog, todo, or design artifacts. Recent Playwright/coding images are available through `parful.review.showRecentImages` and are off by default.
-- **Usage Limits** — account-level Codex and Claude quota windows with reset times and a compact status-bar summary.
+- **Agents** — the `+` action chooses an enabled provider, a working folder, and launches with a default renameable label. Existing native terminals can be adopted explicitly. Focus, split, rename, guarded restart, inline removal, unread badge, and attention-first status text keep parallel sessions scannable. An unattended waiting/completed agent plays a volume-controlled bell; the toolbar reflects mute state and links to sound settings.
+- **Review** — Git changes grouped by worktree as native diffs, with **agent name → repository** prominent and the live branch in grey description text. A branch switch is shown as `launch → current` with a stale-baseline warning. Plans & Docs contains only matching Git changes made since an attached open agent launched, grouped under the same honest worktree labels and excluded from ordinary changes. Diagnostics, Test Explorer, test tasks, debugging, Source Control, general Tasks, and browser shortcuts remain native. Canonical Compound Engineering paths are labelled by artifact type. Recent images are opt-in.
+- **Usage Limits** — independently enabled Codex and Claude account quota windows with reset times and a compact status-bar summary.
 
 The default terminal location is the editor area. New terminals use the second editor column or split beside an existing agent; review resources open in the first editor column.
 

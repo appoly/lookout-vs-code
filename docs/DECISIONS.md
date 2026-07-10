@@ -47,7 +47,7 @@ Separate Codex Spark buckets are hidden by default because they distract from th
 
 **Decision:** capture Git `HEAD`, repository root, and branch at session launch. Group changes by the physical Git worktree root, show the agents attached to each worktree, and display the current diff from that worktree's captured commit plus untracked files. Do not label shared-worktree changes as authored by one agent.
 
-Tracked text opens in a native diff against a read-only virtual baseline. Images open in the native image editor. Recent images are filtered to the selected session's root and creation time. Plans/docs are root-scoped but intentionally include pre-existing files; anything discovered by the configured artifact globs is classified under **Plans & Docs** and removed from ordinary worktree changes. Discovery spans opened workspace folders and every known agent root, including linked worktrees outside the VS Code workspace. Canonical Workshop paths receive honest type labels. Diagnostics come directly from VS Code.
+Tracked text opens in a native diff against a read-only virtual baseline. Images open in the native image editor. Recent images are filtered to the selected session's root and creation time. Plans/docs must match the configured artifact globs, appear in an open agent worktree's Git change set, and have been modified since an attached agent launched. They are grouped by the same worktree-level agent labels as code changes and removed from ordinary worktree changes. This deliberately avoids claiming file-level authorship when agents share a worktree and avoids surfacing unrelated pre-existing documents. Discovery spans every known open agent root, including linked worktrees outside the VS Code workspace. Canonical Workshop paths receive honest type labels. Diagnostics come directly from VS Code.
 
 Recent image discovery is off by default to avoid unnecessary workspace scanning and sidebar noise. It is enabled explicitly with `parful.review.showRecentImages`.
 
@@ -75,7 +75,7 @@ Non-managed Codex hooks require review and trust. Parful tells the user to run `
 
 ## D9 — Attention sound is optional and owned by Parful
 
-**Decision:** an unattended session entering attention plays a short synthesized metallic bell. `parful.attentionSound.volume` controls the generated PCM amplitude from 0–100, and either volume 0, `parful.attentionSound.enabled`, or the Agents toolbar speaker command can mute it.
+**Decision:** an unattended session entering attention or completing plays a short synthesized metallic bell. A session is unattended whenever its specific terminal is not the active terminal or the VS Code window itself is unfocused; merely remaining VS Code's last active terminal while the window is in the background does not suppress unread state, sound, or notifications. `parful.attentionSound.volume` controls the generated PCM amplitude from 0–100, and either volume 0, `parful.attentionSound.enabled`, or the Agents toolbar speaker command can mute it.
 
 VS Code has configurable internal accessibility signals but no public extension API for playing one. Parful therefore generates its own WAV and invokes a native local player (`afplay`, Windows `SoundPlayer`, or `paplay`/`pw-play`/`aplay`, with a WSL PowerShell fallback). If no player exists, the visual notification remains authoritative and Parful reports the missing audio backend once.
 

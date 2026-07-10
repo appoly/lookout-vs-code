@@ -64,6 +64,12 @@ export class UsageManager implements vscode.Disposable {
         }
       }),
       vscode.workspace.onDidChangeConfiguration((event) => {
+        if (
+          event.affectsConfiguration('parful.usage.codex.enabled') ||
+          event.affectsConfiguration('parful.usage.claude.enabled')
+        ) {
+          this.changedEmitter.fire();
+        }
         if (event.affectsConfiguration('parful.usage.codex.showSparkLimits')) {
           this.codex.setIncludeSparkLimits(
             vscode.workspace
@@ -78,18 +84,24 @@ export class UsageManager implements vscode.Disposable {
 
   public initialize(): void {
     this.refreshTimer = setInterval(() => void this.refresh(), 90_000);
-    void this.codex.start();
+    if (providerEnabled('codex')) {
+      void this.codex.start();
+    }
   }
 
   public list(): readonly UsageSnapshot[] {
-    return (['codex', 'claude'] as const).map(
+    return (['codex', 'claude'] as const)
+      .filter(providerEnabled)
+      .map(
       (provider) =>
         withStaleness(this.snapshots.get(provider) ?? fallbackSnapshot(provider))
-    );
+      );
   }
 
   public async refresh(): Promise<void> {
-    await this.codex.refresh();
+    if (providerEnabled('codex')) {
+      await this.codex.refresh();
+    }
     const claude = this.snapshots.get('claude');
     if (claude) {
       this.snapshots.set('claude', withStaleness(claude));
@@ -112,6 +124,12 @@ export class UsageManager implements vscode.Disposable {
     this.snapshots.set(snapshot.provider, snapshot);
     this.changedEmitter.fire();
   }
+}
+
+function providerEnabled(provider: UsageSnapshot['provider']): boolean {
+  return vscode.workspace
+    .getConfiguration(`parful.usage.${provider}`)
+    .get('enabled', true);
 }
 
 function withStaleness(snapshot: UsageSnapshot): UsageSnapshot {

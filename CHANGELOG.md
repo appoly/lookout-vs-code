@@ -13,7 +13,7 @@
 - Format long quota reset countdowns with days, hours, and minutes.
 - Make the Agents `+` action choose Codex, Claude Code, or a custom agent.
 - Group workspace changes by Git worktree and list attached agents per group.
-- Move discovered plan/docs files out of ordinary workspace changes and include pre-existing documents in Plans & Docs.
+- Group recently changed plan/docs artifacts by attached agent worktree, remove them from ordinary changes, and hide unrelated pre-existing documents.
 - Distinguish a live agent process from an actively working turn; report Codex and Claude turn completion as waiting for input.
 - Track provider-owned delegated agents so foreground stop does not request input while child work remains.
 - Put agent names first in worktree review groups, show branches in grey, and warn when an agent switches branches after launch.
@@ -22,3 +22,5 @@
 - Rename the product and its full extension namespace to Parful / `parful.*` / `PARFUL_*` before publication.
 - Discover plans and Compound Engineering artifacts across active external worktrees, refresh after agent lifecycle events, and label canonical Workshop paths.
 - Document The Workshop as a separately released optional compatibility pack and record the staged deep-integration plan.
+- Add working-folder choice, guided executable checks, explicit adoption of unmanaged terminals, guarded restart, and late-event protection for closed terminals.
+- Add unread activity badge, attention-first status text, stateful sound controls, completion bells, provider enablement, and native Test Explorer/test/debug actions.

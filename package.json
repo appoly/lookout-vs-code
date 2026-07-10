@@ -121,7 +121,8 @@
       {
         "command": "parful.closeSession",
         "title": "Remove Agent",
-        "category": "Parful"
+        "category": "Parful",
+        "icon": "$(trash)"
       },
       {
         "command": "parful.markNeedsAttention",
@@ -172,6 +173,36 @@
         "icon": "$(unmute)"
       },
       {
+        "command": "parful.adoptTerminal",
+        "title": "Adopt Existing Terminal as Agent…",
+        "category": "Parful",
+        "icon": "$(link)"
+      },
+      {
+        "command": "parful.muteAttentionSound",
+        "title": "Mute Attention Sound",
+        "category": "Parful",
+        "icon": "$(unmute)"
+      },
+      {
+        "command": "parful.unmuteAttentionSound",
+        "title": "Unmute Attention Sound",
+        "category": "Parful",
+        "icon": "$(mute)"
+      },
+      {
+        "command": "parful.configureAttentionSound",
+        "title": "Configure Attention Sound",
+        "category": "Parful",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "parful.testAttentionSound",
+        "title": "Test Attention Sound",
+        "category": "Parful",
+        "icon": "$(play)"
+      },
+      {
         "command": "parful.refreshReview",
         "title": "Refresh Review Items",
         "category": "Parful",
@@ -194,6 +225,24 @@
         "title": "Open Source Control",
         "category": "Parful",
         "icon": "$(git-compare)"
+      },
+      {
+        "command": "parful.openTestExplorer",
+        "title": "Open Test Explorer",
+        "category": "Parful",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "parful.runTestTask",
+        "title": "Run Test Task",
+        "category": "Parful",
+        "icon": "$(run)"
+      },
+      {
+        "command": "parful.startDebug",
+        "title": "Start Debugging…",
+        "category": "Parful",
+        "icon": "$(debug-alt)"
       },
       {
         "command": "parful.runTask",
@@ -281,9 +330,24 @@
           "group": "navigation@3"
         },
         {
-          "command": "parful.toggleAttentionSound",
-          "when": "view == parful.sessions",
+          "command": "parful.muteAttentionSound",
+          "when": "view == parful.sessions && parful.attentionSoundEnabled",
           "group": "navigation@4"
+        },
+        {
+          "command": "parful.adoptTerminal",
+          "when": "view == parful.sessions",
+          "group": "navigation@3"
+        },
+        {
+          "command": "parful.unmuteAttentionSound",
+          "when": "view == parful.sessions && !parful.attentionSoundEnabled",
+          "group": "navigation@4"
+        },
+        {
+          "command": "parful.configureAttentionSound",
+          "when": "view == parful.sessions",
+          "group": "navigation@5"
         },
         {
           "command": "parful.openBrowser",
@@ -316,6 +380,26 @@
           "command": "parful.splitSession",
           "when": "view == parful.sessions && viewItem == parful.session",
           "group": "inline@1"
+        },
+        {
+          "command": "parful.openTestExplorer",
+          "when": "view == parful.review",
+          "group": "parful@1"
+        },
+        {
+          "command": "parful.runTestTask",
+          "when": "view == parful.review",
+          "group": "parful@2"
+        },
+        {
+          "command": "parful.startDebug",
+          "when": "view == parful.review",
+          "group": "parful@3"
+        },
+        {
+          "command": "parful.closeSession",
+          "when": "view == parful.sessions && viewItem == parful.session",
+          "group": "inline@2"
         },
         {
           "command": "parful.markNeedsAttention",
@@ -352,6 +436,11 @@
           "default": "codex",
           "description": "Command used to launch a Codex CLI session."
         },
+        "parful.codex.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Codex in the new-agent picker."
+        },
         "parful.codex.lifecycleIntegration": {
           "type": "boolean",
           "default": true,
@@ -361,6 +450,11 @@
           "type": "string",
           "default": "claude",
           "description": "Command used to launch a Claude Code session."
+        },
+        "parful.claude.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Claude Code in the new-agent picker."
         },
         "parful.claude.lifecycleIntegration": {
           "type": "boolean",
@@ -412,6 +506,11 @@
           "default": "codex",
           "description": "Codex executable used for structured rate-limit queries."
         },
+        "parful.usage.codex.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Codex usage and start its structured rate-limit provider. Reload the window after changing this setting."
+        },
         "parful.usage.codex.showSparkLimits": {
           "type": "boolean",
           "default": false,
@@ -421,6 +520,11 @@
           "type": "boolean",
           "default": true,
           "description": "Add a Parful status-line bridge to extension-launched Claude sessions so subscription limits can be tracked."
+        },
+        "parful.usage.claude.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Claude usage limits."
         },
         "parful.usage.warningThreshold": {
           "type": "number",
@@ -452,9 +556,9 @@
             "type": "string"
           },
           "default": [
-            "**/{plans,docs}/**/*.{md,mdx}",
-            "**/todos/**/*.{md,mdx}",
-            "**/{TODOS,DESIGN}.{md,mdx}"
+            "**/{plans,docs}/**/*.{md,mdx,txt}",
+            "**/todos/**/*.{md,mdx,txt}",
+            "**/{TODOS,DESIGN,TESTPLAN}.{md,mdx,txt}"
           ],
           "description": "Globs used to find plans, documentation, and Compound Engineering artifacts for review."
         },

@@ -59,6 +59,23 @@ export class AttentionSound implements vscode.Disposable {
     );
   }
 
+  public async setEnabled(enabled: boolean): Promise<void> {
+    const configuration = vscode.workspace.getConfiguration(
+      'parful.attentionSound'
+    );
+    await configuration.update(
+      'enabled',
+      enabled,
+      vscode.ConfigurationTarget.Global
+    );
+    const volume = configuration.get('volume', 35);
+    void vscode.window.showInformationMessage(
+      enabled
+        ? `Parful attention sound enabled at ${volume}%.`
+        : 'Parful attention sound muted.'
+    );
+  }
+
   public dispose(): void {
     for (const player of this.players) {
       player.kill();

@@ -44,13 +44,15 @@ export async function captureGitBaseline(
 export async function readGitWorktreeState(
   cwd: string
 ): Promise<GitWorktreeState> {
-  const repoRoot = (await runGit(cwd, ['rev-parse', '--show-toplevel'])).trim();
+  const repoRoot = path.normalize(
+    (await runGit(cwd, ['rev-parse', '--show-toplevel'])).trim()
+  );
   const [commit, branch, commonDirectoryValue] = await Promise.all([
     runGit(repoRoot, ['rev-parse', 'HEAD']),
     runGit(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD']),
     runGit(repoRoot, ['rev-parse', '--git-common-dir'])
   ]);
-  const commonDirectory = commonDirectoryValue.trim();
+  const commonDirectory = path.normalize(commonDirectoryValue.trim());
   const commonPath = path.isAbsolute(commonDirectory)
     ? commonDirectory
     : path.resolve(repoRoot, commonDirectory);

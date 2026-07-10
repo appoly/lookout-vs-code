@@ -73,6 +73,46 @@ export class SessionTreeProvider
   }
 }
 
+export class SessionStatusBar implements vscode.Disposable {
+  private readonly item = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    90
+  );
+  private readonly subscription: vscode.Disposable;
+
+  public constructor(private readonly manager: SessionManager) {
+    this.subscription = manager.onDidChange(() => this.refresh());
+    this.refresh();
+    this.item.show();
+  }
+
+  public dispose(): void {
+    this.subscription.dispose();
+    this.item.dispose();
+  }
+
+  private refresh(): void {
+    const sessions = this.manager.list();
+    const unread = sessions.filter((session) => session.unread).length;
+    const attention = sessions.filter(
+      (session) => session.status === 'attention'
+    ).length;
+    if (unread > 0) {
+      this.item.text = `$(bell-dot) ${unread} agent${unread === 1 ? '' : 's'}`;
+      this.item.tooltip = `${attention} waiting · ${unread} unread`;
+      this.item.command = 'parful.focusNextAttention';
+      this.item.backgroundColor = new vscode.ThemeColor(
+        'statusBarItem.warningBackground'
+      );
+      return;
+    }
+    this.item.text = `$(terminal) ${this.manager.activeCount}`;
+    this.item.tooltip = `${this.manager.activeCount} active agents`;
+    this.item.command = 'parful.pickSession';
+    this.item.backgroundColor = undefined;
+  }
+}
+
 function sessionDescription(session: AgentSession): string {
   const directory = path.basename(session.cwd);
   const unread = session.unread ? '● ' : '';

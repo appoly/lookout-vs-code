@@ -22,6 +22,7 @@ type ReviewKind =
   | 'plan'
   | 'change'
   | 'worktree'
+  | 'artifact-worktree'
   | 'diagnostic'
   | 'message';
 type ReviewGroup = 'changes' | 'diagnostics' | 'images' | 'plans';
@@ -43,6 +44,7 @@ interface ReviewTreeItemOptions {
 interface WorktreeChanges {
   readonly key: string;
   readonly session: AgentSession;
+  readonly sessions: readonly AgentSession[];
   readonly agentLabels: readonly string[];
   readonly agentDetails: readonly string[];
   readonly changes: readonly WorkspaceChange[] | undefined;
@@ -67,7 +69,7 @@ export class ReviewTreeItem extends vscode.TreeItem {
       label,
       kind === 'group'
         ? vscode.TreeItemCollapsibleState.Expanded
-        : kind === 'worktree'
+        : kind === 'worktree' || kind === 'artifact-worktree'
           ? vscode.TreeItemCollapsibleState.Collapsed
           : vscode.TreeItemCollapsibleState.None
     );
@@ -89,7 +91,7 @@ export class ReviewTreeItem extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon('info');
       return;
     }
-    if (kind === 'worktree') {
+    if (kind === 'worktree' || kind === 'artifact-worktree') {
       this.description = options.description;
       this.tooltip = options.tooltip;
       this.iconPath = options.warning
@@ -152,6 +154,8 @@ export class ReviewTreeProvider
   private diagnostics: ReviewTreeItem[] = [];
   private images: ReviewTreeItem[] = [];
   private plans: ReviewTreeItem[] = [];
+  private planCount = 0;
+  private readonly plansByWorktree = new Map<string, ReviewTreeItem[]>();
   private planPaths = new Set<string>();
   private changeMessage = 'Select an agent with a Git baseline to review changes';
   private refreshGeneration = 0;
@@ -164,7 +168,7 @@ export class ReviewTreeProvider
     const imageWatcher = vscode.workspace.createFileSystemWatcher(
       '**/*.{png,jpg,jpeg,gif,webp}'
     );
-    const planWatcher = vscode.workspace.createFileSystemWatcher('**/*.{md,mdx}');
+    const planWatcher = vscode.workspace.createFileSystemWatcher('**/*.{md,mdx,txt}');
     this.watchers = [imageWatcher, planWatcher];
     imageWatcher.onDidCreate(() => this.refreshImagesIfEnabled());
     imageWatcher.onDidChange(() => this.refreshImagesIfEnabled());
@@ -207,7 +211,7 @@ export class ReviewTreeProvider
         }),
         new ReviewTreeItem('group', 'Plans & Docs', {
           group: 'plans',
-          count: this.plans.length
+          count: this.planCount
         })
       ];
       if (imagesEnabled()) {
@@ -224,6 +228,9 @@ export class ReviewTreeProvider
     }
     if (element.kind === 'worktree' && element.worktreeKey) {
       return this.changesByWorktree.get(element.worktreeKey) ?? [];
+    }
+    if (element.kind === 'artifact-worktree' && element.worktreeKey) {
+      return this.plansByWorktree.get(element.worktreeKey) ?? [];
     }
     switch (element.group) {
       case 'changes':
@@ -264,24 +271,29 @@ export class ReviewTreeProvider
       findFilesAcrossAgentRoots(
         this.sessions,
         config.get<string[]>('artifactGlobs', [
-          '**/{plans,docs}/**/*.{md,mdx}',
-          '**/todos/**/*.{md,mdx}',
-          '**/{TODOS,DESIGN}.{md,mdx}'
+          '**/{plans,docs}/**/*.{md,mdx,txt}',
+          '**/todos/**/*.{md,mdx,txt}',
+          '**/{TODOS,DESIGN,TESTPLAN}.{md,mdx,txt}'
         ]),
         '**/{node_modules,.git,out,dist}/**'
       ),
       loadWorktreeChanges(this.sessions)
     ]);
-    const [images, plans] = await Promise.all([
+    const [images, planArtifacts] = await Promise.all([
       toArtifactItems('image', imageUris, max, session),
-      toArtifactItems('plan', planUris, max, session)
+      toChangedPlanItems(planUris, worktreeChanges, max)
     ]);
     if (generation !== this.refreshGeneration) {
       return;
     }
     this.images = images;
-    this.plans = plans;
-    this.planPaths = new Set(planUris.map((uri) => uri.fsPath));
+    this.plans = planArtifacts.groups;
+    this.planCount = planArtifacts.paths.size;
+    this.plansByWorktree.clear();
+    for (const [key, items] of planArtifacts.itemsByWorktree) {
+      this.plansByWorktree.set(key, items);
+    }
+    this.planPaths = planArtifacts.paths;
     this.diagnostics = toDiagnosticItems(session, max);
     if (changeGeneration === this.changeGeneration) {
       this.applyWorktreeChanges(worktreeChanges);
@@ -548,6 +560,7 @@ async function loadWorktreeChanges(
       return {
         key,
         session,
+        sessions: sorted,
         agentLabels: sorted.map((attached) => attached.label),
         agentDetails: sorted.map(
           (attached) => `${attached.label} (${attached.kind})`
@@ -653,6 +666,87 @@ async function toArtifactItems(
           description
         });
     });
+}
+
+async function toChangedPlanItems(
+  uris: readonly vscode.Uri[],
+  worktrees: readonly WorktreeChanges[],
+  max: number
+): Promise<{
+  groups: ReviewTreeItem[];
+  itemsByWorktree: Map<string, ReviewTreeItem[]>;
+  paths: Set<string>;
+}> {
+  const urisByPath = new Map(
+    uris.map((uri) => [normalizeRootKey(uri.fsPath), uri] as const)
+  );
+  const groups: ReviewTreeItem[] = [];
+  const itemsByWorktree = new Map<string, ReviewTreeItem[]>();
+  const paths = new Set<string>();
+  let remaining = max;
+  for (const worktree of worktrees) {
+    if (!worktree.changes || remaining <= 0) {
+      continue;
+    }
+    const earliestLaunch = Math.min(
+      ...worktree.sessions.map((attached) => attached.createdAt)
+    );
+    const candidates = await Promise.all(
+      worktree.changes.map(async (change) => {
+        if (change.kind === 'deleted') {
+          return undefined;
+        }
+        const absolutePath = path.join(worktree.state.repoRoot, change.path);
+        const uri = urisByPath.get(normalizeRootKey(absolutePath));
+        if (!uri) {
+          return undefined;
+        }
+        try {
+          const stat = await vscode.workspace.fs.stat(uri);
+          return stat.mtime >= earliestLaunch ? { change, uri, stat } : undefined;
+        } catch {
+          return undefined;
+        }
+      })
+    );
+    const eligible = candidates
+      .filter(
+        (value): value is {
+          change: WorkspaceChange;
+          uri: vscode.Uri;
+          stat: vscode.FileStat;
+        } => value !== undefined
+      )
+      .sort((left, right) => right.stat.mtime - left.stat.mtime);
+    for (const { uri } of eligible) {
+      paths.add(uri.fsPath);
+    }
+    const values = eligible.slice(0, remaining);
+    if (values.length === 0) {
+      continue;
+    }
+    const items = values.map(({ change, uri, stat }) => {
+      return new ReviewTreeItem('plan', path.basename(change.path), {
+        uri,
+        modifiedAt: stat.mtime,
+        description: `${artifactTypeLabel(classifyArtifact(change.path))} · ${directoryLabel(change.path)}`
+      });
+    });
+    remaining -= items.length;
+    itemsByWorktree.set(worktree.key, items);
+    groups.push(
+      new ReviewTreeItem(
+        'artifact-worktree',
+        `${worktree.agentLabels.join(' + ')} · ${worktree.state.repositoryName}`,
+        {
+          worktreeKey: worktree.key,
+          description: `${worktree.state.branch} · ${items.length} artifacts`,
+          tooltip: `${worktree.state.repoRoot}\nAgents: ${worktree.agentDetails.join(', ')}`
+        }
+      )
+    );
+  }
+  return { groups, itemsByWorktree, paths };
 }
 
 function isWithin(root: string, candidate: string): boolean {
