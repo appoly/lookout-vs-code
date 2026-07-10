@@ -13,7 +13,7 @@ test('creates a stable, identifiable terminal session', () => {
   const session = createSession('codex', ' API work ', ' codex ', '/repo', 10, 'id-1');
   assert.equal(session.label, 'API work');
   assert.equal(session.command, 'codex');
-  assert.equal(session.terminalName, 'Paraterm: API work [id-1]');
+  assert.equal(session.terminalName, 'Parful: API work [id-1]');
   assert.equal(session.unread, false);
   assert.equal(terminalName('id-1', ' API work '), session.terminalName);
 });

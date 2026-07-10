@@ -10,6 +10,7 @@ import {
   listWorkspaceChanges,
   parseNameStatus,
   parseNullList,
+  readGitWorktreeState,
   readBaselineFile
 } from '../src/gitReview';
 
@@ -42,11 +43,11 @@ test('removes discovered plans and docs from ordinary workspace changes', () => 
 });
 
 test('captures a Git baseline and lists working tree changes', async () => {
-  const directory = mkdtempSync(path.join(tmpdir(), 'multiterm-git-'));
+  const directory = mkdtempSync(path.join(tmpdir(), 'parful-git-'));
   try {
     git(directory, ['init', '-q']);
-    git(directory, ['config', 'user.name', 'MultiTerm Tests']);
-    git(directory, ['config', 'user.email', 'multiterm@example.invalid']);
+    git(directory, ['config', 'user.name', 'Parful Tests']);
+    git(directory, ['config', 'user.email', 'parful@example.invalid']);
     writeFileSync(path.join(directory, 'tracked.txt'), 'baseline\n');
     git(directory, ['add', 'tracked.txt']);
     git(directory, ['commit', '-qm', 'baseline']);
@@ -65,6 +66,12 @@ test('captures a Git baseline and lists working tree changes', async () => {
       ]
     );
     assert.equal(await readBaselineFile(baseline, 'tracked.txt'), 'baseline\n');
+
+    git(directory, ['checkout', '-qb', 'agent/second-branch']);
+    const state = await readGitWorktreeState(directory);
+    assert.equal(state.branch, 'agent/second-branch');
+    assert.equal(state.repoRoot, directory);
+    assert.equal(state.repositoryName, path.basename(directory));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

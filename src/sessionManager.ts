@@ -4,10 +4,11 @@ import {
   AttentionServer,
   type AttentionEndpoint
 } from './attentionServer';
+import { AttentionSound } from './attentionSound';
 import {
   isDirectAgentCommand,
   shellQuote,
-  withCodexTurnNotification
+  withCodexLifecycleIntegration
 } from './agentCommand';
 import { captureGitBaseline } from './gitReview';
 import {
@@ -16,11 +17,21 @@ import {
   markSessionRead,
   transitionSession
 } from './sessionModel';
-import type { AgentEvent, AgentSession, LaunchRequest } from './types';
+import {
+  applyAgentEvent,
+  normalizeSessionActivity
+} from './sessionActivity';
+import type {
+  AgentEvent,
+  AgentReportedStatus,
+  AgentSession,
+  LaunchRequest
+} from './types';
 import type { UsageBridgeEvent } from './usageTypes';
 
-const STORAGE_KEY = 'multiTerm.sessions.v1';
-const BRIDGE_STORAGE_KEY = 'multiTerm.attentionEndpoint.v1';
+const STORAGE_KEY = 'parful.sessions.v1';
+const BRIDGE_STORAGE_KEY = 'parful.attentionEndpoint.v1';
+const CODEX_HOOK_NOTICE_KEY = 'parful.codexHookNotice.v1';
 
 export class SessionManager implements vscode.Disposable {
   private readonly sessions = new Map<string, AgentSession>();
@@ -42,13 +53,16 @@ export class SessionManager implements vscode.Disposable {
   private persistChain: Promise<void> = Promise.resolve();
   private attentionEndpoint: AttentionEndpoint | undefined;
   private bridgeWarningShown = false;
+  private readonly attentionSound: AttentionSound;
 
   public readonly onDidChange = this.changedEmitter.event;
   public readonly onDidChangeTopology = this.topologyEmitter.event;
   public readonly onDidSelectSession = this.selectedEmitter.event;
   public readonly onDidReceiveUsage = this.usageEmitter.event;
 
-  public constructor(private readonly context: vscode.ExtensionContext) {}
+  public constructor(private readonly context: vscode.ExtensionContext) {
+    this.attentionSound = new AttentionSound(context);
+  }
 
   public async initialize(): Promise<void> {
     const preferredEndpoint = this.context.workspaceState.get<AttentionEndpoint>(
@@ -78,25 +92,32 @@ export class SessionManager implements vscode.Disposable {
     }
 
     for (const saved of stored) {
+      const normalizedSaved = normalizeSessionActivity(saved);
       const terminal =
         terminalsBySessionId.get(saved.id) ?? terminalsByName.get(saved.terminalName);
       const session: AgentSession = terminal
         ? {
-            ...saved,
+            ...normalizedSaved,
             bridgeAvailable: bridgeReused,
             ...(!bridgeReused
-              ? { latestEvent: 'Restored terminal · hooks require a new session' }
+              ? {
+                  backgroundAgents: [],
+                  foregroundState: 'unknown',
+                  latestEvent: 'Restored terminal · hooks require a new session'
+                }
               : {})
           }
         : {
             ...transitionSession(
-              saved,
+              normalizedSaved,
               'closed',
               Date.now(),
               saved.exitCode,
               'Terminal is no longer open'
             ),
-            bridgeAvailable: false
+            bridgeAvailable: false,
+            backgroundAgents: [],
+            foregroundState: 'stopped'
           };
       this.sessions.set(session.id, session);
       if (terminal) {
@@ -140,7 +161,7 @@ export class SessionManager implements vscode.Disposable {
               : 'Agent command finished'
         );
         if (
-          vscode.workspace.getConfiguration('multiTerm').get('notifyOnAgentExit', true) &&
+          vscode.workspace.getConfiguration('parful').get('notifyOnAgentExit', true) &&
           vscode.window.activeTerminal !== event.terminal
         ) {
           const session = this.sessions.get(id);
@@ -219,7 +240,7 @@ export class SessionManager implements vscode.Disposable {
       ? this.terminals.get(request.parentSessionId)
       : undefined;
     const configuredLocation = vscode.workspace
-      .getConfiguration('multiTerm')
+      .getConfiguration('parful')
       .get<'editor' | 'panel'>('terminals.location', 'editor');
     const endpoint = this.attentionEndpoint;
     const location: vscode.TerminalOptions['location'] = parentTerminal
@@ -235,18 +256,18 @@ export class SessionManager implements vscode.Disposable {
       location,
       iconPath: new vscode.ThemeIcon(request.kind === 'claude' ? 'sparkle' : 'terminal'),
       env: {
-        MULTITERM_SESSION_ID: session.id,
+        PARFUL_SESSION_ID: session.id,
         ...(endpoint
           ? {
-              MULTITERM_NOTIFY_URL: endpoint.url,
-              MULTITERM_NOTIFY_TOKEN: endpoint.token,
-              MULTITERM_NOTIFY_HELPER: path.join(
+              PARFUL_NOTIFY_URL: endpoint.url,
+              PARFUL_NOTIFY_TOKEN: endpoint.token,
+              PARFUL_NOTIFY_HELPER: path.join(
                 this.context.extensionPath,
                 'out',
                 'src',
                 'notify.js'
               ),
-              MULTITERM_USAGE_URL: endpoint.url.replace(/\/events$/, '/usage')
+              PARFUL_USAGE_URL: endpoint.url.replace(/\/events$/, '/usage')
             }
           : {})
       }
@@ -258,10 +279,16 @@ export class SessionManager implements vscode.Disposable {
     await this.persistAndNotify();
     terminal.show(false);
     await this.executeAgentCommand(session.id, terminal, launchCommand);
+    if (
+      request.kind === 'codex' &&
+      launchCommand.includes('hooks.SubagentStart=')
+    ) {
+      void this.showCodexHookNotice(session.id);
+    }
     if (!endpoint && !this.bridgeWarningShown) {
       this.bridgeWarningShown = true;
       void vscode.window.showWarningMessage(
-        'Paraterm could not start its local attention bridge. Terminals still work, but agent hooks and Claude usage updates are unavailable.'
+        'Parful could not start its local attention bridge. Terminals still work, but agent hooks and Claude usage updates are unavailable.'
       );
     }
     return session;
@@ -306,10 +333,23 @@ export class SessionManager implements vscode.Disposable {
   }
 
   public async close(id: string): Promise<void> {
-    this.terminals.get(id)?.dispose();
-    if (!this.terminals.has(id)) {
-      this.updateSession(id, 'closed', undefined, 'Terminal closed');
+    const terminal = this.terminals.get(id);
+    if (terminal) {
+      this.terminals.delete(id);
+      this.agentExecutions.delete(id);
+      this.sessionIdsByTerminal.delete(terminal);
+      terminal.dispose();
     }
+    if (!this.sessions.delete(id)) {
+      return;
+    }
+    if (this.selectedSessionId === id) {
+      const next = this.list().find((session) => this.isOpen(session.id));
+      this.selectedSessionId = next?.id;
+      this.selectedEmitter.fire(next);
+    }
+    this.topologyEmitter.fire();
+    await this.persistAndNotify();
   }
 
   public async restart(id: string): Promise<void> {
@@ -327,6 +367,8 @@ export class SessionManager implements vscode.Disposable {
     }
     session.status = 'starting';
     session.unread = false;
+    session.backgroundAgents = [];
+    session.foregroundState = 'unknown';
     session.latestEvent = 'Restarting agent command';
     session.updatedAt = Date.now();
     await this.persistAndNotify();
@@ -362,8 +404,13 @@ export class SessionManager implements vscode.Disposable {
     return `node ${shellQuote(helperPath)} attention`;
   }
 
+  public toggleAttentionSound(): Promise<void> {
+    return this.attentionSound.toggle();
+  }
+
   public dispose(): void {
     this.attentionServer.dispose();
+    this.attentionSound.dispose();
     this.changedEmitter.dispose();
     this.topologyEmitter.dispose();
     this.selectedEmitter.dispose();
@@ -422,7 +469,22 @@ export class SessionManager implements vscode.Disposable {
     if (!session) {
       return;
     }
-    let updated = transitionSession(session, status, Date.now(), exitCode, message);
+    const resetActivity =
+      status === 'active'
+        ? { ...session, backgroundAgents: [], foregroundState: 'unknown' as const }
+        : status === 'completed' ||
+            status === 'failed' ||
+            status === 'unknown' ||
+            status === 'closed'
+          ? { ...session, backgroundAgents: [], foregroundState: 'stopped' as const }
+          : session;
+    let updated = transitionSession(
+      resetActivity,
+      status,
+      Date.now(),
+      exitCode,
+      message
+    );
     if (this.terminals.get(id) === vscode.window.activeTerminal && updated.unread) {
       updated = markSessionRead(updated);
     }
@@ -443,22 +505,29 @@ export class SessionManager implements vscode.Disposable {
     if (!session) {
       return;
     }
-    this.updateSession(
-      event.sessionId,
-      event.status,
-      event.exitCode,
-      event.message ?? defaultEventMessage(event.status)
-    );
+    let updated = applyAgentEvent(session, event);
     const terminal = this.terminals.get(event.sessionId);
-    const configuration = vscode.workspace.getConfiguration('multiTerm');
+    if (terminal === vscode.window.activeTerminal && updated.unread) {
+      updated = markSessionRead(updated);
+    }
+    this.sessions.set(event.sessionId, updated);
+    await this.persistAndNotify();
+    const configuration = vscode.workspace.getConfiguration('parful');
     const shouldNotify =
-      (event.status === 'attention' &&
+      (updated.status === 'attention' &&
         configuration.get('notifyOnAttention', true)) ||
-      ((event.status === 'completed' || event.status === 'failed') &&
+      ((updated.status === 'completed' || updated.status === 'failed') &&
         configuration.get('notifyOnTurnComplete', true));
+    const enteredAttention =
+      updated.status === 'attention' && session.status !== 'attention';
+    const terminalIsUnattended =
+      !vscode.window.state.focused || vscode.window.activeTerminal !== terminal;
+    if (enteredAttention && terminalIsUnattended) {
+      void this.attentionSound.play();
+    }
     if (shouldNotify && vscode.window.activeTerminal !== terminal) {
       const choice = await vscode.window.showInformationMessage(
-        `${session.label}: ${event.message ?? defaultEventMessage(event.status)}`,
+        `${session.label}: ${updated.latestEvent ?? updated.status}`,
         'Focus Agent'
       );
       if (choice) {
@@ -492,19 +561,25 @@ export class SessionManager implements vscode.Disposable {
     if (
       request.kind === 'codex' &&
       vscode.workspace
-        .getConfiguration('multiTerm.codex')
+        .getConfiguration('parful.codex')
         .get('lifecycleIntegration', true)
     ) {
-      return withCodexTurnNotification(request.command, notifyHelperPath);
+      return withCodexLifecycleIntegration(request.command, notifyHelperPath);
     }
     if (
       request.kind !== 'claude' ||
-      !vscode.workspace
-        .getConfiguration('multiTerm.usage.claude')
-        .get('statusLineIntegration', true) ||
       /(^|\s)--settings(?:\s|=)/.test(request.command) ||
       !isDirectClaudeCommand(request.command)
     ) {
+      return request.command;
+    }
+    const statusLineIntegration = vscode.workspace
+      .getConfiguration('parful.usage.claude')
+      .get('statusLineIntegration', true);
+    const lifecycleIntegration = vscode.workspace
+      .getConfiguration('parful.claude')
+      .get('lifecycleIntegration', true);
+    if (!statusLineIntegration && !lifecycleIntegration) {
       return request.command;
     }
     await vscode.workspace.fs.createDirectory(this.context.globalStorageUri);
@@ -516,46 +591,51 @@ export class SessionManager implements vscode.Disposable {
     );
     const settingsUri = vscode.Uri.joinPath(
       this.context.globalStorageUri,
-      'claude-multiterm-settings.json'
+      'claude-parful-settings.json'
     );
-    const settings = {
-      statusLine: {
-        type: 'command',
-        command: `node ${shellQuote(helperPath)}`
-      },
-      hooks: {
-        UserPromptSubmit: [
-          hookGroup(notifyHelperPath, 'running', 'Claude is working')
-        ],
-        Notification: [
-          {
-            matcher: 'permission_prompt',
-            ...hookGroup(
-              notifyHelperPath,
-              'attention',
-              'Claude needs permission'
-            )
-          },
-          {
-            matcher: 'idle_prompt',
-            ...hookGroup(
-              notifyHelperPath,
-              'attention',
-              'Claude is waiting for input'
-            )
-          }
-        ],
-        Stop: [
-          hookGroup(
+    const hooks = {
+      UserPromptSubmit: [
+        hookGroup(notifyHelperPath, 'running', 'Claude is working')
+      ],
+      Notification: [
+        {
+          matcher: 'permission_prompt',
+          ...hookGroup(
             notifyHelperPath,
             'attention',
+            'Claude needs permission'
+          )
+        },
+        {
+          matcher: 'idle_prompt',
+          ...hookGroup(
+            notifyHelperPath,
+            'foreground-stop',
             'Claude is waiting for input'
           )
-        ],
-        StopFailure: [
-          hookGroup(notifyHelperPath, 'failed', 'Claude turn failed')
-        ]
-      }
+        }
+      ],
+      Stop: [
+        hookGroup(
+          notifyHelperPath,
+          'foreground-stop',
+          'Claude is waiting for input'
+        )
+      ],
+      SubagentStart: [hookGroup(notifyHelperPath, 'background-start')],
+      SubagentStop: [hookGroup(notifyHelperPath, 'background-stop')],
+      StopFailure: [hookGroup(notifyHelperPath, 'failed', 'Claude turn failed')]
+    };
+    const settings = {
+      ...(statusLineIntegration
+        ? {
+            statusLine: {
+              type: 'command',
+              command: `node ${shellQuote(helperPath)}`
+            }
+          }
+        : {}),
+      ...(lifecycleIntegration ? { hooks } : {})
     };
     await vscode.workspace.fs.writeFile(
       settingsUri,
@@ -563,31 +643,49 @@ export class SessionManager implements vscode.Disposable {
     );
     return `${request.command} --settings ${shellQuote(settingsUri.fsPath)}`;
   }
-}
 
-function defaultEventMessage(status: AgentEvent['status']): string {
-  switch (status) {
-    case 'running':
-      return 'Agent is running';
-    case 'attention':
-      return 'Agent needs attention';
-    case 'completed':
-      return 'Agent completed';
-    case 'failed':
-      return 'Agent failed';
+  private async showCodexHookNotice(id: string): Promise<void> {
+    if (this.context.globalState.get<boolean>(CODEX_HOOK_NOTICE_KEY, false)) {
+      return;
+    }
+    const choice = await vscode.window.showInformationMessage(
+      'To track delegated Codex agents, run /hooks in this Codex terminal and trust the Parful lifecycle hooks once.',
+      'Focus Agent',
+      "Don't Remind Me"
+    );
+    if (!choice) {
+      return;
+    }
+    await this.context.globalState.update(CODEX_HOOK_NOTICE_KEY, true);
+    if (choice === 'Focus Agent') {
+      await this.focus(id);
+    }
   }
 }
 
+type HookAction =
+  | AgentReportedStatus
+  | 'foreground-stop'
+  | 'background-start'
+  | 'background-stop';
+
 function hookGroup(
   helperPath: string,
-  status: AgentEvent['status'],
-  message: string
+  action: HookAction,
+  message?: string
 ): { hooks: Array<{ type: 'command'; command: string }> } {
   return {
     hooks: [
       {
         type: 'command',
-        command: `node ${shellQuote(helperPath)} ${status} ${shellQuote(message)}`
+        command: [
+          'node',
+          shellQuote(helperPath),
+          '--hook',
+          'claude',
+          action,
+          ...(message ? [shellQuote(message)] : [])
+        ].join(' ')
       }
     ]
   };
@@ -601,7 +699,7 @@ function sessionIdFromTerminal(terminal: vscode.Terminal): string | undefined {
   if (!('env' in options) || !options.env) {
     return undefined;
   }
-  const sessionId = options.env.MULTITERM_SESSION_ID;
+  const sessionId = options.env.PARFUL_SESSION_ID;
   return typeof sessionId === 'string' ? sessionId : undefined;
 }
 

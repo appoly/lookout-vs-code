@@ -4,6 +4,7 @@ export type SessionStatus =
   | 'starting'
   | 'active'
   | 'running'
+  | 'background'
   | 'attention'
   | 'completed'
   | 'failed'
@@ -22,10 +23,19 @@ export interface AgentSession {
   terminalName: string;
   bridgeAvailable: boolean;
   unread: boolean;
+  backgroundAgents: BackgroundAgent[];
+  foregroundState: ForegroundState;
   latestEvent?: string;
   exitCode?: number;
   readonly baseline?: GitBaseline;
 }
+
+export interface BackgroundAgent {
+  readonly id: string;
+  readonly label: string;
+}
+
+export type ForegroundState = 'unknown' | 'working' | 'stopped';
 
 export interface GitBaseline {
   readonly repoRoot: string;
@@ -34,15 +44,36 @@ export interface GitBaseline {
   readonly capturedAt: number;
 }
 
-export interface AgentEvent {
+export type AgentReportedStatus = Extract<
+  SessionStatus,
+  'running' | 'attention' | 'completed' | 'failed'
+>;
+
+export interface AgentStatusEvent {
+  readonly kind: 'status';
   readonly sessionId: string;
-  readonly status: Extract<
-    SessionStatus,
-    'running' | 'attention' | 'completed' | 'failed'
-  >;
+  readonly status: AgentReportedStatus;
   readonly message?: string;
   readonly exitCode?: number;
 }
+
+export interface AgentForegroundStopEvent {
+  readonly kind: 'foreground-stop';
+  readonly sessionId: string;
+  readonly message?: string;
+}
+
+export interface AgentBackgroundEvent {
+  readonly kind: 'background-start' | 'background-stop';
+  readonly sessionId: string;
+  readonly agentId: string;
+  readonly agentLabel: string;
+}
+
+export type AgentEvent =
+  | AgentStatusEvent
+  | AgentForegroundStopEvent
+  | AgentBackgroundEvent;
 
 export interface LaunchRequest {
   readonly kind: AgentKind;

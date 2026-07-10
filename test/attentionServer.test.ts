@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import * as path from 'node:path';
 import test from 'node:test';
 import {
   AttentionServer,
@@ -33,11 +36,43 @@ test('accepts authenticated agent and usage events on loopback', async (context)
     assert.equal(eventResponse.status, 204);
     assert.deepEqual(agentEvents, [
       {
+        kind: 'status',
         sessionId: 'session-1',
         status: 'attention',
         message: 'Approve command?'
       }
     ]);
+
+    const backgroundResponse = await post(endpoint.url, endpoint.token, {
+      kind: 'background-start',
+      sessionId: 'session-1',
+      agentId: 'agent-42',
+      agentLabel: 'Explore'
+    });
+    assert.equal(backgroundResponse.status, 204);
+    assert.deepEqual(agentEvents[1], {
+      kind: 'background-start',
+      sessionId: 'session-1',
+      agentId: 'agent-42',
+      agentLabel: 'Explore'
+    });
+
+    const hookResult = await runNotify(
+      endpoint,
+      ['--hook', 'codex', 'background-start'],
+      {
+        agent_id: 'agent-from-hook',
+        agent_type: 'Reviewer'
+      }
+    );
+    assert.equal(hookResult.code, 0);
+    assert.equal(hookResult.stdout.trim(), '{}');
+    assert.deepEqual(agentEvents[2], {
+      kind: 'background-start',
+      sessionId: 'session-from-hook',
+      agentId: 'agent-from-hook',
+      agentLabel: 'Reviewer'
+    });
 
     const usageResponse = await post(
       endpoint.url.replace(/\/events$/, '/usage'),
@@ -76,4 +111,32 @@ function post(url: string, token: string, value: object): Promise<Response> {
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error;
+}
+
+async function runNotify(
+  endpoint: AttentionEndpoint,
+  args: readonly string[],
+  input: object
+): Promise<{ code: number | null; stdout: string }> {
+  const child = spawn(
+    process.execPath,
+    [path.resolve(__dirname, '../src/notify.js'), ...args],
+    {
+      env: {
+        ...process.env,
+        PARFUL_NOTIFY_URL: endpoint.url,
+        PARFUL_NOTIFY_TOKEN: endpoint.token,
+        PARFUL_SESSION_ID: 'session-from-hook'
+      },
+      stdio: ['pipe', 'pipe', 'pipe']
+    }
+  );
+  let stdout = '';
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', (chunk: string) => {
+    stdout += chunk;
+  });
+  child.stdin.end(JSON.stringify(input));
+  const [code] = (await once(child, 'close')) as [number | null];
+  return { code, stdout };
 }

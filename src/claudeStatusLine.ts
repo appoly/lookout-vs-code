@@ -17,8 +17,8 @@ async function main(): Promise<void> {
 }
 
 async function postUsage(body: object): Promise<void> {
-  const url = process.env.MULTITERM_USAGE_URL;
-  const token = process.env.MULTITERM_NOTIFY_TOKEN;
+  const url = process.env.PARFUL_USAGE_URL;
+  const token = process.env.PARFUL_NOTIFY_TOKEN;
   if (!url || !token) {
     return;
   }

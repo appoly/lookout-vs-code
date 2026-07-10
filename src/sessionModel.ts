@@ -4,6 +4,7 @@ const ACTIVE_STATUSES = new Set<SessionStatus>([
   'starting',
   'active',
   'running',
+  'background',
   'attention'
 ]);
 
@@ -26,7 +27,9 @@ export function createSession(
     updatedAt: now,
     terminalName: terminalName(id, label),
     bridgeAvailable: true,
-    unread: false
+    unread: false,
+    backgroundAgents: [],
+    foregroundState: 'unknown'
   };
 }
 
@@ -36,7 +39,7 @@ export function createSessionId(kind: AgentKind, now = Date.now()): string {
 }
 
 export function terminalName(id: string, label: string): string {
-  return `Paraterm: ${label.trim()} [${id}]`;
+  return `Parful: ${label.trim()} [${id}]`;
 }
 
 export function isActiveSession(session: AgentSession): boolean {

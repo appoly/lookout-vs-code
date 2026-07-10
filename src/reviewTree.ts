@@ -1,15 +1,21 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
+  artifactTypeLabel,
+  classifyArtifact
+} from './artifactClassification';
+import {
   excludeWorkspaceArtifacts,
   listWorkspaceChanges,
   readBaselineFile,
+  readGitWorktreeState,
+  type GitWorktreeState,
   type WorkspaceChange
 } from './gitReview';
 import type { SessionManager } from './sessionManager';
 import type { AgentSession } from './types';
 
-const BASELINE_SCHEME = 'multiterm-baseline';
+const BASELINE_SCHEME = 'parful-baseline';
 type ReviewKind =
   | 'group'
   | 'image'
@@ -31,13 +37,16 @@ interface ReviewTreeItemOptions {
   readonly diagnostic?: vscode.Diagnostic;
   readonly worktreeKey?: string;
   readonly tooltip?: string;
+  readonly warning?: boolean;
 }
 
 interface WorktreeChanges {
   readonly key: string;
   readonly session: AgentSession;
   readonly agentLabels: readonly string[];
+  readonly agentDetails: readonly string[];
   readonly changes: readonly WorkspaceChange[] | undefined;
+  readonly state: GitWorktreeState;
 }
 
 export class ReviewTreeItem extends vscode.TreeItem {
@@ -83,7 +92,12 @@ export class ReviewTreeItem extends vscode.TreeItem {
     if (kind === 'worktree') {
       this.description = options.description;
       this.tooltip = options.tooltip;
-      this.iconPath = new vscode.ThemeIcon('git-branch');
+      this.iconPath = options.warning
+        ? new vscode.ThemeIcon(
+            'warning',
+            new vscode.ThemeColor('list.warningForeground')
+          )
+        : new vscode.ThemeIcon('git-branch');
       return;
     }
     if (kind === 'change' && options.change && options.uri) {
@@ -108,9 +122,9 @@ export class ReviewTreeItem extends vscode.TreeItem {
     }
     if (options.uri) {
       this.resourceUri = options.uri;
-      this.description = path.dirname(
-        vscode.workspace.asRelativePath(options.uri, false)
-      );
+      this.description =
+        options.description ??
+        path.dirname(vscode.workspace.asRelativePath(options.uri, false));
       this.tooltip = `${options.uri.fsPath}\nModified ${new Date(
         options.modifiedAt ?? 0
       ).toLocaleString()}`;
@@ -142,6 +156,7 @@ export class ReviewTreeProvider
   private changeMessage = 'Select an agent with a Git baseline to review changes';
   private refreshGeneration = 0;
   private changeGeneration = 0;
+  private refreshTimer: NodeJS.Timeout | undefined;
   public readonly onDidChangeTreeData = this.changedEmitter.event;
   public readonly onDidChange = this.contentChangedEmitter.event;
 
@@ -158,12 +173,13 @@ export class ReviewTreeProvider
     planWatcher.onDidChange(() => void this.refresh());
     planWatcher.onDidDelete(() => void this.refresh());
     this.disposables.push(
-      sessions.onDidSelectSession(() => void this.refresh()),
-      sessions.onDidChangeTopology(() => void this.refreshChanges()),
+      sessions.onDidSelectSession(() => this.scheduleRefresh()),
+      sessions.onDidChange(() => this.scheduleRefresh()),
+      sessions.onDidChangeTopology(() => this.scheduleRefresh()),
       vscode.workspace.onDidSaveTextDocument(() => void this.refreshChanges()),
       vscode.languages.onDidChangeDiagnostics(() => this.refreshDiagnostics()),
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (event.affectsConfiguration('multiTerm.review')) {
+        if (event.affectsConfiguration('parful.review')) {
           void this.refresh();
         }
       })
@@ -232,20 +248,26 @@ export class ReviewTreeProvider
   public async refresh(): Promise<void> {
     const generation = ++this.refreshGeneration;
     const changeGeneration = ++this.changeGeneration;
-    const config = vscode.workspace.getConfiguration('multiTerm.review');
+    const config = vscode.workspace.getConfiguration('parful.review');
     const max = config.get<number>('maxItemsPerGroup', 12);
     const showImages = config.get<boolean>('showRecentImages', false);
     const session = this.sessions.selectedSession;
     const [imageUris, planUris, worktreeChanges] = await Promise.all([
       showImages
-        ? vscode.workspace.findFiles(
-            config.get<string>('imageGlob', '**/*.{png,jpg,jpeg,gif,webp}'),
+        ? findFilesAcrossAgentRoots(
+            this.sessions,
+            [config.get<string>('imageGlob', '**/*.{png,jpg,jpeg,gif,webp}')],
             '**/{node_modules,.git,out,dist}/**',
             max * 8
           )
         : Promise.resolve([]),
-      vscode.workspace.findFiles(
-        config.get<string>('planGlob', '**/{plans,docs}/**/*.{md,mdx}'),
+      findFilesAcrossAgentRoots(
+        this.sessions,
+        config.get<string[]>('artifactGlobs', [
+          '**/{plans,docs}/**/*.{md,mdx}',
+          '**/todos/**/*.{md,mdx}',
+          '**/{TODOS,DESIGN}.{md,mdx}'
+        ]),
         '**/{node_modules,.git,out,dist}/**'
       ),
       loadWorktreeChanges(this.sessions)
@@ -273,6 +295,16 @@ export class ReviewTreeProvider
     }
   }
 
+  private scheduleRefresh(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      void this.refresh();
+    }, 250);
+  }
+
   public async refreshChanges(): Promise<void> {
     const generation = ++this.changeGeneration;
     const worktreeChanges = await loadWorktreeChanges(this.sessions);
@@ -285,7 +317,7 @@ export class ReviewTreeProvider
 
   public refreshDiagnostics(): void {
     const max = vscode.workspace
-      .getConfiguration('multiTerm.review')
+      .getConfiguration('parful.review')
       .get<number>('maxItemsPerGroup', 12);
     this.diagnostics = toDiagnosticItems(this.sessions.selectedSession, max);
     this.changedEmitter.fire();
@@ -327,6 +359,9 @@ export class ReviewTreeProvider
   }
 
   public dispose(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
     for (const watcher of this.watchers) {
       watcher.dispose();
     }
@@ -348,6 +383,7 @@ export class ReviewTreeProvider
 
     for (const worktree of worktrees) {
       const baseline = worktree.session.baseline!;
+      const branchChanged = worktree.state.branch !== baseline.branch;
       const changes = worktree.changes
         ? excludeWorkspaceArtifacts(
             worktree.changes,
@@ -355,7 +391,7 @@ export class ReviewTreeProvider
             this.planPaths
           )
         : undefined;
-      const childItems = changes
+      const changeItems = changes
         ? changes.length > 0
           ? changes.map(
               (change) =>
@@ -369,19 +405,42 @@ export class ReviewTreeProvider
             )
           : [new ReviewTreeItem('message', 'No workspace changes')]
         : [new ReviewTreeItem('message', 'Git changes could not be read')];
+      const childItems = branchChanged
+        ? [
+            new ReviewTreeItem('message', 'Branch changed since agent launch', {
+              description: `${branchLabel(baseline.branch, baseline.commit)} → ${branchLabel(
+                worktree.state.branch,
+                worktree.state.commit
+              )} · captured baseline is stale`
+            }),
+            ...changeItems
+          ]
+        : changeItems;
       this.changesByWorktree.set(worktree.key, childItems);
       this.changeCount += changes?.length ?? 0;
       this.changeGroups.push(
         new ReviewTreeItem(
           'worktree',
-          `${baseline.branch} · ${path.basename(baseline.repoRoot)}`,
+          `${worktree.agentLabels.join(' + ')} · ${worktree.state.repositoryName}`,
           {
             worktreeKey: worktree.key,
-            description: `${changes?.length ?? 0} changes · ${worktree.agentLabels.join(', ')}`,
+            description: `${
+              branchChanged
+                ? `${branchLabel(baseline.branch, baseline.commit)} → ${branchLabel(
+                    worktree.state.branch,
+                    worktree.state.commit
+                  )}`
+                : branchLabel(worktree.state.branch, worktree.state.commit)
+            } · ${changes?.length ?? 0} changes`,
+            warning: branchChanged,
             tooltip: [
               baseline.repoRoot,
-              `Baseline: ${baseline.commit}`,
-              `Agents: ${worktree.agentLabels.join(', ')}`
+              `Agents: ${worktree.agentDetails.join(', ')}`,
+              `Launch baseline: ${baseline.branch} @ ${baseline.commit}`,
+              `Current branch: ${worktree.state.branch} @ ${worktree.state.commit}`,
+              ...(branchChanged
+                ? ['Warning: branch changed; the captured diff baseline is stale.']
+                : [])
             ].join('\n')
           }
         )
@@ -470,21 +529,79 @@ async function loadWorktreeChanges(
       );
       const session = sorted[0];
       let changes: WorkspaceChange[] | undefined;
+      let state: GitWorktreeState = {
+        repoRoot: session.baseline!.repoRoot,
+        repositoryName: path.basename(session.baseline!.repoRoot),
+        commit: session.baseline!.commit,
+        branch: session.baseline!.branch
+      };
       try {
         changes = await listWorkspaceChanges(session.baseline!);
       } catch {
         changes = undefined;
       }
+      try {
+        state = await readGitWorktreeState(session.baseline!.repoRoot);
+      } catch {
+        // Keep the launch baseline as an honest fallback while retaining changes.
+      }
       return {
         key,
         session,
-        agentLabels: sorted.map(
+        agentLabels: sorted.map((attached) => attached.label),
+        agentDetails: sorted.map(
           (attached) => `${attached.label} (${attached.kind})`
         ),
-        changes
+        changes,
+        state
       };
     })
   );
+}
+
+async function findFilesAcrossAgentRoots(
+  sessions: SessionManager,
+  includes: readonly string[],
+  exclude: string,
+  maxResultsPerRoot?: number
+): Promise<vscode.Uri[]> {
+  const roots = new Map<string, vscode.Uri>();
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    roots.set(normalizeRootKey(folder.uri.fsPath), folder.uri);
+  }
+  for (const session of sessions.list()) {
+    const root = session.baseline?.repoRoot ?? session.cwd;
+    const resolved = path.resolve(root);
+    roots.set(normalizeRootKey(resolved), vscode.Uri.file(resolved));
+  }
+
+  const matches = await Promise.all(
+    [...roots.values()].flatMap((root) => includes.map(async (include) => {
+      try {
+        return await vscode.workspace.findFiles(
+          new vscode.RelativePattern(root, include),
+          exclude,
+          maxResultsPerRoot
+        );
+      } catch {
+        return [];
+      }
+    }))
+  );
+  const unique = new Map<string, vscode.Uri>();
+  for (const uri of matches.flat()) {
+    unique.set(normalizeRootKey(uri.fsPath), uri);
+  }
+  return [...unique.values()];
+}
+
+function normalizeRootKey(value: string): string {
+  const resolved = path.resolve(value);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+function branchLabel(branch: string, commit: string): string {
+  return branch === 'HEAD' ? `detached@${commit.slice(0, 7)}` : branch;
 }
 
 async function toArtifactItems(
@@ -520,13 +637,22 @@ async function toArtifactItems(
     })
     .sort((a, b) => b.stat.mtime - a.stat.mtime)
     .slice(0, max)
-    .map(
-      ({ uri, stat }) =>
-        new ReviewTreeItem(kind, path.basename(uri.fsPath), {
+    .map(({ uri, stat }) => {
+      const relativePath = root && isWithin(root, uri.fsPath)
+        ? path.relative(root, uri.fsPath)
+        : vscode.workspace.asRelativePath(uri, false);
+      const directory = path.dirname(relativePath);
+      const description = kind === 'plan'
+        ? `${artifactTypeLabel(classifyArtifact(relativePath))} · ${
+            directory === '.' ? 'repository root' : directory
+          }`
+        : directory;
+      return new ReviewTreeItem(kind, path.basename(uri.fsPath), {
           uri,
-          modifiedAt: stat.mtime
-        })
-    );
+          modifiedAt: stat.mtime,
+          description
+        });
+    });
 }
 
 function isWithin(root: string, candidate: string): boolean {
@@ -540,7 +666,7 @@ function isImage(filePath: string): boolean {
 
 function imagesEnabled(): boolean {
   return vscode.workspace
-    .getConfiguration('multiTerm.review')
+    .getConfiguration('parful.review')
     .get('showRecentImages', false);
 }
 
@@ -612,7 +738,7 @@ function diagnosticIcon(severity: vscode.DiagnosticSeverity): vscode.ThemeIcon {
 
 function openCommand(item: ReviewTreeItem): vscode.Command {
   return {
-    command: 'multiTerm.openReviewItem',
+    command: 'parful.openReviewItem',
     title: 'Open Review Item',
     arguments: [item]
   };

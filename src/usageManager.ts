@@ -3,7 +3,7 @@ import { CodexUsageProvider } from './codexUsageProvider';
 import type { SessionManager } from './sessionManager';
 import type { UsageSnapshot } from './usageTypes';
 
-const CLAUDE_STORAGE_KEY = 'multiTerm.usage.claude.v1';
+const CLAUDE_STORAGE_KEY = 'parful.usage.claude.v1';
 const STALE_AFTER_MS = 15 * 60 * 1000;
 
 export class UsageManager implements vscode.Disposable {
@@ -19,10 +19,10 @@ export class UsageManager implements vscode.Disposable {
     sessions: SessionManager
   ) {
     const executable = vscode.workspace
-      .getConfiguration('multiTerm.usage.codex')
+      .getConfiguration('parful.usage.codex')
       .get('executable', 'codex');
     const includeSparkLimits = vscode.workspace
-      .getConfiguration('multiTerm.usage.codex')
+      .getConfiguration('parful.usage.codex')
       .get('showSparkLimits', false);
     this.codex = new CodexUsageProvider(
       executable,
@@ -64,10 +64,10 @@ export class UsageManager implements vscode.Disposable {
         }
       }),
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (event.affectsConfiguration('multiTerm.usage.codex.showSparkLimits')) {
+        if (event.affectsConfiguration('parful.usage.codex.showSparkLimits')) {
           this.codex.setIncludeSparkLimits(
             vscode.workspace
-              .getConfiguration('multiTerm.usage.codex')
+              .getConfiguration('parful.usage.codex')
               .get('showSparkLimits', false)
           );
           void this.refresh();

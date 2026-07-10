@@ -3,27 +3,44 @@ import test from 'node:test';
 import {
   isDirectAgentCommand,
   shellQuote,
-  withCodexTurnNotification
+  withCodexLifecycleIntegration
 } from '../src/agentCommand';
 
-test('adds a session-only Codex turn notification', () => {
-  assert.equal(
-    withCodexTurnNotification('codex --no-alt-screen', '/extension/notify.js', 'linux'),
-    "codex --no-alt-screen -c 'notify=[\"node\",\"/extension/notify.js\",\"attention\",\"Codex is waiting for input\"]'"
+test('adds session-only Codex turn and delegated-agent lifecycle events', () => {
+  const command = withCodexLifecycleIntegration(
+    'codex --no-alt-screen',
+    '/extension/notify.js',
+    'linux'
   );
+  assert.match(command, /notify=.*foreground-stop/);
+  assert.match(command, /features\.hooks=true/);
+  assert.match(command, /hooks\.UserPromptSubmit=/);
+  assert.match(command, /hooks\.PermissionRequest=/);
+  assert.match(command, /hooks\.SubagentStart=/);
+  assert.match(command, /hooks\.SubagentStop=/);
+  assert.match(command, /hooks\.Stop=/);
+  assert.match(command, /--hook codex background-start/);
 });
 
-test('preserves custom and already configured Codex commands', () => {
-  assert.equal(
-    withCodexTurnNotification(
-      "codex -c 'notify=[\"my-notifier\"]'",
-      '/extension/notify.js',
-      'linux'
-    ),
-    "codex -c 'notify=[\"my-notifier\"]'"
+test('preserves explicit Codex notifier and hook overrides', () => {
+  const explicitNotifier = withCodexLifecycleIntegration(
+    "codex -c 'notify=[\"my-notifier\"]'",
+    '/extension/notify.js',
+    'linux'
   );
+  assert.doesNotMatch(explicitNotifier, /Parful is waiting/);
+  assert.match(explicitNotifier, /hooks\.SubagentStart=/);
+
+  const explicitHooks = withCodexLifecycleIntegration(
+    "codex -c 'hooks.Stop=[]'",
+    '/extension/notify.js',
+    'linux'
+  );
+  assert.match(explicitHooks, /notify=/);
+  assert.doesNotMatch(explicitHooks, /hooks\.SubagentStart=/);
+
   assert.equal(
-    withCodexTurnNotification('wrapper codex', '/extension/notify.js', 'linux'),
+    withCodexLifecycleIntegration('wrapper codex', '/extension/notify.js', 'linux'),
     'wrapper codex'
   );
 });

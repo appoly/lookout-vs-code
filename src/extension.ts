@@ -24,35 +24,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     usage,
     usageTree,
     usageStatus,
-    vscode.window.registerTreeDataProvider('multiTerm.sessions', sessionTree),
-    vscode.window.registerTreeDataProvider('multiTerm.review', reviewTree),
+    vscode.window.registerTreeDataProvider('parful.sessions', sessionTree),
+    vscode.window.registerTreeDataProvider('parful.review', reviewTree),
     vscode.workspace.registerTextDocumentContentProvider(
-      'multiterm-baseline',
+      'parful-baseline',
       reviewTree
     ),
-    vscode.window.registerTreeDataProvider('multiTerm.usage', usageTree),
-    register('multiTerm.launchAgent', () => chooseAndLaunchAgent(sessions)),
-    register('multiTerm.launchCodex', () => launchAgent(sessions, 'codex')),
-    register('multiTerm.launchClaude', () => launchAgent(sessions, 'claude')),
-    register('multiTerm.launchCustom', () => launchAgent(sessions, 'custom')),
-    register('multiTerm.splitCodex', (item?: SessionTreeItem) =>
+    vscode.window.registerTreeDataProvider('parful.usage', usageTree),
+    register('parful.launchAgent', () => chooseAndLaunchAgent(sessions)),
+    register('parful.launchCodex', () => launchAgent(sessions, 'codex')),
+    register('parful.launchClaude', () => launchAgent(sessions, 'claude')),
+    register('parful.launchCustom', () => launchAgent(sessions, 'custom')),
+    register('parful.splitCodex', (item?: SessionTreeItem) =>
       launchAgent(sessions, 'codex', sessionId(item))
     ),
-    register('multiTerm.splitClaude', (item?: SessionTreeItem) =>
+    register('parful.splitClaude', (item?: SessionTreeItem) =>
       launchAgent(sessions, 'claude', sessionId(item))
     ),
-    register('multiTerm.splitSession', (item?: SessionTreeItem) =>
+    register('parful.splitSession', (item?: SessionTreeItem) =>
       splitSession(sessions, item)
     ),
-    register('multiTerm.focusSession', (item?: SessionTreeItem) => {
+    register('parful.focusSession', (item?: SessionTreeItem) => {
       const id = sessionId(item);
       return id ? sessions.focus(id) : undefined;
     }),
-    register('multiTerm.focusNextAttention', () => sessions.focusNextAttention()),
-    register('multiTerm.pickSession', () => pickSession(sessions)),
-    register('multiTerm.focusNextSession', () => sessions.focusAdjacent(1)),
-    register('multiTerm.focusPreviousSession', () => sessions.focusAdjacent(-1)),
-    register('multiTerm.renameSession', async (item?: SessionTreeItem) => {
+    register('parful.focusNextAttention', () => sessions.focusNextAttention()),
+    register('parful.pickSession', () => pickSession(sessions)),
+    register('parful.focusNextSession', () => sessions.focusAdjacent(1)),
+    register('parful.focusPreviousSession', () => sessions.focusAdjacent(-1)),
+    register('parful.renameSession', async (item?: SessionTreeItem) => {
       const id = sessionId(item);
       if (!id) {
         return;
@@ -70,21 +70,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         await sessions.rename(id, label);
       }
     }),
-    register('multiTerm.closeSession', (item?: SessionTreeItem) => {
+    register('parful.closeSession', (item?: SessionTreeItem) => {
       const id = sessionId(item);
       return id ? sessions.close(id) : undefined;
     }),
-    register('multiTerm.restartSession', (item?: SessionTreeItem) => {
+    register('parful.restartSession', (item?: SessionTreeItem) => {
       const id = sessionId(item);
       return id ? sessions.restart(id) : undefined;
     }),
-    register('multiTerm.markNeedsAttention', (item?: SessionTreeItem) => {
+    register('parful.markNeedsAttention', (item?: SessionTreeItem) => {
       const id = sessionId(item);
       if (id) {
         sessions.markAttention(id);
       }
     }),
-    register('multiTerm.copyNotifyCommand', async (item?: SessionTreeItem) => {
+    register('parful.copyNotifyCommand', async (item?: SessionTreeItem) => {
       const id = sessionId(item);
       const command = id ? sessions.notifyCommand(id) : undefined;
       if (command) {
@@ -96,17 +96,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         );
       }
     }),
-    register('multiTerm.refreshSessions', () => sessionTree.refresh()),
-    register('multiTerm.refreshReview', () => reviewTree.refresh()),
-    register('multiTerm.refreshUsage', () => usage.refresh()),
-    register('multiTerm.openReviewItem', (item?: ReviewTreeItem) =>
+    register('parful.refreshSessions', () => sessionTree.refresh()),
+    register('parful.toggleAttentionSound', () =>
+      sessions.toggleAttentionSound()
+    ),
+    register('parful.refreshReview', () => reviewTree.refresh()),
+    register('parful.refreshUsage', () => usage.refresh()),
+    register('parful.openReviewItem', (item?: ReviewTreeItem) =>
       item ? reviewTree.open(item) : undefined
     ),
-    register('multiTerm.openSourceControl', () =>
+    register('parful.openSourceControl', () =>
       vscode.commands.executeCommand('workbench.view.scm')
     ),
-    register('multiTerm.runTask', () => runWorkspaceTask()),
-    register('multiTerm.openBrowser', () => openBrowser())
+    register('parful.runTask', () => runWorkspaceTask()),
+    register('parful.openBrowser', () => openBrowser())
   );
 
   void reviewTree.initialize();
@@ -143,7 +146,7 @@ async function launchAgent(
           validateInput: nonEmpty
         })
       : vscode.workspace
-          .getConfiguration('multiTerm')
+          .getConfiguration('parful')
           .get<string>(`${kind}.command`, kind);
   if (!command) {
     return;
@@ -281,7 +284,7 @@ async function pickWorkingDirectory(): Promise<string | undefined> {
 
 async function openBrowser(): Promise<void> {
   const defaultUrl = vscode.workspace
-    .getConfiguration('multiTerm.browser')
+    .getConfiguration('parful.browser')
     .get('defaultUrl', 'http://localhost:3000');
   const value = await vscode.window.showInputBox({
     title: 'Open Browser',

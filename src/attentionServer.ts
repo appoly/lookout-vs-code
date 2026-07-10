@@ -1,10 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { AgentEvent, SessionStatus } from './types';
+import type { AgentEvent, AgentReportedStatus } from './types';
 import type { UsageBridgeEvent, UsageWindow } from './usageTypes';
 
-const EVENT_STATUSES = new Set<SessionStatus>([
+const EVENT_STATUSES = new Set<AgentReportedStatus>([
   'running',
   'attention',
   'completed',
@@ -134,12 +134,39 @@ function parseAgentEvent(value: unknown): AgentEvent {
   if (typeof value.sessionId !== 'string' || value.sessionId.length === 0) {
     throw new Error('Event requires a session ID');
   }
-  if (typeof value.status !== 'string' || !EVENT_STATUSES.has(value.status as SessionStatus)) {
+  if (value.kind === 'foreground-stop') {
+    return {
+      kind: 'foreground-stop',
+      sessionId: value.sessionId,
+      ...(typeof value.message === 'string'
+        ? { message: value.message.slice(0, 240) }
+        : {})
+    };
+  }
+  if (value.kind === 'background-start' || value.kind === 'background-stop') {
+    if (typeof value.agentId !== 'string' || value.agentId.length === 0) {
+      throw new Error('Background event requires an agent ID');
+    }
+    return {
+      kind: value.kind,
+      sessionId: value.sessionId,
+      agentId: value.agentId.slice(0, 200),
+      agentLabel:
+        typeof value.agentLabel === 'string' && value.agentLabel.length > 0
+          ? value.agentLabel.slice(0, 120)
+          : 'Delegated agent'
+    };
+  }
+  if (
+    typeof value.status !== 'string' ||
+    !EVENT_STATUSES.has(value.status as AgentReportedStatus)
+  ) {
     throw new Error('Event has an invalid status');
   }
   return {
+    kind: 'status',
     sessionId: value.sessionId,
-    status: value.status as AgentEvent['status'],
+    status: value.status as AgentReportedStatus,
     ...(typeof value.message === 'string' ? { message: value.message.slice(0, 240) } : {}),
     ...(typeof value.exitCode === 'number' ? { exitCode: value.exitCode } : {})
   };

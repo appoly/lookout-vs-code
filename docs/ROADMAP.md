@@ -14,20 +14,26 @@ launch several agents → work in VS Code → see attention/finish state → jum
 - [x] Stable session metadata and terminal reattachment by injected ID.
 - [x] Exact shell-execution lifecycle tracking with a neutral active-process state and honest degraded fallback.
 - [x] Claude working/permission/waiting/failure hooks through session-local settings.
-- [x] Session-only Codex turn-complete notification for waiting-for-input attention.
+- [x] Claude and Codex delegated-agent start/stop tracking with foreground-stop precedence.
+- [x] Session-only Codex lifecycle hooks with one-time trust review and turn-complete fallback.
+- [x] Volume-controlled/muteable attention bell for unattended waiting agents.
+- [x] Completed/closed agents can be removed from persisted sidebar state.
 - [x] Token-authenticated, size-limited loopback event bridge.
 - [x] Git changes grouped by worktree with attached agents and native diff editors.
+- [x] Agent-first worktree labels with live grey branch state and branch-switch warnings.
 - [x] Pre-existing and new plans/docs classified separately from worktree changes, plus optional recent images, diagnostics, Tasks, SCM, and browser commands.
 - [x] Codex and Claude account usage windows with reset times/stale states.
 - [x] User-configurable Spark quota and recent-image visibility, both quiet by default.
-- [x] Lint, strict TypeScript, seven automated test files, CI, and clean VSIX packaging.
+- [x] Lint, strict TypeScript, ten automated test files, CI, and clean VSIX packaging.
 - [x] Initial interactive Extension Development Host review.
+- [x] Deep product and extension namespace rename to Parful / `parful.*` / `PARFUL_*` before publication.
+- [x] Cross-worktree Compound Engineering artifact discovery and canonical path labels.
 
 ## Next: prove the MVP loop
 
 1. Install the VSIX or press F5 in a stable desktop/remote VS Code environment.
 2. Launch two Codex sessions and one Claude session; confirm column-one review remains available.
-3. Exercise Claude and Codex working/waiting/permission events and the unread/focus lifecycle.
+3. Exercise Claude and Codex working/delegated/waiting/permission events, the bell volume/mute control, and unread/focus lifecycle.
 4. Compare Codex/Claude usage percentages against each provider's own UI.
 5. Change, add, rename, and delete files; verify native diff behavior.
 6. Open a Playwright screenshot, a plan, a diagnostic, a workspace task, SCM, and a localhost URL.
@@ -40,7 +46,7 @@ launch several agents → work in VS Code → see attention/finish state → jum
 - Per-provider usage enablement so Claude-only users are not shown `Codex —` and no unused `codex app-server` is spawned.
 - Default, skippable session labels with rename afterwards.
 - Detect missing `codex`/`claude`/`node` executables at launch and show a guided message instead of a dead terminal.
-- Decide open decision 7 (the `multiTerm.*` → `paraterm.*` namespace) before anything is published.
+- Add a guided, non-mutating Workshop compatibility check once its independent release contract is stable.
 
 ## Then: deepen VS Code integration
 
@@ -54,6 +60,7 @@ launch several agents → work in VS Code → see attention/finish state → jum
 
 - Optional worktree creation when launching an agent.
 - Session templates: agent, model/profile, worktree policy, task/browser URL, and preferred review resources.
+- Workshop fleet-manifest state associated with isolated agents/worktrees without overstating attribution.
 - Safe close flow: running process → dirty worktree → review/keep/remove choices.
 - Resume supported Codex/Claude sessions using provider-owned IDs.
 
@@ -68,7 +75,7 @@ launch several agents → work in VS Code → see attention/finish state → jum
 
 Details in [the 2026-07-10 review](sessions/2026-07-10-review.md):
 
-- Identity: publisher account, `paraterm` name availability, public repository at the manifest URL, namespace decision executed.
+- Identity: publisher account, `parful` name availability, public repository at the manifest URL, and external repository rename decision.
 - Listing: 128×128+ PNG `icon`, gallery banner, screenshots/GIF of the launch → attention → review loop, user-first README rewrite, `AI` category and agent-name keywords.
 - Build: esbuild bundling and `"preview": true`.
 - Publish: tag-driven `vsce publish` and Open VSX (Cursor/VSCodium/Windsurf users).

@@ -18,22 +18,49 @@ export interface WorkspaceChange {
   readonly statusCode: string;
 }
 
+export interface GitWorktreeState {
+  readonly repoRoot: string;
+  readonly repositoryName: string;
+  readonly commit: string;
+  readonly branch: string;
+}
+
 export async function captureGitBaseline(
   cwd: string
 ): Promise<GitBaseline | undefined> {
   try {
-    const repoRoot = (await runGit(cwd, ['rev-parse', '--show-toplevel'])).trim();
-    const commit = (await runGit(repoRoot, ['rev-parse', 'HEAD'])).trim();
-    const branch = (
-      await runGit(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD'])
-    ).trim();
-    if (!repoRoot || !commit) {
-      return undefined;
-    }
-    return { repoRoot, commit, branch, capturedAt: Date.now() };
+    const state = await readGitWorktreeState(cwd);
+    return {
+      repoRoot: state.repoRoot,
+      commit: state.commit,
+      branch: state.branch,
+      capturedAt: Date.now()
+    };
   } catch {
     return undefined;
   }
+}
+
+export async function readGitWorktreeState(
+  cwd: string
+): Promise<GitWorktreeState> {
+  const repoRoot = (await runGit(cwd, ['rev-parse', '--show-toplevel'])).trim();
+  const [commit, branch, commonDirectoryValue] = await Promise.all([
+    runGit(repoRoot, ['rev-parse', 'HEAD']),
+    runGit(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD']),
+    runGit(repoRoot, ['rev-parse', '--git-common-dir'])
+  ]);
+  const commonDirectory = commonDirectoryValue.trim();
+  const commonPath = path.isAbsolute(commonDirectory)
+    ? commonDirectory
+    : path.resolve(repoRoot, commonDirectory);
+  const repositoryRoot = path.dirname(commonPath);
+  return {
+    repoRoot,
+    repositoryName: path.basename(repositoryRoot),
+    commit: commit.trim(),
+    branch: branch.trim()
+  };
 }
 
 export async function listWorkspaceChanges(

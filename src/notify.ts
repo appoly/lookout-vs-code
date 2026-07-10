@@ -1,6 +1,12 @@
 import { request } from 'node:http';
 
 type EventStatus = 'running' | 'attention' | 'completed' | 'failed';
+type EventAction =
+  | EventStatus
+  | 'foreground-stop'
+  | 'background-start'
+  | 'background-stop';
+type HookProvider = 'claude' | 'codex';
 
 const statuses = new Set<EventStatus>([
   'running',
@@ -8,24 +14,35 @@ const statuses = new Set<EventStatus>([
   'completed',
   'failed'
 ]);
+const actions = new Set<EventAction>([
+  ...statuses,
+  'foreground-stop',
+  'background-start',
+  'background-stop'
+]);
 
 async function main(): Promise<void> {
-  const url = process.env.MULTITERM_NOTIFY_URL;
-  const token = process.env.MULTITERM_NOTIFY_TOKEN;
-  const sessionId = process.env.MULTITERM_SESSION_ID;
+  const url = process.env.PARFUL_NOTIFY_URL;
+  const token = process.env.PARFUL_NOTIFY_TOKEN;
+  const sessionId = process.env.PARFUL_SESSION_ID;
   if (!url || !token || !sessionId) {
     process.exitCode = 2;
     return;
   }
 
-  const first = process.argv[2] as EventStatus | undefined;
-  const status = first && statuses.has(first) ? first : 'attention';
-  const argumentMessage = messageFromArguments(
-    process.argv.slice(status === first ? 3 : 2)
+  const parsedArguments = parseArguments(process.argv.slice(2));
+  const stdinMessage = parsedArguments.hookProvider ? await readStdin() : '';
+  const providerPayload = parseRecord(
+    parsedArguments.payloadArgument || stdinMessage
   );
-  const stdinMessage = argumentMessage ? '' : await readStdin();
-  const message = summarizeMessage(argumentMessage || stdinMessage);
-  const body = JSON.stringify({ sessionId, status, message });
+  const body = JSON.stringify(
+    normalizeEvent(
+      sessionId,
+      parsedArguments.action,
+      parsedArguments.message,
+      providerPayload
+    )
+  );
 
   await new Promise<void>((resolve, reject) => {
     const req = request(
@@ -42,7 +59,7 @@ async function main(): Promise<void> {
         response.resume();
         response.on('end', () => {
           if ((response.statusCode ?? 500) >= 300) {
-            reject(new Error(`Paraterm notification failed: ${response.statusCode}`));
+            reject(new Error(`Parful notification failed: ${response.statusCode}`));
           } else {
             resolve();
           }
@@ -52,13 +69,77 @@ async function main(): Promise<void> {
     req.once('error', reject);
     req.end(body);
   });
+  if (parsedArguments.hookProvider === 'codex') {
+    process.stdout.write('{}\n');
+  }
 }
 
-function messageFromArguments(values: readonly string[]): string {
-  if (values.length > 1 && isJsonObject(values.at(-1))) {
-    return values.slice(0, -1).join(' ').trim();
+interface ParsedArguments {
+  readonly action: EventAction;
+  readonly hookProvider?: HookProvider;
+  readonly message: string;
+  readonly payloadArgument: string;
+}
+
+function parseArguments(values: readonly string[]): ParsedArguments {
+  const remaining = [...values];
+  let hookProvider: HookProvider | undefined;
+  const hookIndex = remaining.indexOf('--hook');
+  if (hookIndex >= 0) {
+    const candidate = remaining[hookIndex + 1];
+    if (candidate === 'claude' || candidate === 'codex') {
+      hookProvider = candidate;
+      remaining.splice(hookIndex, 2);
+    }
   }
-  return values.join(' ').trim();
+  const first = remaining.shift() as EventAction | undefined;
+  const action = first && actions.has(first) ? first : 'attention';
+  if (first && action === 'attention' && first !== 'attention') {
+    remaining.unshift(first);
+  }
+  const payloadArgument = isJsonObject(remaining.at(-1))
+    ? (remaining.pop() ?? '')
+    : '';
+  return {
+    action,
+    ...(hookProvider ? { hookProvider } : {}),
+    message: remaining.join(' ').trim(),
+    payloadArgument
+  };
+}
+
+function normalizeEvent(
+  sessionId: string,
+  action: EventAction,
+  explicitMessage: string,
+  providerPayload: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  if (action === 'foreground-stop') {
+    return {
+      kind: action,
+      sessionId,
+      message: explicitMessage || 'Agent is waiting for input'
+    };
+  }
+  if (action === 'background-start' || action === 'background-stop') {
+    return {
+      kind: action,
+      sessionId,
+      agentId: providerString(providerPayload, ['agent_id', 'agentId']) ||
+        providerString(providerPayload, ['task_id', 'taskId']) ||
+        'unknown-agent',
+      agentLabel:
+        providerString(providerPayload, ['agent_type', 'agentType', 'name']) ||
+        explicitMessage ||
+        'Delegated agent'
+    };
+  }
+  return {
+    kind: 'status',
+    sessionId,
+    status: action,
+    message: explicitMessage || summarizePayload(providerPayload)
+  };
 }
 
 function isJsonObject(value: string | undefined): boolean {
@@ -73,6 +154,20 @@ function isJsonObject(value: string | undefined): boolean {
   }
 }
 
+function parseRecord(input: string): Record<string, unknown> | undefined {
+  if (!input) {
+    return undefined;
+  }
+  try {
+    const parsed: unknown = JSON.parse(input);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function readStdin(): Promise<string> {
   if (process.stdin.isTTY) {
     return '';
@@ -84,25 +179,30 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString('utf8').trim();
 }
 
-function summarizeMessage(input: string): string {
+function summarizePayload(input: Record<string, unknown> | undefined): string {
   if (!input) {
     return 'Agent needs attention';
   }
-  try {
-    const parsed: unknown = JSON.parse(input);
-    if (typeof parsed === 'object' && parsed !== null) {
-      const record = parsed as Record<string, unknown>;
-      for (const key of ['message', 'notification', 'hook_event_name', 'type']) {
-        const value = record[key];
-        if (typeof value === 'string' && value.length > 0) {
-          return value.slice(0, 240);
-        }
-      }
+  for (const key of ['message', 'notification', 'hook_event_name', 'type']) {
+    const value = input[key];
+    if (typeof value === 'string' && value.length > 0) {
+      return value.replace(/\s+/g, ' ').slice(0, 240);
     }
-  } catch {
-    // Plain-text hook messages are valid.
   }
-  return input.replace(/\s+/g, ' ').slice(0, 240);
+  return 'Agent needs attention';
+}
+
+function providerString(
+  payload: Record<string, unknown> | undefined,
+  keys: readonly string[]
+): string {
+  for (const key of keys) {
+    const value = payload?.[key];
+    if (typeof value === 'string' && value.length > 0) {
+      return value.slice(0, 200);
+    }
+  }
+  return '';
 }
 
 void main().catch((error: unknown) => {

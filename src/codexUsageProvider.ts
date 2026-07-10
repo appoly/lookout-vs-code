@@ -87,8 +87,8 @@ export class CodexUsageProvider {
 
       await this.request('initialize', {
         clientInfo: {
-          name: 'multi-term-vscode',
-          title: 'Paraterm Agent Cockpit',
+          name: 'parful-vscode',
+          title: 'Parful Agent Cockpit',
           version: '0.1.0'
         },
         capabilities: { experimentalApi: false }
