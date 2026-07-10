@@ -4,7 +4,7 @@ Paraterm is a VS Code-native cockpit for running several terminal coding agents 
 
 It takes the useful interaction model from cmux—named agent sessions, fast attention routing, split terminals, and review surfaces—but lets VS Code remain the code editor, diff viewer, image viewer, source-control client, and browser host.
 
-> **Development status:** TypeScript, lint, unit/integration tests, and VSIX packaging pass in WSL. Interactive Extension Development Host verification is still pending. Read [the verification handoff](docs/LINUX_HANDOFF.md) for the remaining smoke checks.
+> **Development status:** TypeScript, lint, unit/integration tests, and VSIX packaging pass in WSL. The first Extension Development Host review is complete; provider lifecycle and reload smoke checks remain. Read [the verification handoff](docs/LINUX_HANDOFF.md) for the remaining checks.
 
 ## Product principle: use VS Code
 
@@ -24,8 +24,8 @@ That keeps the rest of the editor ecosystem—navigation, themes, accessibility,
 
 The extension contributes a **Paraterm** activity-bar container with:
 
-- **Agents** — launch, focus, split, rename, restart, close, and manually mark sessions needing attention.
-- **Review** — session-scoped Git changes as native diffs, current VS Code diagnostics, recent Playwright/coding image artifacts and plans/docs, plus Source Control, Tasks, and integrated-browser shortcuts.
+- **Agents** — the `+` action chooses Codex, Claude Code, or a custom agent, then supports focus, split, rename, restart, close, and attention state. A live CLI process is neutrally “active”; provider events distinguish working from waiting for input.
+- **Review** — Git changes grouped by worktree as native diffs, current VS Code diagnostics, plans/docs, plus Source Control, Tasks, and integrated-browser shortcuts. Files discovered by the plan/docs glob appear in **Plans & Docs**, including files that predate the agent, instead of being duplicated under workspace changes. Recent Playwright/coding images are available through `multiTerm.review.showRecentImages` and are off by default.
 - **Usage Limits** — account-level Codex and Claude quota windows with reset times and a compact status-bar summary.
 
 The default terminal location is the editor area. New terminals use the second editor column or split beside an existing agent; review resources open in the first editor column.
@@ -59,7 +59,7 @@ Both providers expose account-wide limits, not per-terminal budgets. “Unavaila
 ## Scope deliberately deferred
 
 - Arbitrary cmux-like spatial layout beyond VS Code terminal-editor groups/splits.
-- Terminal-output parsing for “waiting for input.” Provider hooks/status events are preferred.
+- Terminal-output parsing for “waiting for input.” Paraterm uses provider hooks/notifications where available and otherwise reports only that the session is active.
 - tmux/SSH multiplexing, background subagent panes, browser automation, and automatic worktree creation.
 - Proven attribution of a shared-worktree change to one specific agent; the current view is explicitly workspace-scoped from the captured commit.
 

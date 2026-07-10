@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   captureGitBaseline,
+  excludeWorkspaceArtifacts,
   listWorkspaceChanges,
   parseNameStatus,
   parseNullList,
@@ -23,6 +24,21 @@ test('parses NUL-delimited Git status including renames', () => {
       statusCode: 'R100'
     }
   ]);
+});
+
+test('removes discovered plans and docs from ordinary workspace changes', () => {
+  const changes = [
+    { kind: 'modified' as const, path: 'src/main.ts', statusCode: 'M' },
+    { kind: 'modified' as const, path: 'docs/plan.md', statusCode: 'M' }
+  ];
+  assert.deepEqual(
+    excludeWorkspaceArtifacts(
+      changes,
+      '/repo',
+      new Set(['/repo/docs/plan.md'])
+    ),
+    [changes[0]]
+  );
 });
 
 test('captures a Git baseline and lists working tree changes', async () => {

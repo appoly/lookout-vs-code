@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { UsageManager } from './usageManager';
 import type { UsageSnapshot, UsageWindow } from './usageTypes';
+import { formatResetDescription } from './usageFormatting';
 
 type UsageTreeValue =
   | { readonly kind: 'provider'; readonly snapshot: UsageSnapshot }
@@ -20,7 +21,7 @@ export class UsageTreeItem extends vscode.TreeItem {
       this.iconPath = providerIcon(value.snapshot);
       this.tooltip = `${value.snapshot.provider} usage from ${value.snapshot.source}\nLast checked ${new Date(value.snapshot.observedAt).toLocaleString()}`;
     } else if (value.kind === 'window') {
-      this.description = resetDescription(value.window.resetsAt);
+      this.description = formatResetDescription(value.window.resetsAt);
       this.iconPath = usageIcon(value.window.usedPercent);
       this.tooltip = `${value.window.usedPercent.toFixed(1)}% used${
         value.window.resetsAt
@@ -172,23 +173,6 @@ function usageIcon(percent: number): vscode.ThemeIcon {
     return new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'));
   }
   return new vscode.ThemeIcon('graph');
-}
-
-function resetDescription(resetsAt: number | undefined): string {
-  if (!resetsAt) {
-    return '';
-  }
-  const delta = resetsAt * 1000 - Date.now();
-  if (delta <= 0) {
-    return 'reset due';
-  }
-  const minutes = Math.ceil(delta / 60_000);
-  if (minutes < 60) {
-    return `resets in ${minutes}m`;
-  }
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return `resets in ${hours}h ${remainingMinutes}m`;
 }
 
 function warningThreshold(): number {

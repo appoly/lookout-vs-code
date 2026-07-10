@@ -70,6 +70,12 @@
   "contributes": {
     "commands": [
       {
+        "command": "multiTerm.launchAgent",
+        "title": "New Agent…",
+        "category": "Paraterm",
+        "icon": "$(add)"
+      },
+      {
         "command": "multiTerm.launchCodex",
         "title": "Launch Codex Agent",
         "category": "Paraterm",
@@ -254,7 +260,7 @@
     "menus": {
       "view/title": [
         {
-          "command": "multiTerm.launchCodex",
+          "command": "multiTerm.launchAgent",
           "when": "view == multiTerm.sessions",
           "group": "navigation@1"
         },
@@ -335,6 +341,11 @@
           "default": "codex",
           "description": "Command used to launch a Codex CLI session."
         },
+        "multiTerm.codex.lifecycleIntegration": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add a session-only Codex turn notification so Paraterm can show when Codex is waiting for input."
+        },
         "multiTerm.claude.command": {
           "type": "string",
           "default": "claude",
@@ -373,6 +384,11 @@
           "default": "codex",
           "description": "Codex executable used for structured rate-limit queries."
         },
+        "multiTerm.usage.codex.showSparkLimits": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show separate GPT Codex Spark rate-limit buckets in the Usage Limits view."
+        },
         "multiTerm.usage.claude.statusLineIntegration": {
           "type": "boolean",
           "default": true,
@@ -391,6 +407,11 @@
           "minimum": 1,
           "maximum": 100,
           "description": "Usage percentage at which limit indicators turn to critical state."
+        },
+        "multiTerm.review.showRecentImages": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show and scan the Recent Images group in the Review view."
         },
         "multiTerm.review.imageGlob": {
           "type": "string",

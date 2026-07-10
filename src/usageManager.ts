@@ -21,7 +21,14 @@ export class UsageManager implements vscode.Disposable {
     const executable = vscode.workspace
       .getConfiguration('multiTerm.usage.codex')
       .get('executable', 'codex');
-    this.codex = new CodexUsageProvider(executable, (snapshot) => this.setSnapshot(snapshot));
+    const includeSparkLimits = vscode.workspace
+      .getConfiguration('multiTerm.usage.codex')
+      .get('showSparkLimits', false);
+    this.codex = new CodexUsageProvider(
+      executable,
+      (snapshot) => this.setSnapshot(snapshot),
+      includeSparkLimits
+    );
     const cachedClaude = context.globalState.get<UsageSnapshot>(CLAUDE_STORAGE_KEY);
     this.snapshots.set(
       'claude',
@@ -53,6 +60,16 @@ export class UsageManager implements vscode.Disposable {
       }),
       vscode.window.onDidChangeWindowState((state) => {
         if (state.focused) {
+          void this.refresh();
+        }
+      }),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration('multiTerm.usage.codex.showSparkLimits')) {
+          this.codex.setIncludeSparkLimits(
+            vscode.workspace
+              .getConfiguration('multiTerm.usage.codex')
+              .get('showSparkLimits', false)
+          );
           void this.refresh();
         }
       })

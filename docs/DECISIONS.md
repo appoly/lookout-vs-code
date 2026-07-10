@@ -26,7 +26,9 @@ New agent terminals default to editor column two. Review resources default to co
 
 **Decision:** never infer “needs input” by scraping terminal output.
 
-Paraterm runs a token-authenticated loopback bridge. Extension-launched Claude sessions receive temporary hooks for prompt submission, permission/idle notifications, turn completion, and failure. Other agents can invoke the bundled helper. Shell-integration lifecycle state is accepted only for the exact execution object Paraterm launched.
+Paraterm runs a token-authenticated loopback bridge. Extension-launched Claude sessions receive temporary hooks for prompt submission, permission/idle notifications, turn completion, and failure. Direct Codex sessions receive a session-only `notify` override for `agent-turn-complete`. Other agents can invoke the bundled helper. Shell-integration lifecycle state is accepted only for the exact execution object Paraterm launched.
+
+A live interactive process is `active`, not automatically `running`: process lifetime does not reveal whether an agent is thinking or waiting at its prompt. Claude prompt hooks can report `running`; Claude stop and Codex turn-complete events report attention with “waiting for input.”
 
 The bridge endpoint/token is persisted per workspace so restored terminals can reconnect when the port is reusable. If it is not reusable, the restored row visibly reports that hooks are unavailable.
 
@@ -39,13 +41,17 @@ The bridge endpoint/token is persisted per workspace so restored terminals can r
 
 Unknown, waiting, stale, unsupported, and authentication-required are distinct states. No OAuth credential files are read.
 
+Separate Codex Spark buckets are hidden by default because they distract from the general Codex allowance; users can opt in with `multiTerm.usage.codex.showSparkLimits`.
+
 ## D5 — Review is session-selected but workspace-honest
 
-**Decision:** capture Git `HEAD`, repository root, and branch at session launch. Show the current workspace diff from that commit plus untracked files, but do not label shared-worktree changes as authored by one agent.
+**Decision:** capture Git `HEAD`, repository root, and branch at session launch. Group changes by the physical Git worktree root, show the agents attached to each worktree, and display the current diff from that worktree's captured commit plus untracked files. Do not label shared-worktree changes as authored by one agent.
 
-Tracked text opens in a native diff against a read-only virtual baseline. Images open in the native image editor. Recent artifacts are filtered to the selected session's root and creation time. Diagnostics come directly from VS Code.
+Tracked text opens in a native diff against a read-only virtual baseline. Images open in the native image editor. Recent images are filtered to the selected session's root and creation time. Plans/docs are root-scoped but intentionally include pre-existing files; anything discovered by the configured plan glob is classified under **Plans & Docs** and removed from ordinary worktree changes. Diagnostics come directly from VS Code.
 
-True attribution requires one worktree per session and is a later opt-in workflow.
+Recent image discovery is off by default to avoid unnecessary workspace scanning and sidebar noise. It is enabled explicitly with `multiTerm.review.showRecentImages`.
+
+When multiple agents share one worktree they appear in one group because they see the same filesystem. True attribution requires one worktree per session and is a later opt-in workflow.
 
 ## D6 — Command execution requires workspace trust
 
@@ -59,6 +65,12 @@ Custom session commands are deliberately omitted from persisted workspace state 
 
 **Known tradeoff:** the generated status line replaces the status line for that launched session. Preserving/proxying an existing command is still an open design task.
 
+## D8 — Codex lifecycle integration is session-local and conservative
+
+**Decision:** for direct `codex` invocations, pass a command-line `notify` override that calls Paraterm's loopback helper when Codex emits `agent-turn-complete`. Do not modify user or project Codex files. Leave wrapper commands, shell expressions, and commands with an explicit `notify` override untouched. The integration can be disabled with `multiTerm.codex.lifecycleIntegration`.
+
+Codex's external `notify` channel currently exposes turn completion, not turn start. Paraterm can therefore say when Codex is waiting after a turn, but does not claim to know when a later turn begins. Composing a user's global Codex notifier with Paraterm remains an open design task.
+
 ## Open decisions
 
 1. Should “new agent” optionally create a Git worktree by default, or remain a separate advanced command?
@@ -66,3 +78,4 @@ Custom session commands are deliberately omitted from persisted workspace state 
 3. Should the Review view expose discovered tests directly, or only open the native Test Explorer/run tasks?
 4. How should existing Claude status-line commands be composed without executing arbitrary global configuration implicitly?
 5. Should Paraterm expose a notification feed view, or keep unread/latest-event state only in agent rows?
+6. How should a user's global Codex `notify` command be composed with Paraterm's session-only notifier?

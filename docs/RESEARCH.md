@@ -40,7 +40,13 @@ Sources: [VS Code terminal API](https://code.visualstudio.com/api/references/vsc
 
 Stable VS Code APIs do not allow an extension to inspect arbitrary interactive terminal scrollback. Parsing it would also be fragile and invasive. `src/attentionServer.ts` instead starts a loopback-only HTTP endpoint with a random bearer token. Every Paraterm terminal receives the session ID, endpoint, and a bundled `notify.js` helper path in its environment.
 
-Claude sessions launched directly by Paraterm receive session-only `UserPromptSubmit`, `Notification`, `Stop`, and `StopFailure` hooks through their temporary `--settings` file. These report running, permission/idle attention, completion, and failure without modifying global Claude settings. Other agents can run the value copied by **Paraterm: Copy Attention Hook Command**, for example:
+Claude sessions launched directly by Paraterm receive session-only `UserPromptSubmit`, `Notification`, `Stop`, and `StopFailure` hooks through their temporary `--settings` file. These report working, permission/idle attention, waiting for input, and failure without modifying global Claude settings.
+
+The Codex CLI's external `notify` setting currently emits `agent-turn-complete`. Direct Codex sessions receive a command-line-only notifier that marks them waiting for input without changing global or project config. The channel does not emit a turn-start event, so Paraterm labels the raw interactive-process lifetime as neutral `active` instead of falsely claiming the agent is working. Commands with shell operators, wrappers, or their own explicit `notify` override are not rewritten.
+
+Sources: [Codex advanced notifications](https://developers.openai.com/codex/config-advanced#notifications), [Codex lifecycle hooks](https://learn.chatgpt.com/docs/hooks).
+
+Other agents can run the value copied by **Paraterm: Copy Attention Hook Command**, for example:
 
 ```bash
 node "$MULTITERM_NOTIFY_HELPER" attention "Please approve the database migration"

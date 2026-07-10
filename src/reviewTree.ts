@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
+  excludeWorkspaceArtifacts,
   listWorkspaceChanges,
   readBaselineFile,
   type WorkspaceChange
@@ -14,6 +15,7 @@ type ReviewKind =
   | 'image'
   | 'plan'
   | 'change'
+  | 'worktree'
   | 'diagnostic'
   | 'message';
 type ReviewGroup = 'changes' | 'diagnostics' | 'images' | 'plans';
@@ -27,6 +29,15 @@ interface ReviewTreeItemOptions {
   readonly sessionId?: string;
   readonly description?: string;
   readonly diagnostic?: vscode.Diagnostic;
+  readonly worktreeKey?: string;
+  readonly tooltip?: string;
+}
+
+interface WorktreeChanges {
+  readonly key: string;
+  readonly session: AgentSession;
+  readonly agentLabels: readonly string[];
+  readonly changes: readonly WorkspaceChange[] | undefined;
 }
 
 export class ReviewTreeItem extends vscode.TreeItem {
@@ -36,6 +47,7 @@ export class ReviewTreeItem extends vscode.TreeItem {
   public readonly change?: WorkspaceChange;
   public readonly sessionId?: string;
   public readonly diagnostic?: vscode.Diagnostic;
+  public readonly worktreeKey?: string;
 
   public constructor(
     public readonly kind: ReviewKind,
@@ -46,7 +58,9 @@ export class ReviewTreeItem extends vscode.TreeItem {
       label,
       kind === 'group'
         ? vscode.TreeItemCollapsibleState.Expanded
-        : vscode.TreeItemCollapsibleState.None
+        : kind === 'worktree'
+          ? vscode.TreeItemCollapsibleState.Collapsed
+          : vscode.TreeItemCollapsibleState.None
     );
     this.group = options.group;
     this.uri = options.uri;
@@ -54,6 +68,7 @@ export class ReviewTreeItem extends vscode.TreeItem {
     this.change = options.change;
     this.sessionId = options.sessionId;
     this.diagnostic = options.diagnostic;
+    this.worktreeKey = options.worktreeKey;
 
     if (kind === 'group') {
       this.description = `${options.count ?? 0}`;
@@ -63,6 +78,12 @@ export class ReviewTreeItem extends vscode.TreeItem {
     if (kind === 'message') {
       this.description = options.description;
       this.iconPath = new vscode.ThemeIcon('info');
+      return;
+    }
+    if (kind === 'worktree') {
+      this.description = options.description;
+      this.tooltip = options.tooltip;
+      this.iconPath = new vscode.ThemeIcon('git-branch');
       return;
     }
     if (kind === 'change' && options.change && options.uri) {
@@ -111,10 +132,13 @@ export class ReviewTreeProvider
   private readonly contentChangedEmitter = new vscode.EventEmitter<vscode.Uri>();
   private readonly watchers: vscode.FileSystemWatcher[];
   private readonly disposables: vscode.Disposable[] = [];
-  private changes: ReviewTreeItem[] = [];
+  private changeGroups: ReviewTreeItem[] = [];
+  private readonly changesByWorktree = new Map<string, ReviewTreeItem[]>();
+  private changeCount = 0;
   private diagnostics: ReviewTreeItem[] = [];
   private images: ReviewTreeItem[] = [];
   private plans: ReviewTreeItem[] = [];
+  private planPaths = new Set<string>();
   private changeMessage = 'Select an agent with a Git baseline to review changes';
   private refreshGeneration = 0;
   private changeGeneration = 0;
@@ -122,19 +146,27 @@ export class ReviewTreeProvider
   public readonly onDidChange = this.contentChangedEmitter.event;
 
   public constructor(private readonly sessions: SessionManager) {
-    this.watchers = [
-      vscode.workspace.createFileSystemWatcher('**/*.{png,jpg,jpeg,gif,webp}'),
-      vscode.workspace.createFileSystemWatcher('**/*.{md,mdx}')
-    ];
-    for (const watcher of this.watchers) {
-      watcher.onDidCreate(() => void this.refresh());
-      watcher.onDidChange(() => void this.refresh());
-      watcher.onDidDelete(() => void this.refresh());
-    }
+    const imageWatcher = vscode.workspace.createFileSystemWatcher(
+      '**/*.{png,jpg,jpeg,gif,webp}'
+    );
+    const planWatcher = vscode.workspace.createFileSystemWatcher('**/*.{md,mdx}');
+    this.watchers = [imageWatcher, planWatcher];
+    imageWatcher.onDidCreate(() => this.refreshImagesIfEnabled());
+    imageWatcher.onDidChange(() => this.refreshImagesIfEnabled());
+    imageWatcher.onDidDelete(() => this.refreshImagesIfEnabled());
+    planWatcher.onDidCreate(() => void this.refresh());
+    planWatcher.onDidChange(() => void this.refresh());
+    planWatcher.onDidDelete(() => void this.refresh());
     this.disposables.push(
       sessions.onDidSelectSession(() => void this.refresh()),
+      sessions.onDidChangeTopology(() => void this.refreshChanges()),
       vscode.workspace.onDidSaveTextDocument(() => void this.refreshChanges()),
-      vscode.languages.onDidChangeDiagnostics(() => this.refreshDiagnostics())
+      vscode.languages.onDidChangeDiagnostics(() => this.refreshDiagnostics()),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration('multiTerm.review')) {
+          void this.refresh();
+        }
+      })
     );
   }
 
@@ -148,32 +180,42 @@ export class ReviewTreeProvider
 
   public getChildren(element?: ReviewTreeItem): ReviewTreeItem[] {
     if (!element) {
-      return [
+      const groups = [
         new ReviewTreeItem('group', 'Workspace Changes', {
           group: 'changes',
-          count: this.changes.length
+          count: this.changeCount
         }),
         new ReviewTreeItem('group', 'Problems', {
           group: 'diagnostics',
           count: this.diagnostics.length
-        }),
-        new ReviewTreeItem('group', 'Recent Images', {
-          group: 'images',
-          count: this.images.length
         }),
         new ReviewTreeItem('group', 'Plans & Docs', {
           group: 'plans',
           count: this.plans.length
         })
       ];
+      if (imagesEnabled()) {
+        groups.splice(
+          2,
+          0,
+          new ReviewTreeItem('group', 'Recent Images', {
+            group: 'images',
+            count: this.images.length
+          })
+        );
+      }
+      return groups;
+    }
+    if (element.kind === 'worktree' && element.worktreeKey) {
+      return this.changesByWorktree.get(element.worktreeKey) ?? [];
     }
     switch (element.group) {
       case 'changes':
-        return this.changes.length > 0
-          ? this.changes
+        return this.changeGroups.length > 0
+          ? this.changeGroups
           : [
               new ReviewTreeItem('message', this.changeMessage, {
-                description: this.sessions.selectedSession?.label
+                description: 'Launch an agent in a Git worktree'
               })
             ];
       case 'images':
@@ -192,19 +234,21 @@ export class ReviewTreeProvider
     const changeGeneration = ++this.changeGeneration;
     const config = vscode.workspace.getConfiguration('multiTerm.review');
     const max = config.get<number>('maxItemsPerGroup', 12);
+    const showImages = config.get<boolean>('showRecentImages', false);
     const session = this.sessions.selectedSession;
-    const [imageUris, planUris, changes] = await Promise.all([
-      vscode.workspace.findFiles(
-        config.get<string>('imageGlob', '**/*.{png,jpg,jpeg,gif,webp}'),
-        '**/{node_modules,.git,out,dist}/**',
-        max * 8
-      ),
+    const [imageUris, planUris, worktreeChanges] = await Promise.all([
+      showImages
+        ? vscode.workspace.findFiles(
+            config.get<string>('imageGlob', '**/*.{png,jpg,jpeg,gif,webp}'),
+            '**/{node_modules,.git,out,dist}/**',
+            max * 8
+          )
+        : Promise.resolve([]),
       vscode.workspace.findFiles(
         config.get<string>('planGlob', '**/{plans,docs}/**/*.{md,mdx}'),
-        '**/{node_modules,.git,out,dist}/**',
-        max * 8
+        '**/{node_modules,.git,out,dist}/**'
       ),
-      loadChanges(session)
+      loadWorktreeChanges(this.sessions)
     ]);
     const [images, plans] = await Promise.all([
       toArtifactItems('image', imageUris, max, session),
@@ -215,21 +259,27 @@ export class ReviewTreeProvider
     }
     this.images = images;
     this.plans = plans;
+    this.planPaths = new Set(planUris.map((uri) => uri.fsPath));
     this.diagnostics = toDiagnosticItems(session, max);
     if (changeGeneration === this.changeGeneration) {
-      this.applyChanges(session, changes);
+      this.applyWorktreeChanges(worktreeChanges);
     }
     this.changedEmitter.fire();
   }
 
+  private refreshImagesIfEnabled(): void {
+    if (imagesEnabled()) {
+      void this.refresh();
+    }
+  }
+
   public async refreshChanges(): Promise<void> {
     const generation = ++this.changeGeneration;
-    const session = this.sessions.selectedSession;
-    const changes = await loadChanges(session);
+    const worktreeChanges = await loadWorktreeChanges(this.sessions);
     if (generation !== this.changeGeneration) {
       return;
     }
-    this.applyChanges(session, changes);
+    this.applyWorktreeChanges(worktreeChanges);
     this.changedEmitter.fire();
   }
 
@@ -287,30 +337,56 @@ export class ReviewTreeProvider
     this.contentChangedEmitter.dispose();
   }
 
-  private applyChanges(
-    session: AgentSession | undefined,
-    changes: readonly WorkspaceChange[] | undefined
-  ): void {
-    if (!session?.baseline) {
-      this.changes = [];
-      this.changeMessage = session
-        ? 'This agent was launched outside a Git repository'
-        : 'Select an agent with a Git baseline to review changes';
+  private applyWorktreeChanges(worktrees: readonly WorktreeChanges[]): void {
+    this.changeGroups = [];
+    this.changeCount = 0;
+    this.changesByWorktree.clear();
+    if (worktrees.length === 0) {
+      this.changeMessage = 'No open agents have a Git worktree baseline';
       return;
     }
-    if (!changes) {
-      this.changes = [];
-      this.changeMessage = 'Git changes could not be read';
-      return;
+
+    for (const worktree of worktrees) {
+      const baseline = worktree.session.baseline!;
+      const changes = worktree.changes
+        ? excludeWorkspaceArtifacts(
+            worktree.changes,
+            baseline.repoRoot,
+            this.planPaths
+          )
+        : undefined;
+      const childItems = changes
+        ? changes.length > 0
+          ? changes.map(
+              (change) =>
+                new ReviewTreeItem('change', path.basename(change.path), {
+                  change,
+                  sessionId: worktree.session.id,
+                  uri: vscode.Uri.file(
+                    path.join(baseline.repoRoot, change.path)
+                  )
+                })
+            )
+          : [new ReviewTreeItem('message', 'No workspace changes')]
+        : [new ReviewTreeItem('message', 'Git changes could not be read')];
+      this.changesByWorktree.set(worktree.key, childItems);
+      this.changeCount += changes?.length ?? 0;
+      this.changeGroups.push(
+        new ReviewTreeItem(
+          'worktree',
+          `${baseline.branch} · ${path.basename(baseline.repoRoot)}`,
+          {
+            worktreeKey: worktree.key,
+            description: `${changes?.length ?? 0} changes · ${worktree.agentLabels.join(', ')}`,
+            tooltip: [
+              baseline.repoRoot,
+              `Baseline: ${baseline.commit}`,
+              `Agents: ${worktree.agentLabels.join(', ')}`
+            ].join('\n')
+          }
+        )
+      );
     }
-    this.changes = changes.map((change) =>
-      new ReviewTreeItem('change', path.basename(change.path), {
-        change,
-        sessionId: session.id,
-        uri: vscode.Uri.file(path.join(session.baseline!.repoRoot, change.path))
-      })
-    );
-    this.changeMessage = 'No workspace changes from the captured commit';
   }
 
   private async openChange(item: ReviewTreeItem): Promise<void> {
@@ -373,17 +449,42 @@ export class ReviewTreeProvider
   }
 }
 
-async function loadChanges(
-  session: AgentSession | undefined
-): Promise<WorkspaceChange[] | undefined> {
-  if (!session?.baseline) {
-    return [];
+async function loadWorktreeChanges(
+  sessions: SessionManager
+): Promise<WorktreeChanges[]> {
+  const sessionsByWorktree = new Map<string, AgentSession[]>();
+  for (const session of sessions.list()) {
+    if (!session.baseline || !sessions.isOpen(session.id)) {
+      continue;
+    }
+    const key = path.resolve(session.baseline.repoRoot);
+    const existing = sessionsByWorktree.get(key) ?? [];
+    existing.push(session);
+    sessionsByWorktree.set(key, existing);
   }
-  try {
-    return await listWorkspaceChanges(session.baseline);
-  } catch {
-    return undefined;
-  }
+
+  return Promise.all(
+    [...sessionsByWorktree.entries()].map(async ([key, attachedSessions]) => {
+      const sorted = attachedSessions.sort(
+        (left, right) => right.createdAt - left.createdAt
+      );
+      const session = sorted[0];
+      let changes: WorkspaceChange[] | undefined;
+      try {
+        changes = await listWorkspaceChanges(session.baseline!);
+      } catch {
+        changes = undefined;
+      }
+      return {
+        key,
+        session,
+        agentLabels: sorted.map(
+          (attached) => `${attached.label} (${attached.kind})`
+        ),
+        changes
+      };
+    })
+  );
 }
 
 async function toArtifactItems(
@@ -412,7 +513,10 @@ async function toArtifactItems(
       if (!session || !root) {
         return true;
       }
-      return isWithin(root, uri.fsPath) && stat.mtime >= session.createdAt;
+      return (
+        isWithin(root, uri.fsPath) &&
+        (kind === 'plan' || stat.mtime >= session.createdAt)
+      );
     })
     .sort((a, b) => b.stat.mtime - a.stat.mtime)
     .slice(0, max)
@@ -432,6 +536,12 @@ function isWithin(root: string, candidate: string): boolean {
 
 function isImage(filePath: string): boolean {
   return /\.(?:png|jpe?g|gif|webp)$/i.test(filePath);
+}
+
+function imagesEnabled(): boolean {
+  return vscode.workspace
+    .getConfiguration('multiTerm.review')
+    .get('showRecentImages', false);
 }
 
 function groupIcon(group: ReviewGroup | undefined): vscode.ThemeIcon {

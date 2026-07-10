@@ -33,6 +33,19 @@ test('attention is active and unread until focused', () => {
   assert.equal(markSessionRead(attention, 30).unread, false);
 });
 
+test('an open agent process can be active without claiming it is working', () => {
+  const session = transitionSession(
+    createSession('codex', 'Work', 'codex', '/repo', 10, 'id-active'),
+    'active',
+    20,
+    undefined,
+    'Agent session active'
+  );
+  assert.equal(isActiveSession(session), true);
+  assert.equal(session.status, 'active');
+  assert.equal(session.unread, false);
+});
+
 test('summarizes active and attention counts', () => {
   const one = createSession('codex', 'One', 'codex', '/repo', 1, 'one');
   const two = transitionSession(

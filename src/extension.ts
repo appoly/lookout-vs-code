@@ -31,6 +31,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       reviewTree
     ),
     vscode.window.registerTreeDataProvider('multiTerm.usage', usageTree),
+    register('multiTerm.launchAgent', () => chooseAndLaunchAgent(sessions)),
     register('multiTerm.launchCodex', () => launchAgent(sessions, 'codex')),
     register('multiTerm.launchClaude', () => launchAgent(sessions, 'claude')),
     register('multiTerm.launchCustom', () => launchAgent(sessions, 'custom')),
@@ -165,6 +166,38 @@ async function launchAgent(
     ...(parentSessionId ? { parentSessionId } : {})
   };
   await sessions.launch(request);
+}
+
+async function chooseAndLaunchAgent(sessions: SessionManager): Promise<void> {
+  const selected = await vscode.window.showQuickPick(
+    [
+      {
+        label: 'Codex',
+        description: 'OpenAI Codex CLI',
+        iconPath: new vscode.ThemeIcon('terminal'),
+        agentKind: 'codex' as const
+      },
+      {
+        label: 'Claude Code',
+        description: 'Anthropic Claude Code',
+        iconPath: new vscode.ThemeIcon('sparkle'),
+        agentKind: 'claude' as const
+      },
+      {
+        label: 'Custom',
+        description: 'Choose another terminal agent command',
+        iconPath: new vscode.ThemeIcon('tools'),
+        agentKind: 'custom' as const
+      }
+    ],
+    {
+      title: 'New Agent',
+      placeHolder: 'Choose the agent to launch'
+    }
+  );
+  if (selected) {
+    await launchAgent(sessions, selected.agentKind);
+  }
 }
 
 async function splitSession(

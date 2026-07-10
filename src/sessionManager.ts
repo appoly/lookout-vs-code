@@ -4,6 +4,11 @@ import {
   AttentionServer,
   type AttentionEndpoint
 } from './attentionServer';
+import {
+  isDirectAgentCommand,
+  shellQuote,
+  withCodexTurnNotification
+} from './agentCommand';
 import { captureGitBaseline } from './gitReview';
 import {
   createSession,
@@ -26,6 +31,7 @@ export class SessionManager implements vscode.Disposable {
   >();
   private readonly sessionIdsByTerminal = new Map<vscode.Terminal, string>();
   private readonly changedEmitter = new vscode.EventEmitter<void>();
+  private readonly topologyEmitter = new vscode.EventEmitter<void>();
   private readonly selectedEmitter = new vscode.EventEmitter<AgentSession | undefined>();
   private readonly usageEmitter = new vscode.EventEmitter<UsageBridgeEvent>();
   private readonly attentionServer = new AttentionServer((event) => {
@@ -38,6 +44,7 @@ export class SessionManager implements vscode.Disposable {
   private bridgeWarningShown = false;
 
   public readonly onDidChange = this.changedEmitter.event;
+  public readonly onDidChangeTopology = this.topologyEmitter.event;
   public readonly onDidSelectSession = this.selectedEmitter.event;
   public readonly onDidReceiveUsage = this.usageEmitter.event;
 
@@ -103,7 +110,7 @@ export class SessionManager implements vscode.Disposable {
       vscode.window.onDidStartTerminalShellExecution((event) => {
         const id = this.sessionIdsByTerminal.get(event.terminal);
         if (id && this.agentExecutions.get(id) === event.execution) {
-          this.updateSession(id, 'running', undefined, 'Agent command is running');
+          this.updateSession(id, 'active', undefined, 'Agent session active');
         }
       }),
       vscode.window.onDidEndTerminalShellExecution((event) => {
@@ -157,6 +164,7 @@ export class SessionManager implements vscode.Disposable {
         this.terminals.delete(id);
         this.agentExecutions.delete(id);
         this.sessionIdsByTerminal.delete(terminal);
+        this.topologyEmitter.fire();
         this.updateSession(id, 'closed', terminal.exitStatus?.code, 'Terminal closed');
       }),
       vscode.window.onDidChangeActiveTerminal((terminal) => {
@@ -245,6 +253,7 @@ export class SessionManager implements vscode.Disposable {
     });
     this.sessions.set(session.id, session);
     this.attachTerminal(session.id, terminal);
+    this.topologyEmitter.fire();
     this.selectSession(session.id);
     await this.persistAndNotify();
     terminal.show(false);
@@ -356,6 +365,7 @@ export class SessionManager implements vscode.Disposable {
   public dispose(): void {
     this.attentionServer.dispose();
     this.changedEmitter.dispose();
+    this.topologyEmitter.dispose();
     this.selectedEmitter.dispose();
     this.usageEmitter.dispose();
     for (const disposable of this.disposables) {
@@ -378,7 +388,7 @@ export class SessionManager implements vscode.Disposable {
       try {
         const execution = shellIntegration.executeCommand(command);
         this.agentExecutions.set(id, execution);
-        this.updateSession(id, 'running', undefined, 'Agent command is running');
+        this.updateSession(id, 'active', undefined, 'Agent session active');
         return;
       } catch {
         // Fall through to sendText for terminals that reject execution tracking.
@@ -387,9 +397,9 @@ export class SessionManager implements vscode.Disposable {
     terminal.sendText(command, true);
     this.updateSession(
       id,
-      'running',
+      'active',
       undefined,
-      'Agent launched · detailed lifecycle unavailable'
+      'Agent session active · detailed lifecycle unavailable'
     );
   }
 
@@ -470,9 +480,25 @@ export class SessionManager implements vscode.Disposable {
   }
 
   private async prepareLaunchCommand(request: LaunchRequest): Promise<string> {
+    if (!this.attentionEndpoint) {
+      return request.command;
+    }
+    const notifyHelperPath = path.join(
+      this.context.extensionPath,
+      'out',
+      'src',
+      'notify.js'
+    );
+    if (
+      request.kind === 'codex' &&
+      vscode.workspace
+        .getConfiguration('multiTerm.codex')
+        .get('lifecycleIntegration', true)
+    ) {
+      return withCodexTurnNotification(request.command, notifyHelperPath);
+    }
     if (
       request.kind !== 'claude' ||
-      !this.attentionEndpoint ||
       !vscode.workspace
         .getConfiguration('multiTerm.usage.claude')
         .get('statusLineIntegration', true) ||
@@ -487,12 +513,6 @@ export class SessionManager implements vscode.Disposable {
       'out',
       'src',
       'claudeStatusLine.js'
-    );
-    const notifyHelperPath = path.join(
-      this.context.extensionPath,
-      'out',
-      'src',
-      'notify.js'
     );
     const settingsUri = vscode.Uri.joinPath(
       this.context.globalStorageUri,
@@ -526,7 +546,11 @@ export class SessionManager implements vscode.Disposable {
           }
         ],
         Stop: [
-          hookGroup(notifyHelperPath, 'completed', 'Claude finished a turn')
+          hookGroup(
+            notifyHelperPath,
+            'attention',
+            'Claude is waiting for input'
+          )
         ],
         StopFailure: [
           hookGroup(notifyHelperPath, 'failed', 'Claude turn failed')
@@ -539,13 +563,6 @@ export class SessionManager implements vscode.Disposable {
     );
     return `${request.command} --settings ${shellQuote(settingsUri.fsPath)}`;
   }
-}
-
-function shellQuote(value: string): string {
-  if (process.platform === 'win32') {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 function defaultEventMessage(status: AgentEvent['status']): string {
@@ -576,18 +593,8 @@ function hookGroup(
   };
 }
 
-function isDirectClaudeCommand(command: string): boolean {
-  if (/[\n;&|<>]/.test(command)) {
-    return false;
-  }
-  const firstToken = command.trim().split(/\s+/, 1)[0]?.replace(/^['"]|['"]$/g, '');
-  if (!firstToken) {
-    return false;
-  }
-  const executable = path.basename(firstToken).toLowerCase();
-  const windowsExecutable = path.win32.basename(firstToken).toLowerCase();
-  return executable === 'claude' || windowsExecutable === 'claude.exe';
-}
+const isDirectClaudeCommand = (command: string): boolean =>
+  isDirectAgentCommand(command, 'claude');
 
 function sessionIdFromTerminal(terminal: vscode.Terminal): string | undefined {
   const options = terminal.creationOptions;

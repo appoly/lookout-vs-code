@@ -5,6 +5,7 @@ import type { AgentSession, SessionStatus } from './types';
 
 const STATUS_ICONS: Record<SessionStatus, vscode.ThemeIcon> = {
   starting: new vscode.ThemeIcon('loading~spin'),
+  active: new vscode.ThemeIcon('terminal', new vscode.ThemeColor('charts.green')),
   running: new vscode.ThemeIcon('play', new vscode.ThemeColor('charts.green')),
   attention: new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('list.warningForeground')),
   completed: new vscode.ThemeIcon('pass', new vscode.ThemeColor('charts.green')),

@@ -20,8 +20,10 @@ async function main(): Promise<void> {
 
   const first = process.argv[2] as EventStatus | undefined;
   const status = first && statuses.has(first) ? first : 'attention';
-  const argumentMessage = process.argv.slice(status === first ? 3 : 2).join(' ').trim();
-  const stdinMessage = await readStdin();
+  const argumentMessage = messageFromArguments(
+    process.argv.slice(status === first ? 3 : 2)
+  );
+  const stdinMessage = argumentMessage ? '' : await readStdin();
   const message = summarizeMessage(argumentMessage || stdinMessage);
   const body = JSON.stringify({ sessionId, status, message });
 
@@ -50,6 +52,25 @@ async function main(): Promise<void> {
     req.once('error', reject);
     req.end(body);
   });
+}
+
+function messageFromArguments(values: readonly string[]): string {
+  if (values.length > 1 && isJsonObject(values.at(-1))) {
+    return values.slice(0, -1).join(' ').trim();
+  }
+  return values.join(' ').trim();
+}
+
+function isJsonObject(value: string | undefined): boolean {
+  if (!value?.trim().startsWith('{')) {
+    return false;
+  }
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
+  } catch {
+    return false;
+  }
 }
 
 async function readStdin(): Promise<string> {

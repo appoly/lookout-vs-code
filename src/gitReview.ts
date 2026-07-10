@@ -78,6 +78,23 @@ export async function readBaselineFile(
   ]);
 }
 
+export function excludeWorkspaceArtifacts(
+  changes: readonly WorkspaceChange[],
+  repoRoot: string,
+  artifactPaths: ReadonlySet<string>
+): WorkspaceChange[] {
+  if (artifactPaths.size === 0) {
+    return [...changes];
+  }
+  const excluded = new Set(
+    [...artifactPaths].map((artifactPath) => normalizeFsPath(artifactPath))
+  );
+  return changes.filter(
+    (change) =>
+      !excluded.has(normalizeFsPath(path.resolve(repoRoot, change.path)))
+  );
+}
+
 export function parseNameStatus(output: string): WorkspaceChange[] {
   const fields = parseNullList(output);
   const changes: WorkspaceChange[] = [];
@@ -132,6 +149,11 @@ function changeKind(status: string): WorkspaceChangeKind {
     default:
       return 'other';
   }
+}
+
+function normalizeFsPath(filePath: string): string {
+  const resolved = path.resolve(filePath);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
 
 function runGit(cwd: string, args: readonly string[]): Promise<string> {

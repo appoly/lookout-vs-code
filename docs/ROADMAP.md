@@ -9,22 +9,25 @@ launch several agents → work in VS Code → see attention/finish state → jum
 ## Current checkpoint
 
 - [x] Native editor-area Codex, Claude, and custom terminals.
+- [x] Provider picker from the Agents `+` action.
 - [x] Native terminal splits and fast focus picker/attention jump.
 - [x] Stable session metadata and terminal reattachment by injected ID.
-- [x] Exact shell-execution lifecycle tracking with an honest degraded fallback.
-- [x] Claude permission/idle/completion/failure hooks through session-local settings.
+- [x] Exact shell-execution lifecycle tracking with a neutral active-process state and honest degraded fallback.
+- [x] Claude working/permission/waiting/failure hooks through session-local settings.
+- [x] Session-only Codex turn-complete notification for waiting-for-input attention.
 - [x] Token-authenticated, size-limited loopback event bridge.
-- [x] Session-scoped Git changes and native diff editors.
-- [x] Recent images/plans plus VS Code diagnostics, Tasks, SCM, and browser commands.
+- [x] Git changes grouped by worktree with attached agents and native diff editors.
+- [x] Pre-existing and new plans/docs classified separately from worktree changes, plus optional recent images, diagnostics, Tasks, SCM, and browser commands.
 - [x] Codex and Claude account usage windows with reset times/stale states.
-- [x] Lint, strict TypeScript, five automated test files, CI, and clean VSIX packaging.
-- [ ] Interactive Extension Development Host smoke test.
+- [x] User-configurable Spark quota and recent-image visibility, both quiet by default.
+- [x] Lint, strict TypeScript, seven automated test files, CI, and clean VSIX packaging.
+- [x] Initial interactive Extension Development Host review.
 
 ## Next: prove the MVP loop
 
 1. Install the VSIX or press F5 in a stable desktop/remote VS Code environment.
 2. Launch two Codex sessions and one Claude session; confirm column-one review remains available.
-3. Exercise Claude permission and completion hooks and the unread/focus lifecycle.
+3. Exercise Claude and Codex working/waiting/permission events and the unread/focus lifecycle.
 4. Compare Codex/Claude usage percentages against each provider's own UI.
 5. Change, add, rename, and delete files; verify native diff behavior.
 6. Open a Playwright screenshot, a plan, a diagnostic, a workspace task, SCM, and a localhost URL.

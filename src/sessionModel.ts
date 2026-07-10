@@ -2,6 +2,7 @@ import type { AgentKind, AgentSession, SessionStatus } from './types';
 
 const ACTIVE_STATUSES = new Set<SessionStatus>([
   'starting',
+  'active',
   'running',
   'attention'
 ]);

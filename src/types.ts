@@ -2,6 +2,7 @@ export type AgentKind = 'codex' | 'claude' | 'custom';
 
 export type SessionStatus =
   | 'starting'
+  | 'active'
   | 'running'
   | 'attention'
   | 'completed'

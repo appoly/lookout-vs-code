@@ -46,8 +46,13 @@ export class CodexUsageProvider {
 
   public constructor(
     private readonly executable: string,
-    private readonly onSnapshot: (snapshot: UsageSnapshot) => void
+    private readonly onSnapshot: (snapshot: UsageSnapshot) => void,
+    private includeSparkLimits = false
   ) {}
+
+  public setIncludeSparkLimits(include: boolean): void {
+    this.includeSparkLimits = include;
+  }
 
   public async start(): Promise<void> {
     if (this.process) {
@@ -126,7 +131,11 @@ export class CodexUsageProvider {
         'account/rateLimits/read',
         null
       )) as RateLimitResponsePayload;
-      this.onSnapshot(normalizeRateLimits(result));
+      this.onSnapshot(
+        normalizeRateLimits(result, {
+          includeSparkLimits: this.includeSparkLimits
+        })
+      );
     } catch (error) {
       this.onSnapshot(codexErrorSnapshot(error));
     }
@@ -226,13 +235,18 @@ export class CodexUsageProvider {
 }
 
 export function normalizeRateLimits(
-  payload: RateLimitResponsePayload
+  payload: RateLimitResponsePayload,
+  options: { readonly includeSparkLimits?: boolean } = {}
 ): UsageSnapshot {
-  const entries = payload.rateLimitsByLimitId
+  const allEntries = payload.rateLimitsByLimitId
     ? Object.entries(payload.rateLimitsByLimitId)
     : payload.rateLimits
       ? [[payload.rateLimits.limitId ?? 'codex', payload.rateLimits] as const]
       : [];
+  const entries = allEntries.filter(
+    ([limitId, snapshot]) =>
+      options.includeSparkLimits || !isSparkLimit(limitId, snapshot)
+  );
   const windows: UsageWindow[] = [];
   for (const [limitId, snapshot] of entries) {
     const prefix = entries.length > 1 ? `${snapshot.limitName ?? limitId} ` : '';
@@ -244,10 +258,14 @@ export function normalizeRateLimits(
       snapshot.secondary
     );
   }
-  const representative = entries[0]?.[1] ?? payload.rateLimits;
+  const representative =
+    entries[0]?.[1] ?? payload.rateLimits ?? allEntries[0]?.[1];
   return {
     provider: 'codex',
-    status: windows.length > 0 ? 'available' : 'authRequired',
+    status:
+      windows.length > 0 || allEntries.length > 0
+        ? 'available'
+        : 'authRequired',
     observedAt: Date.now(),
     source: 'codex-app-server',
     windows,
@@ -267,8 +285,22 @@ export function normalizeRateLimits(
           }
         }
       : {}),
-    ...(windows.length === 0 ? { detail: 'Sign in to Codex to see usage limits' } : {})
+    ...(windows.length === 0
+      ? {
+          detail:
+            allEntries.length > 0
+              ? 'No enabled Codex limit buckets are available'
+              : 'Sign in to Codex to see usage limits'
+        }
+      : {})
   };
+}
+
+function isSparkLimit(
+  limitId: string,
+  snapshot: RateLimitSnapshotPayload
+): boolean {
+  return /spark/i.test(`${limitId} ${snapshot.limitName ?? ''}`);
 }
 
 function appendWindow(
