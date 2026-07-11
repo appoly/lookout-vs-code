@@ -4,8 +4,11 @@ import type {
   AgentReportedStatus,
   AgentSession,
   BackgroundAgent,
-  ForegroundState
+  ForegroundState,
+  RunningCommand
 } from './types';
+
+const MAX_RUNNING_COMMANDS = 12;
 
 export function applyAgentEvent(
   session: AgentSession,
@@ -21,6 +24,10 @@ export function applyAgentEvent(
       return applyBackgroundStart(session, event.agentId, event.agentLabel, now);
     case 'background-stop':
       return applyBackgroundStop(session, event.agentId, now);
+    case 'command-start':
+      return applyCommandStart(session, event.commandId, event.command, now);
+    case 'command-stop':
+      return applyCommandStop(session, event.commandId, now);
   }
 }
 
@@ -29,6 +36,9 @@ export function normalizeSessionActivity(session: AgentSession): AgentSession {
     ...session,
     backgroundAgents: Array.isArray(session.backgroundAgents)
       ? session.backgroundAgents.filter(isBackgroundAgent)
+      : [],
+    runningCommands: Array.isArray(session.runningCommands)
+      ? session.runningCommands.filter(isRunningCommand)
       : [],
     foregroundState: isForegroundState(session.foregroundState)
       ? session.foregroundState
@@ -43,11 +53,13 @@ function applyStatusEvent(
   exitCode: number | undefined,
   now: number
 ): AgentSession {
+  // A fresh prompt ('running') and a finished turn ('completed'/'failed') both
+  // end any in-flight commands from the prior turn, so drop the stale list.
   const withForeground =
     status === 'running'
-      ? { ...session, foregroundState: 'working' as const }
+      ? { ...session, foregroundState: 'working' as const, runningCommands: [] }
       : status === 'completed' || status === 'failed'
-        ? { ...session, foregroundState: 'stopped' as const }
+        ? { ...session, foregroundState: 'stopped' as const, runningCommands: [] }
         : session;
   return transitionSession(
     withForeground,
@@ -64,7 +76,12 @@ function applyForegroundStop(
   reason: 'turn-end' | undefined,
   now: number
 ): AgentSession {
-  const stopped = { ...session, foregroundState: 'stopped' as const };
+  // The foreground turn is over, so any commands it launched have ended too.
+  const stopped = {
+    ...session,
+    foregroundState: 'stopped' as const,
+    runningCommands: []
+  };
   if (stopped.backgroundAgents.length > 0) {
     return transitionSession(
       stopped,
@@ -164,6 +181,37 @@ function applyBackgroundStop(
   );
 }
 
+function applyCommandStart(
+  session: AgentSession,
+  commandId: string,
+  command: string,
+  now: number
+): AgentSession {
+  const remaining = session.runningCommands.filter(
+    (entry) => entry.id !== commandId
+  );
+  // Newest last; cap the list so a hook that never fires its stop can't grow it
+  // without bound (a fresh prompt or turn end still clears it entirely).
+  const runningCommands = [...remaining, { id: commandId, command }].slice(
+    -MAX_RUNNING_COMMANDS
+  );
+  return { ...session, runningCommands, updatedAt: now };
+}
+
+function applyCommandStop(
+  session: AgentSession,
+  commandId: string,
+  now: number
+): AgentSession {
+  const runningCommands = session.runningCommands.filter(
+    (entry) => entry.id !== commandId
+  );
+  if (runningCommands.length === session.runningCommands.length) {
+    return session;
+  }
+  return { ...session, runningCommands, updatedAt: now };
+}
+
 function upsertBackgroundAgent(
   agents: readonly BackgroundAgent[],
   id: string,
@@ -210,6 +258,14 @@ function isBackgroundAgent(value: unknown): value is BackgroundAgent {
   }
   const record = value as Record<string, unknown>;
   return typeof record.id === 'string' && typeof record.label === 'string';
+}
+
+function isRunningCommand(value: unknown): value is RunningCommand {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return typeof record.id === 'string' && typeof record.command === 'string';
 }
 
 function isForegroundState(value: unknown): value is ForegroundState {

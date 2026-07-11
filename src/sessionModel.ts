@@ -30,6 +30,7 @@ export function createSession(
     bridgeAvailable: true,
     unread: false,
     backgroundAgents: [],
+    runningCommands: [],
     foregroundState: 'unknown'
   };
 }

@@ -157,8 +157,71 @@ test('normalizes restored sessions created before activity tracking', () => {
   const restored = normalizeSessionActivity({
     ...legacy,
     backgroundAgents: undefined,
+    runningCommands: undefined,
     foregroundState: undefined
   } as unknown as typeof legacy);
   assert.deepEqual(restored.backgroundAgents, []);
+  assert.deepEqual(restored.runningCommands, []);
   assert.equal(restored.foregroundState, 'unknown');
+});
+
+test('tracks a running command until it stops', () => {
+  const starting = createSession('claude', 'Builds', 'claude', '/repo', 1, 'c1');
+  const started = applyAgentEvent(
+    starting,
+    { kind: 'command-start', sessionId: 'c1', commandId: 't1', command: 'npm test' },
+    2
+  );
+  assert.deepEqual(started.runningCommands, [{ id: 't1', command: 'npm test' }]);
+
+  const stopped = applyAgentEvent(
+    started,
+    { kind: 'command-stop', sessionId: 'c1', commandId: 't1', command: 'npm test' },
+    3
+  );
+  assert.deepEqual(stopped.runningCommands, []);
+});
+
+test('keeps concurrent commands distinct and removes only the one that stops', () => {
+  const base = createSession('claude', 'Builds', 'claude', '/repo', 1, 'c2');
+  const withBuild = applyAgentEvent(
+    base,
+    { kind: 'command-start', sessionId: 'c2', commandId: 'b', command: 'npm run build' },
+    2
+  );
+  const withTest = applyAgentEvent(
+    withBuild,
+    { kind: 'command-start', sessionId: 'c2', commandId: 't', command: 'npm test' },
+    3
+  );
+  assert.equal(withTest.runningCommands.length, 2);
+
+  const buildDone = applyAgentEvent(
+    withTest,
+    { kind: 'command-stop', sessionId: 'c2', commandId: 'b', command: 'npm run build' },
+    4
+  );
+  assert.deepEqual(buildDone.runningCommands, [{ id: 't', command: 'npm test' }]);
+});
+
+test('a finished turn clears any lingering running commands', () => {
+  const base = createSession('claude', 'Builds', 'claude', '/repo', 1, 'c3');
+  const working = applyAgentEvent(
+    base,
+    { kind: 'status', sessionId: 'c3', status: 'running' },
+    2
+  );
+  const withCommand = applyAgentEvent(
+    working,
+    { kind: 'command-start', sessionId: 'c3', commandId: 'srv', command: 'npm run dev' },
+    3
+  );
+  assert.equal(withCommand.runningCommands.length, 1);
+
+  const finished = applyAgentEvent(
+    withCommand,
+    { kind: 'foreground-stop', sessionId: 'c3', reason: 'turn-end' },
+    4
+  );
+  assert.deepEqual(finished.runningCommands, []);
 });

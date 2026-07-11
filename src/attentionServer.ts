@@ -158,6 +158,22 @@ function parseAgentEvent(value: unknown): AgentEvent {
           : 'Delegated agent'
     };
   }
+  if (value.kind === 'command-start' || value.kind === 'command-stop') {
+    if (typeof value.command !== 'string' || value.command.length === 0) {
+      throw new Error('Command event requires a command');
+    }
+    const command = value.command.replace(/\s+/g, ' ').trim().slice(0, 200);
+    const commandId =
+      typeof value.commandId === 'string' && value.commandId.length > 0
+        ? value.commandId.slice(0, 200)
+        : command;
+    return {
+      kind: value.kind,
+      sessionId: value.sessionId,
+      commandId,
+      command
+    };
+  }
   if (
     typeof value.status !== 'string' ||
     !EVENT_STATUSES.has(value.status as AgentReportedStatus)

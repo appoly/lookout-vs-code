@@ -30,7 +30,7 @@ Tests use Node's built-in `node:test` runner, not a framework. There is no VS Co
 
 Two layers, split by whether they import `vscode`:
 
-- **Pure logic (unit-tested in `test/`):** `sessionModel.ts` (status state machine), `sessionActivity.ts` (applies `AgentEvent`s — foreground stop vs. delegated background agents vs. permission attention), `agentCommand.ts` (builds provider launch commands; leaves wrapper/shell-operator commands untouched), `gitReview.ts`, `artifactClassification.ts` (labels Workshop artifact paths: plan/research/solution/etc.), `claudeUsage.ts`, `codexUsageProvider.ts` parsing, `usageFormatting.ts`, `attentionTone.ts` (PCM bell synthesis).
+- **Pure logic (unit-tested in `test/`):** `sessionModel.ts` (status state machine), `sessionActivity.ts` (applies `AgentEvent`s — foreground stop vs. delegated background agents vs. running shell commands vs. permission attention), `agentCommand.ts` (builds provider launch commands; leaves wrapper/shell-operator commands untouched), `gitReview.ts`, `artifactClassification.ts` (labels Workshop artifact paths: plan/research/solution/etc.), `claudeUsage.ts`, `codexUsageProvider.ts` parsing, `usageFormatting.ts`, `attentionTone.ts` (PCM bell synthesis).
 - **VS Code / IO integration:** `sessionManager.ts` (terminal lifecycle, persistence, restore), `sessionTree.ts` / `reviewTree.ts` / `usageTree.ts` (tree providers; `reviewTree` also serves the `lookout-baseline` read-only virtual documents for diffs), `attentionServer.ts` (token-authenticated loopback HTTP bridge), `attentionSound.ts` (native audio players), `usageManager.ts`, `claudeStatusLine.ts`.
 
 Core types are in `types.ts` (`AgentSession`, `SessionStatus`, `AgentEvent`) and `usageTypes.ts`.

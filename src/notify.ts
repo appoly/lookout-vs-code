@@ -6,7 +6,9 @@ type EventAction =
   | 'foreground-stop'
   | 'turn-end'
   | 'background-start'
-  | 'background-stop';
+  | 'background-stop'
+  | 'command-start'
+  | 'command-stop';
 type HookProvider = 'claude' | 'codex';
 
 const statuses = new Set<EventStatus>([
@@ -20,7 +22,9 @@ const actions = new Set<EventAction>([
   'foreground-stop',
   'turn-end',
   'background-start',
-  'background-stop'
+  'background-stop',
+  'command-start',
+  'command-stop'
 ]);
 
 async function main(): Promise<void> {
@@ -144,6 +148,21 @@ function normalizeEvent(
         'Delegated agent'
     };
   }
+  if (action === 'command-start' || action === 'command-stop') {
+    const command = commandFromPayload(providerPayload) || explicitMessage;
+    return {
+      kind: action,
+      sessionId,
+      commandId:
+        providerString(providerPayload, [
+          'tool_use_id',
+          'toolUseId',
+          'call_id',
+          'callId'
+        ]) || command,
+      command
+    };
+  }
   return {
     kind: 'status',
     sessionId,
@@ -200,6 +219,23 @@ function summarizePayload(input: Record<string, unknown> | undefined): string {
     }
   }
   return 'Agent needs attention';
+}
+
+function commandFromPayload(
+  payload: Record<string, unknown> | undefined
+): string {
+  // Claude Bash-tool hooks nest the command under tool_input.command; some
+  // shapes surface it at the top level. Prefer the nested form.
+  const toolInput = payload?.tool_input ?? payload?.toolInput;
+  if (typeof toolInput === 'object' && toolInput !== null) {
+    const nested = providerString(toolInput as Record<string, unknown>, [
+      'command'
+    ]);
+    if (nested) {
+      return nested;
+    }
+  }
+  return providerString(payload, ['command']);
 }
 
 function providerString(

@@ -100,6 +100,33 @@ test('accepts authenticated agent and usage events on loopback', async (context)
       message: 'Agent is waiting for input'
     });
 
+    const commandResponse = await post(endpoint.url, endpoint.token, {
+      kind: 'command-start',
+      sessionId: 'session-1',
+      commandId: 'call-1',
+      command: 'npm   run\tbuild'
+    });
+    assert.equal(commandResponse.status, 204);
+    assert.deepEqual(agentEvents[5], {
+      kind: 'command-start',
+      sessionId: 'session-1',
+      commandId: 'call-1',
+      command: 'npm run build'
+    });
+
+    const commandHookResult = await runNotify(
+      endpoint,
+      ['--hook', 'claude', 'command-start'],
+      { tool_name: 'Bash', tool_input: { command: 'npm test' }, tool_use_id: 'abc' }
+    );
+    assert.equal(commandHookResult.code, 0);
+    assert.deepEqual(agentEvents[6], {
+      kind: 'command-start',
+      sessionId: 'session-from-hook',
+      commandId: 'abc',
+      command: 'npm test'
+    });
+
     const usageResponse = await post(
       endpoint.url.replace(/\/events$/, '/usage'),
       endpoint.token,

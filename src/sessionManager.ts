@@ -102,6 +102,7 @@ export class SessionManager implements vscode.Disposable {
             ...(!bridgeReused
               ? {
                   backgroundAgents: [],
+                  runningCommands: [],
                   foregroundState: 'unknown',
                   latestEvent: 'Restored terminal · hooks require a new session'
                 }
@@ -117,6 +118,7 @@ export class SessionManager implements vscode.Disposable {
             ),
             bridgeAvailable: false,
             backgroundAgents: [],
+            runningCommands: [],
             foregroundState: 'stopped'
           };
       this.sessions.set(session.id, session);
@@ -447,6 +449,7 @@ export class SessionManager implements vscode.Disposable {
     session.status = 'starting';
     session.unread = false;
     session.backgroundAgents = [];
+    session.runningCommands = [];
     session.foregroundState = 'unknown';
     session.latestEvent = 'Restarting agent command';
     session.updatedAt = Date.now();
@@ -558,12 +561,22 @@ export class SessionManager implements vscode.Disposable {
     }
     const resetActivity =
       status === 'active'
-        ? { ...session, backgroundAgents: [], foregroundState: 'unknown' as const }
+        ? {
+            ...session,
+            backgroundAgents: [],
+            runningCommands: [],
+            foregroundState: 'unknown' as const
+          }
         : status === 'completed' ||
             status === 'failed' ||
             status === 'unknown' ||
             status === 'closed'
-          ? { ...session, backgroundAgents: [], foregroundState: 'stopped' as const }
+          ? {
+              ...session,
+              backgroundAgents: [],
+              runningCommands: [],
+              foregroundState: 'stopped' as const
+            }
           : session;
     let updated = transitionSession(
       resetActivity,
@@ -726,7 +739,15 @@ export class SessionManager implements vscode.Disposable {
       ],
       SubagentStart: [hookGroup(notifyHelperPath, 'background-start')],
       SubagentStop: [hookGroup(notifyHelperPath, 'background-stop')],
-      StopFailure: [hookGroup(notifyHelperPath, 'failed', 'Claude turn failed')]
+      StopFailure: [hookGroup(notifyHelperPath, 'failed', 'Claude turn failed')],
+      // Surface long-running shell commands (builds, tests, dev servers) while
+      // they execute. Quick commands finish before their start is ever seen.
+      PreToolUse: [
+        { matcher: 'Bash', ...hookGroup(notifyHelperPath, 'command-start') }
+      ],
+      PostToolUse: [
+        { matcher: 'Bash', ...hookGroup(notifyHelperPath, 'command-stop') }
+      ]
     };
     const settings = {
       ...(statusLineIntegration
@@ -777,7 +798,9 @@ type HookAction =
   | 'foreground-stop'
   | 'turn-end'
   | 'background-start'
-  | 'background-stop';
+  | 'background-stop'
+  | 'command-start'
+  | 'command-stop';
 
 function hookGroup(
   helperPath: string,

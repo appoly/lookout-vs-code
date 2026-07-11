@@ -87,11 +87,15 @@ VS Code has configurable internal accessibility signals but no public extension 
 
 Before the first public extension release, use `lookout` consistently for the extension package, Activity Bar container, commands, settings, storage, virtual-document scheme, generated integration files, `LOOKOUT_*` bridge variables, and the `lookout-vs-code` GitHub repository. There is no compatibility alias for the unreleased prototype namespaces.
 
+## D11 — The Review "Running" group surfaces agent commands, authoritatively
+
+**Decision:** the Review view's **Running** group lists the shell commands agents are executing right now (builds, tests, dev servers), above any native VS Code Tasks and the active debug session. Command lifecycle comes only from explicit provider tool-use hooks — Claude `PreToolUse`/`PostToolUse` matched to the `Bash` tool report `command-start`/`command-stop` through the same `notify.ts` bridge as delegated-agent events — never from terminal-output scraping (upholds [D3](#d3--attention-comes-from-explicit-events)). Only in-flight commands are shown: fast commands finish before their start is observed, so the list self-filters to genuinely long-running work without any command-name heuristic. A fresh prompt, a turn end, or a session reset clears the list so a missing stop hook cannot leak a stale entry. Claude wiring ships now; Codex is deferred until its per-command tool-hook event name is verified, because [D8](#d8--codex-lifecycle-integration-is-session-local-and-conservative) forbids injecting unverified hook config. This resolves former open decision 3 in favor of surfacing running commands directly rather than only opening the Test Explorer.
+
 ## Open decisions
 
 1. Should “new agent” optionally create a Git worktree by default, or remain a separate advanced command?
 2. Should session resume IDs be captured for `codex resume` and `claude --resume`, and what stable source should provide them?
-3. Should the Review view expose discovered tests directly, or only open the native Test Explorer/run tasks?
+3. ~~Should the Review view expose discovered tests directly, or only open the native Test Explorer/run tasks?~~ Resolved by [D11](#d11--the-review-running-group-surfaces-agent-commands-authoritatively): running agent commands (including test runs) are surfaced directly in the Running group.
 4. How should existing Claude status-line commands be composed without executing arbitrary global configuration implicitly?
 5. Should Lookout expose a notification feed view, or keep unread/latest-event state only in agent rows?
 6. How should a user's global Codex `notify` command be composed with Lookout's session-only notifier?

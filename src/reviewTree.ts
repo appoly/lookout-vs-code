@@ -95,6 +95,7 @@ export class ReviewTreeItem extends vscode.TreeItem {
     }
     if (kind === 'runtime') {
       this.description = options.description;
+      this.tooltip = options.tooltip;
       this.iconPath = new vscode.ThemeIcon(
         options.command?.command === 'workbench.view.debug'
           ? 'debug-alt'
@@ -192,7 +193,10 @@ export class ReviewTreeProvider
     planWatcher.onDidDelete(() => void this.refresh());
     this.disposables.push(
       sessions.onDidSelectSession(() => this.scheduleRefresh()),
-      sessions.onDidChange(() => this.scheduleRefresh()),
+      sessions.onDidChange(() => {
+        this.scheduleRefresh();
+        this.refreshRuntime();
+      }),
       sessions.onDidChangeTopology(() => this.scheduleRefresh()),
       vscode.workspace.onDidSaveTextDocument(() => void this.refreshChanges()),
       vscode.languages.onDidChangeDiagnostics(() => this.refreshDiagnostics()),
@@ -277,7 +281,13 @@ export class ReviewTreeProvider
       case 'runtime':
         return this.runtime.length > 0
           ? this.runtime
-          : [new ReviewTreeItem('message', 'No tasks or debug sessions running')];
+          : [
+              new ReviewTreeItem(
+                'message',
+                'Nothing running',
+                { description: 'Agent commands, tasks, and debug sessions appear here' }
+              )
+            ];
       default:
         return [];
     }
@@ -368,6 +378,24 @@ export class ReviewTreeProvider
 
   public refreshRuntime(): void {
     const items: ReviewTreeItem[] = [];
+    // Agent-run shell commands first: this is what a reviewer actually cares
+    // about (builds, tests, dev servers the agents are running right now).
+    for (const session of this.sessions.list()) {
+      for (const running of session.runningCommands) {
+        items.push(
+          new ReviewTreeItem('runtime', running.command, {
+            sessionId: session.id,
+            description: session.label,
+            tooltip: `${running.command}\n\n${session.label}`,
+            command: {
+              command: 'lookout.focusSession',
+              title: 'Focus Agent',
+              arguments: [{ session: { id: session.id } }]
+            }
+          })
+        );
+      }
+    }
     const debugSession = vscode.debug.activeDebugSession;
     if (debugSession) {
       items.push(
