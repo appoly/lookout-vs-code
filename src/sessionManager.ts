@@ -205,7 +205,10 @@ export class SessionManager implements vscode.Disposable {
   }
 
   public list(): readonly AgentSession[] {
-    return [...this.sessions.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+    // Sort by createdAt (immutable) so sessions keep a stable position.
+    // Sorting by updatedAt made agents jump around the list every time they
+    // emitted an event.
+    return [...this.sessions.values()].sort((a, b) => a.createdAt - b.createdAt);
   }
 
   public get(id: string): AgentSession | undefined {
