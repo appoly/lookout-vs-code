@@ -28,15 +28,19 @@ const actions = new Set<EventAction>([
 ]);
 
 async function main(): Promise<void> {
+  const parsedArguments = parseArguments(process.argv.slice(2));
   const url = process.env.LOOKOUT_NOTIFY_URL;
   const token = process.env.LOOKOUT_NOTIFY_TOKEN;
   const sessionId = process.env.LOOKOUT_SESSION_ID;
   if (!url || !token || !sessionId) {
-    process.exitCode = 2;
+    // Outside a Lookout session (someone reused the generated settings file or
+    // hook command) the hook must be an inert no-op. A non-zero exit here
+    // would be treated by Claude as a BLOCKING hook decision.
+    if (parsedArguments.hookProvider === 'codex') {
+      process.stdout.write('{}\n');
+    }
     return;
   }
-
-  const parsedArguments = parseArguments(process.argv.slice(2));
   const stdinMessage = parsedArguments.hookProvider ? await readStdin() : '';
   const providerPayload = parseRecord(
     parsedArguments.payloadArgument || stdinMessage
@@ -86,6 +90,11 @@ async function main(): Promise<void> {
       }
     );
     req.once('error', reject);
+    // A stale endpoint that accepts but never answers must not stall the
+    // agent's hook budget (Claude allows ~60s per hook; Codex 10s).
+    req.setTimeout(3_000, () => {
+      req.destroy(new Error('Lookout notification timed out'));
+    });
     req.end(body);
   });
   if (parsedArguments.hookProvider === 'codex') {

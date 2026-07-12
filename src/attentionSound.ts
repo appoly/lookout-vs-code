@@ -27,6 +27,7 @@ export class AttentionSound implements vscode.Disposable {
     try {
       await vscode.workspace.fs.stat(soundUri);
     } catch {
+      await this.pruneStaleBells(`attention-bell-${volume}.wav`);
       await vscode.workspace.fs.writeFile(
         soundUri,
         createAttentionBellWav(volume)
@@ -81,6 +82,28 @@ export class AttentionSound implements vscode.Disposable {
       player.kill();
     }
     this.players.clear();
+  }
+
+  /** Volume changes would otherwise accumulate one generated WAV per level. */
+  private async pruneStaleBells(keepName: string): Promise<void> {
+    try {
+      const entries = await vscode.workspace.fs.readDirectory(
+        this.context.globalStorageUri
+      );
+      for (const [name, type] of entries) {
+        if (
+          type === vscode.FileType.File &&
+          name !== keepName &&
+          /^attention-bell-\d+\.wav$/.test(name)
+        ) {
+          await vscode.workspace.fs.delete(
+            vscode.Uri.joinPath(this.context.globalStorageUri, name)
+          );
+        }
+      }
+    } catch {
+      // Pruning is best-effort; playing the bell matters more.
+    }
   }
 
   private async playFile(filePath: string): Promise<boolean> {

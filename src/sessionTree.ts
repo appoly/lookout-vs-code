@@ -115,7 +115,9 @@ export class SessionStatusBar implements vscode.Disposable {
       return;
     }
     this.item.text = `$(terminal) ${this.manager.activeCount}`;
-    this.item.tooltip = `${this.manager.activeCount} active agents`;
+    this.item.tooltip = `${this.manager.activeCount} active agent${
+      this.manager.activeCount === 1 ? '' : 's'
+    }`;
     this.item.command = 'lookout.pickSession';
     this.item.backgroundColor = undefined;
   }

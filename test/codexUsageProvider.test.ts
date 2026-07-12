@@ -78,3 +78,38 @@ test('hides Codex Spark buckets by default and supports opt-in', () => {
     ['codex:primary', 'codex_spark:primary']
   );
 });
+
+test('keeps unrecognized rate-limit payloads distinct from sign-in state', () => {
+  for (const payload of [null, undefined, {}]) {
+    const snapshot = normalizeRateLimits(payload);
+    assert.equal(snapshot.status, 'unsupported');
+    assert.deepEqual(snapshot.windows, []);
+    assert.equal(snapshot.detail, 'Codex did not report usage limits');
+  }
+});
+
+test('normalizes credits-only payloads without rate-limit windows', () => {
+  const snapshot = normalizeRateLimits({
+    rateLimitResetCredits: { availableCount: 3 }
+  });
+  assert.equal(snapshot.status, 'available');
+  assert.deepEqual(snapshot.windows, []);
+  assert.deepEqual(snapshot.credits, { resetCount: 3 });
+  assert.equal(snapshot.detail, 'No rate-limit windows reported');
+
+  const emptyBuckets = normalizeRateLimits({
+    rateLimitsByLimitId: {},
+    rateLimitResetCredits: { availableCount: 1 }
+  });
+  assert.equal(emptyBuckets.status, 'available');
+  assert.deepEqual(emptyBuckets.credits, { resetCount: 1 });
+});
+
+test('maps a missing rate-limit RPC method to unsupported', () => {
+  const snapshot = codexErrorSnapshot(new Error('Method not found'));
+  assert.equal(snapshot.status, 'unsupported');
+  assert.equal(
+    snapshot.detail,
+    'This Codex CLI version does not report usage limits'
+  );
+});

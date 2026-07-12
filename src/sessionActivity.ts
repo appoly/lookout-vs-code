@@ -77,9 +77,12 @@ function applyForegroundStop(
   now: number
 ): AgentSession {
   // The foreground turn is over, so any commands it launched have ended too.
+  // Remember WHY it stopped: when delegated agents are still running the
+  // status becomes 'background' now, and the drain of the last agent must
+  // land on idle for a clean turn end, not on a false "waiting for input".
   const stopped = {
     ...session,
-    foregroundState: 'stopped' as const,
+    foregroundState: reason === 'turn-end' ? ('done' as const) : ('stopped' as const),
     runningCommands: []
   };
   if (stopped.backgroundAgents.length > 0) {
@@ -154,6 +157,15 @@ function applyBackgroundStop(
       backgroundMessage(backgroundAgents.length)
     );
   }
+  if (session.foregroundState === 'done') {
+    return transitionSession(
+      updated,
+      'idle',
+      now,
+      undefined,
+      'Agent finished'
+    );
+  }
   if (session.foregroundState === 'stopped') {
     return transitionSession(
       updated,
@@ -195,6 +207,17 @@ function applyCommandStart(
   const runningCommands = [...remaining, { id: commandId, command }].slice(
     -MAX_RUNNING_COMMANDS
   );
+  // A tool call can only run after any pending permission prompt was answered,
+  // so a mid-turn attention state is over once a command starts.
+  if (session.status === 'attention' && session.foregroundState === 'working') {
+    return transitionSession(
+      { ...session, runningCommands },
+      'running',
+      now,
+      undefined,
+      'Agent is working'
+    );
+  }
   return { ...session, runningCommands, updatedAt: now };
 }
 
@@ -269,5 +292,10 @@ function isRunningCommand(value: unknown): value is RunningCommand {
 }
 
 function isForegroundState(value: unknown): value is ForegroundState {
-  return value === 'unknown' || value === 'working' || value === 'stopped';
+  return (
+    value === 'unknown' ||
+    value === 'working' ||
+    value === 'stopped' ||
+    value === 'done'
+  );
 }

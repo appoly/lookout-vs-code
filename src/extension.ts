@@ -62,10 +62,10 @@ export async function activate(
       adoptTerminal(sessions, terminal)
     ),
     register('lookout.splitCodex', (item?: SessionTreeItem) =>
-      launchAgent(sessions, 'codex', sessionId(item))
+      launchAgent(sessions, 'codex', sessionId(item) ?? sessions.selectedSession?.id)
     ),
     register('lookout.splitClaude', (item?: SessionTreeItem) =>
-      launchAgent(sessions, 'claude', sessionId(item))
+      launchAgent(sessions, 'claude', sessionId(item) ?? sessions.selectedSession?.id)
     ),
     register('lookout.splitSession', (item?: SessionTreeItem) =>
       splitSession(sessions, item)
@@ -88,7 +88,7 @@ export async function activate(
         return;
       }
       const label = await vscode.window.showInputBox({
-        title: 'Rename Agent Session',
+        title: 'Rename Agent',
         value: session.label,
         validateInput: nonEmpty
       });
@@ -101,6 +101,12 @@ export async function activate(
       return id ? sessions.close(id) : undefined;
     }),
     register('lookout.restartSession', (item?: SessionTreeItem) => {
+      if (!vscode.workspace.isTrusted) {
+        void vscode.window.showWarningMessage(
+          'Trust this workspace before restarting an agent command.'
+        );
+        return;
+      }
       const id = sessionId(item);
       return id ? sessions.restart(id) : undefined;
     }),
@@ -118,7 +124,7 @@ export async function activate(
         void vscode.window.showInformationMessage('Agent attention hook command copied.');
       } else {
         void vscode.window.showWarningMessage(
-          'This restored terminal is not connected to the current attention bridge. Launch a new session to use hooks.'
+          'This terminal is not connected to the current attention bridge. Launch a new session to use hooks.'
         );
       }
     }),
@@ -326,7 +332,7 @@ async function launchAgentInWorktree(sessions: SessionManager): Promise<void> {
     ])).trim();
   } catch {
     void vscode.window.showErrorMessage(
-      'The selected folder is not inside a Git repository.'
+      'The selected folder is not inside a Git repository, or Git is not available.'
     );
     return;
   }
@@ -373,7 +379,7 @@ async function splitSession(
   const session = item.session;
   if (!session.command) {
     void vscode.window.showWarningMessage(
-      'This restored custom session did not persist its command. Launch it again instead of splitting it.'
+      'This session has no stored launch command — adopted terminals and restored custom sessions do not keep one. Launch a new agent instead of splitting this one.'
     );
     return;
   }

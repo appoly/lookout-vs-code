@@ -13,6 +13,10 @@ Lookout is built around one loop:
 launch agents → keep coding → see who needs attention → jump there → review the work
 ```
 
+Parallel agents only pay off when you can stop watching them. Lookout routes
+your attention — permission checks, questions, finished turns — so you keep
+working until an agent actually needs you.
+
 It uses native VS Code terminals and review surfaces instead of putting another
 terminal emulator or code viewer inside a webview.
 
@@ -25,10 +29,11 @@ terminal emulator or code viewer inside a webview.
   delegated-agent activity, authorization checks, finished turns, and genuine
   waits for input. Unread badges, status-bar state, notifications, and an optional
   bell make background work visible.
-- **Review** — open Git changes as native diffs against each session's launch
-  commit. Worktree grouping, branch-switch warnings, plans/docs, diagnostics,
-  Tasks, Test Explorer, debugging, Source Control, recent images, and a local
-  browser remain VS Code-owned surfaces.
+- **Review** — open each session's Git changes as native diffs against its
+  launch commit, grouped by worktree with branch-switch warnings and separately
+  classified plans and docs. Diagnostics, Tasks, Test Explorer, debugging,
+  Source Control, recent images, and a local browser stay VS Code-owned
+  surfaces, one step away.
 - **Usage Limits** — show authoritative Codex and Claude account windows and
   reset times. Unknown, stale, unsupported, and signed-out states stay distinct
   from zero usage.
@@ -66,8 +71,9 @@ provider's own CLI before relying on lifecycle or usage information.
 
 On the first Codex launch, Lookout explains the one-time `/hooks` review needed
 for full lifecycle detail. The turn-complete fallback works before those hooks
-are trusted. Claude integrations are passed through a generated, session-local
-`--settings` file; Lookout never modifies your user or repository Claude settings.
+are trusted. Claude hooks are session-local, passed through a generated
+`--settings` file kept in Lookout's own extension storage; Lookout never
+modifies your user or repository Claude settings.
 
 ## Useful commands
 
@@ -83,9 +89,9 @@ are trusted. Claude integrations are passed through a generated, session-local
 | `Lookout: Open Browser` | Open a local URL in VS Code's browser when available. |
 
 The default shortcuts are `Ctrl+Alt+C` / `Cmd+Alt+C` for Codex,
-`Ctrl+Alt+A` / `Cmd+Alt+A` for Claude Code, and `Ctrl+Alt+N` /
-`Cmd+Alt+N` for the next agent needing attention. All shortcuts can be changed
-in Keyboard Shortcuts.
+`Ctrl+Alt+A` / `Cmd+Alt+A` for Claude Code, `Ctrl+Alt+N` / `Cmd+Alt+N` for the
+next agent needing attention, and `Ctrl+Alt+B` / `Cmd+Alt+B` for the browser.
+All shortcuts can be changed in Keyboard Shortcuts.
 
 ## Provider and usage settings
 
@@ -127,6 +133,10 @@ stores and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
 - Lookout never infers attention from terminal output. Custom agents must invoke
   the copied attention-hook command when they need to signal Lookout.
+- Lifecycle hooks are quoted for the default terminal shell (PowerShell 5 and 7,
+  cmd, and POSIX shells such as bash, zsh, and fish). With an unrecognized
+  default shell, agents launch plainly and the session reports that hooks are
+  unavailable.
 - Shared-worktree changes are attributed to the worktree and its attached agents,
   never claimed as the work of one specific agent. Use isolated worktrees when
   per-agent attribution matters.

@@ -6,9 +6,12 @@ import {
 } from './attentionServer';
 import { AttentionSound } from './attentionSound';
 import {
+  classifyShell,
+  hookRunnerShell,
   isDirectAgentCommand,
   shellQuote,
-  withCodexLifecycleIntegration
+  withCodexLifecycleIntegration,
+  type LaunchShell
 } from './agentCommand';
 import { captureGitBaseline, listWorkspaceChanges } from './gitReview';
 import {
@@ -92,13 +95,28 @@ export class SessionManager implements vscode.Disposable {
     }
 
     for (const saved of stored) {
+      if (!isPersistedSession(saved)) {
+        continue;
+      }
       const normalizedSaved = normalizeSessionActivity(saved);
       const terminal =
         terminalsBySessionId.get(saved.id) ?? terminalsByName.get(saved.terminalName);
+      // Without a reusable bridge no event can ever arrive, so transient
+      // statuses would otherwise be stuck (a permanent false "waiting for
+      // you"). A live process is only ever claimed as active.
+      const demoteStale =
+        !bridgeReused &&
+        ['starting', 'running', 'background', 'attention'].includes(
+          normalizedSaved.status
+        );
       const session: AgentSession = terminal
         ? {
-            ...normalizedSaved,
-            bridgeAvailable: bridgeReused,
+            ...(demoteStale
+              ? transitionSession(normalizedSaved, 'active', Date.now())
+              : normalizedSaved),
+            unread: demoteStale ? false : normalizedSaved.unread,
+            bridgeAvailable:
+              bridgeReused && normalizedSaved.bridgeAvailable === true,
             ...(!bridgeReused
               ? {
                   backgroundAgents: [],
@@ -264,7 +282,10 @@ export class SessionManager implements vscode.Disposable {
       parentTerminal.show(false);
     }
 
-    const launchCommand = await this.prepareLaunchCommand(request);
+    const launched = await this.prepareLaunchCommand(
+      request,
+      classifyShell(vscode.env.shell)
+    );
     const terminal = vscode.window.createTerminal({
       name: session.terminalName,
       cwd: vscode.Uri.file(request.cwd),
@@ -293,10 +314,17 @@ export class SessionManager implements vscode.Disposable {
     this.selectSession(session.id);
     await this.persistAndNotify();
     terminal.show(false);
-    await this.executeAgentCommand(session.id, terminal, launchCommand);
+    await this.executeAgentCommand(
+      session.id,
+      terminal,
+      launched.command,
+      launched.integrationsSkipped
+        ? 'Agent session active · hooks unavailable in this terminal shell'
+        : undefined
+    );
     if (
       request.kind === 'codex' &&
-      launchCommand.includes('hooks.SubagentStart=')
+      launched.command.includes('hooks.SubagentStart=')
     ) {
       void this.showCodexHookNotice(session.id);
     }
@@ -321,6 +349,10 @@ export class SessionManager implements vscode.Disposable {
       ...created,
       status: 'active',
       bridgeAvailable: false,
+      // Keep the real terminal name: adopted terminals carry no session-ID
+      // environment marker, so the name is the only way to re-attach them
+      // after a window reload.
+      terminalName: terminal.name,
       latestEvent: 'Adopted terminal · lifecycle hooks unavailable',
       ...(baseline ? { baseline } : {})
     };
@@ -344,7 +376,9 @@ export class SessionManager implements vscode.Disposable {
   }
 
   public async focusNextAttention(): Promise<void> {
-    const sessions = this.list();
+    // Only sessions with an open terminal can be focused; a closed session
+    // must not become a dead end that hides the next real candidate.
+    const sessions = this.list().filter((candidate) => this.isOpen(candidate.id));
     const session =
       sessions.find((candidate) => candidate.status === 'attention') ??
       sessions.find((candidate) => candidate.unread);
@@ -393,8 +427,9 @@ export class SessionManager implements vscode.Disposable {
             ? [`its worktree has ${changeCount} unreviewed change${changeCount === 1 ? '' : 's'}`]
             : [])
         ];
+        const detail = joinRisks(risks);
         const choice = await vscode.window.showWarningMessage(
-          `Remove ${session.label}? ${joinRisks(risks)}.`,
+          `Remove ${session.label}? ${detail.charAt(0).toUpperCase()}${detail.slice(1)}.`,
           { modal: true },
           'Review Changes',
           'Remove Agent'
@@ -436,7 +471,7 @@ export class SessionManager implements vscode.Disposable {
     }
     if (!session.command) {
       void vscode.window.showWarningMessage(
-        'This restored custom session did not persist its command. Launch it again instead.'
+        'This session has no stored launch command — adopted terminals and restored custom sessions do not keep one. Launch a new agent instead.'
       );
       return;
     }
@@ -455,13 +490,23 @@ export class SessionManager implements vscode.Disposable {
     session.updatedAt = Date.now();
     await this.persistAndNotify();
     terminal.show(false);
-    const launchCommand = await this.prepareLaunchCommand({
-      kind: session.kind,
-      label: session.label,
-      command: session.command,
-      cwd: session.cwd
-    });
-    await this.executeAgentCommand(id, terminal, launchCommand);
+    const launched = await this.prepareLaunchCommand(
+      {
+        kind: session.kind,
+        label: session.label,
+        command: session.command,
+        cwd: session.cwd
+      },
+      classifyShell(vscode.env.shell)
+    );
+    await this.executeAgentCommand(
+      id,
+      terminal,
+      launched.command,
+      launched.integrationsSkipped
+        ? 'Agent session active · hooks unavailable in this terminal shell'
+        : undefined
+    );
   }
 
   public async rename(id: string, label: string): Promise<void> {
@@ -475,6 +520,12 @@ export class SessionManager implements vscode.Disposable {
   }
 
   public markAttention(id: string, message = 'Agent needs attention'): void {
+    if (this.sessions.get(id)?.status === 'closed') {
+      void vscode.window.showInformationMessage(
+        'That agent terminal is closed; there is nothing to attend to.'
+      );
+      return;
+    }
     this.updateSession(id, 'attention', undefined, message);
   }
 
@@ -483,7 +534,11 @@ export class SessionManager implements vscode.Disposable {
       return undefined;
     }
     const helperPath = path.join(this.context.extensionPath, 'out', 'src', 'notify.js');
-    return `node ${shellQuote(helperPath)} attention`;
+    const shell = classifyShell(vscode.env.shell);
+    return `node ${shellQuote(
+      helperPath,
+      shell === 'unknown' ? hookRunnerShell() : shell
+    )} attention`;
   }
 
   public toggleAttentionSound(): Promise<void> {
@@ -518,14 +573,15 @@ export class SessionManager implements vscode.Disposable {
   private async executeAgentCommand(
     id: string,
     terminal: vscode.Terminal,
-    command: string
+    command: string,
+    activeMessage = 'Agent session active'
   ): Promise<void> {
     const shellIntegration = await waitForShellIntegration(terminal, 2_000);
     if (shellIntegration) {
       try {
         const execution = shellIntegration.executeCommand(command);
         this.agentExecutions.set(id, execution);
-        this.updateSession(id, 'active', undefined, 'Agent session active');
+        this.updateSession(id, 'active', undefined, activeMessage);
         return;
       } catch {
         // Fall through to sendText for terminals that reject execution tracking.
@@ -536,7 +592,7 @@ export class SessionManager implements vscode.Disposable {
       id,
       'active',
       undefined,
-      'Agent session active · detailed lifecycle unavailable'
+      `${activeMessage} · detailed lifecycle unavailable`
     );
   }
 
@@ -663,9 +719,12 @@ export class SessionManager implements vscode.Disposable {
     return this.persistChain;
   }
 
-  private async prepareLaunchCommand(request: LaunchRequest): Promise<string> {
+  private async prepareLaunchCommand(
+    request: LaunchRequest,
+    launchShell: LaunchShell
+  ): Promise<{ command: string; integrationsSkipped: boolean }> {
     if (!this.attentionEndpoint) {
-      return request.command;
+      return { command: request.command, integrationsSkipped: false };
     }
     const notifyHelperPath = path.join(
       this.context.extensionPath,
@@ -679,14 +738,24 @@ export class SessionManager implements vscode.Disposable {
         .getConfiguration('lookout.codex')
         .get('lifecycleIntegration', true)
     ) {
-      return withCodexLifecycleIntegration(request.command, notifyHelperPath);
+      const command = withCodexLifecycleIntegration(
+        request.command,
+        notifyHelperPath,
+        launchShell
+      );
+      return {
+        command,
+        integrationsSkipped:
+          launchShell === 'unknown' &&
+          isDirectAgentCommand(request.command, 'codex')
+      };
     }
     if (
       request.kind !== 'claude' ||
       /(^|\s)--settings(?:\s|=)/.test(request.command) ||
       !isDirectClaudeCommand(request.command)
     ) {
-      return request.command;
+      return { command: request.command, integrationsSkipped: false };
     }
     const statusLineIntegration = vscode.workspace
       .getConfiguration('lookout.usage.claude')
@@ -695,7 +764,11 @@ export class SessionManager implements vscode.Disposable {
       .getConfiguration('lookout.claude')
       .get('lifecycleIntegration', true);
     if (!statusLineIntegration && !lifecycleIntegration) {
-      return request.command;
+      return { command: request.command, integrationsSkipped: false };
+    }
+    if (launchShell === 'unknown') {
+      // No known-safe way to quote the settings path for this shell.
+      return { command: request.command, integrationsSkipped: true };
     }
     await vscode.workspace.fs.createDirectory(this.context.globalStorageUri);
     const helperPath = path.join(
@@ -754,7 +827,7 @@ export class SessionManager implements vscode.Disposable {
         ? {
             statusLine: {
               type: 'command',
-              command: `node ${shellQuote(helperPath)}`
+              command: `node ${shellQuote(helperPath, hookRunnerShell())}`
             }
           }
         : {}),
@@ -764,7 +837,13 @@ export class SessionManager implements vscode.Disposable {
       settingsUri,
       Buffer.from(JSON.stringify(settings), 'utf8')
     );
-    return `${request.command} --settings ${shellQuote(settingsUri.fsPath)}`;
+    return {
+      command: `${request.command} --settings ${shellQuote(
+        settingsUri.fsPath,
+        launchShell
+      )}`,
+      integrationsSkipped: false
+    };
   }
 
   private async showCodexHookNotice(id: string): Promise<void> {
@@ -807,17 +886,20 @@ function hookGroup(
   action: HookAction,
   message?: string
 ): { hooks: Array<{ type: 'command'; command: string }> } {
+  // Hook commands in the settings file are run by Claude's own hook runner
+  // (cmd on Windows, sh elsewhere), not by the terminal's launch shell.
+  const shell = hookRunnerShell();
   return {
     hooks: [
       {
         type: 'command',
         command: [
           'node',
-          shellQuote(helperPath),
+          shellQuote(helperPath, shell),
           '--hook',
           'claude',
           action,
-          ...(message ? [shellQuote(message)] : [])
+          ...(message ? [shellQuote(message, shell)] : [])
         ].join(' ')
       }
     ]
@@ -834,6 +916,21 @@ function sessionIdFromTerminal(terminal: vscode.Terminal): string | undefined {
   }
   const sessionId = options.env.LOOKOUT_SESSION_ID;
   return typeof sessionId === 'string' ? sessionId : undefined;
+}
+
+function isPersistedSession(value: unknown): value is AgentSession {
+  // A corrupted workspace-state entry must not be able to break activation.
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === 'string' &&
+    record.id.length > 0 &&
+    typeof record.label === 'string' &&
+    typeof record.cwd === 'string' &&
+    typeof record.status === 'string'
+  );
 }
 
 function sameEndpoint(

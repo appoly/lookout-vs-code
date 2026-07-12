@@ -1,11 +1,26 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import {
+  execFile,
+  spawn,
+  type ChildProcessWithoutNullStreams
+} from 'node:child_process';
 import type { UsageSnapshot, UsageWindow } from './usageTypes';
+
+const JSON_RPC_METHOD_NOT_FOUND = -32601;
 
 interface RpcResponse {
   readonly id?: number;
   readonly method?: string;
   readonly result?: unknown;
-  readonly error?: { readonly message?: string };
+  readonly error?: { readonly code?: number; readonly message?: string };
+}
+
+class RpcError extends Error {
+  public constructor(
+    message: string,
+    public readonly code?: number
+  ) {
+    super(message);
+  }
 }
 
 interface RateLimitWindowPayload {
@@ -43,12 +58,67 @@ export class CodexUsageProvider {
   >();
   private lastError = '';
   private refreshPromise: Promise<void> | undefined;
+  private startAttempted = false;
+  private viaCmdWrapper = false;
 
   public constructor(
     private readonly executable: string,
     private readonly onSnapshot: (snapshot: UsageSnapshot) => void,
     private includeSparkLimits = false
   ) {}
+
+  /**
+   * Node cannot spawn npm's `.cmd` shims directly (EINVAL since the batch-file
+   * CVE fix) and does not search PATH for them, so a bare or shim executable
+   * must be resolved with `where.exe` and run through cmd.exe.
+   */
+  private async resolveLaunchTarget(): Promise<{
+    command: string;
+    args: string[];
+    viaCmdWrapper: boolean;
+  }> {
+    const args = ['app-server', '--stdio'];
+    if (process.platform !== 'win32') {
+      return { command: this.executable, args, viaCmdWrapper: false };
+    }
+    let target = this.executable;
+    if (!/[\\/]/.test(target) && !/\.(exe|cmd|bat|com)$/i.test(target)) {
+      const resolved = await resolveWindowsExecutable(target);
+      if (resolved) {
+        target = resolved;
+      }
+    }
+    if (/\.(cmd|bat)$/i.test(target)) {
+      return {
+        command: 'cmd.exe',
+        args: ['/d', '/s', '/c', `""${target}" app-server --stdio"`],
+        viaCmdWrapper: true
+      };
+    }
+    return { command: target, args, viaCmdWrapper: false };
+  }
+
+  private terminate(child: ChildProcessWithoutNullStreams): void {
+    // Killing the cmd.exe wrapper alone would orphan the actual app-server;
+    // take the whole tree down on Windows.
+    if (
+      this.viaCmdWrapper &&
+      process.platform === 'win32' &&
+      child.pid &&
+      child.exitCode === null
+    ) {
+      try {
+        spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+          stdio: 'ignore',
+          windowsHide: true
+        });
+        return;
+      } catch {
+        // Fall through to the plain kill below.
+      }
+    }
+    child.kill();
+  }
 
   public setIncludeSparkLimits(include: boolean): void {
     this.includeSparkLimits = include;
@@ -58,13 +128,21 @@ export class CodexUsageProvider {
     if (this.process) {
       return;
     }
-    this.onSnapshot(waitingSnapshot('Starting Codex usage service…'));
+    // Only announce "starting" once: retries after a failed start would
+    // otherwise flicker waiting → unsupported on every refresh forever.
+    if (!this.startAttempted) {
+      this.startAttempted = true;
+      this.onSnapshot(waitingSnapshot('Starting Codex usage service…'));
+    }
     this.stdoutBuffer = '';
     this.lastError = '';
     try {
-      const child = spawn(this.executable, ['app-server', '--stdio'], {
+      const target = await this.resolveLaunchTarget();
+      this.viaCmdWrapper = target.viaCmdWrapper;
+      const child = spawn(target.command, target.args, {
         stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true
+        windowsHide: true,
+        ...(target.viaCmdWrapper ? { windowsVerbatimArguments: true } : {})
       });
       this.process = child;
       child.stdout.setEncoding('utf8');
@@ -88,7 +166,7 @@ export class CodexUsageProvider {
       await this.request('initialize', {
         clientInfo: {
           name: 'lookout-vscode',
-          title: 'Lookout Agent Cockpit',
+          title: 'Lookout for VS Code',
           version: '0.1.0'
         },
         capabilities: { experimentalApi: false }
@@ -146,7 +224,9 @@ export class CodexUsageProvider {
     this.process = undefined;
     this.initialized = false;
     this.rejectPending(new Error('Codex usage provider disposed'));
-    child?.kill();
+    if (child) {
+      this.terminate(child);
+    }
   }
 
   private request(method: string, params: unknown): Promise<unknown> {
@@ -202,7 +282,12 @@ export class CodexUsageProvider {
     clearTimeout(pending.timer);
     this.pending.delete(message.id);
     if (message.error) {
-      pending.reject(new Error(message.error.message ?? 'Codex request failed'));
+      pending.reject(
+        new RpcError(
+          message.error.message ?? 'Codex request failed',
+          message.error.code
+        )
+      );
     } else {
       pending.resolve(message.result);
     }
@@ -213,7 +298,9 @@ export class CodexUsageProvider {
     this.process = undefined;
     this.initialized = false;
     this.rejectPending(error);
-    child?.kill();
+    if (child) {
+      this.terminate(child);
+    }
     const unsupported = error.message.includes('ENOENT');
     this.onSnapshot({
       provider: 'codex',
@@ -235,9 +322,10 @@ export class CodexUsageProvider {
 }
 
 export function normalizeRateLimits(
-  payload: RateLimitResponsePayload,
+  rawPayload: RateLimitResponsePayload | null | undefined,
   options: { readonly includeSparkLimits?: boolean } = {}
 ): UsageSnapshot {
+  const payload = rawPayload ?? {};
   const allEntries = payload.rateLimitsByLimitId
     ? Object.entries(payload.rateLimitsByLimitId)
     : payload.rateLimits
@@ -260,23 +348,30 @@ export function normalizeRateLimits(
   }
   const representative =
     entries[0]?.[1] ?? payload.rateLimits ?? allEntries[0]?.[1];
+  const hasCredits = Boolean(
+    representative?.credits || payload.rateLimitResetCredits
+  );
+  // An empty successful response is a schema or account shape Lookout does
+  // not understand — report it as such rather than guessing at sign-in state
+  // (authentication problems arrive as errors and are classified there).
+  const status: UsageSnapshot['status'] =
+    windows.length > 0 || allEntries.length > 0 || hasCredits
+      ? 'available'
+      : 'unsupported';
   return {
     provider: 'codex',
-    status:
-      windows.length > 0 || allEntries.length > 0
-        ? 'available'
-        : 'authRequired',
+    status,
     observedAt: Date.now(),
     source: 'codex-app-server',
     windows,
     ...(representative?.planType ? { plan: representative.planType } : {}),
-    ...(representative?.credits || payload.rateLimitResetCredits
+    ...(hasCredits
       ? {
           credits: {
-            ...(representative.credits?.balance
+            ...(representative?.credits?.balance
               ? { balance: representative.credits.balance }
               : {}),
-            ...(representative.credits?.unlimited !== undefined
+            ...(representative?.credits?.unlimited !== undefined
               ? { unlimited: representative.credits.unlimited }
               : {}),
             ...(payload.rateLimitResetCredits?.availableCount !== undefined
@@ -290,7 +385,9 @@ export function normalizeRateLimits(
           detail:
             allEntries.length > 0
               ? 'No enabled Codex limit buckets are available'
-              : 'Sign in to Codex to see usage limits'
+              : hasCredits
+                ? 'No rate-limit windows reported'
+                : 'Codex did not report usage limits'
         }
       : {})
   };
@@ -367,6 +464,19 @@ export function codexErrorSnapshot(error: unknown): UsageSnapshot {
     error instanceof Error ? error.message : String(error)
   );
   if (
+    (error instanceof RpcError && error.code === JSON_RPC_METHOD_NOT_FOUND) ||
+    /method not found/i.test(detail)
+  ) {
+    return {
+      provider: 'codex',
+      status: 'unsupported',
+      observedAt: Date.now(),
+      source: 'codex-app-server',
+      windows: [],
+      detail: 'This Codex CLI version does not report usage limits'
+    };
+  }
+  if (
     /(?:not logged in|login required|authentication|unauthorized|\b401\b|no account)/i.test(
       detail
     )
@@ -385,4 +495,25 @@ export function codexErrorSnapshot(error: unknown): UsageSnapshot {
 
 function cleanError(value: string): string {
   return value.replace(/\s+/g, ' ').trim().slice(0, 240);
+}
+
+function resolveWindowsExecutable(name: string): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    execFile(
+      'where.exe',
+      [name],
+      { encoding: 'utf8', windowsHide: true },
+      (error, stdout) => {
+        if (error) {
+          resolve(undefined);
+          return;
+        }
+        const first = String(stdout)
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .find((line) => line.length > 0);
+        resolve(first);
+      }
+    );
+  });
 }

@@ -5,13 +5,14 @@
 - Launch, name, focus, split, restart, adopt, and safely remove Codex, Claude
   Code, and custom agents in native VS Code terminals.
 - Route explicit working, authorization, delegated-agent, turn-complete,
-  attention, command, and exit lifecycle events through a token-authenticated
-  loopback bridge without scraping terminal output.
+  attention, and running-command lifecycle events through a token-authenticated
+  loopback bridge, and track agent-command exits through VS Code shell
+  integration — never by scraping terminal output.
 - Surface unread activity through the Lookout tree, Activity Bar badge, status
   bar, notifications, and an optional volume-controlled attention bell.
 - Review Git changes against each session's launch baseline in native diffs,
-  grouped honestly by worktree with branch-switch warnings and separately
-  classified plans and documentation.
+  grouped by worktree with branch-switch warnings and separately classified
+  plans and documentation.
 - Open native diagnostics, Tasks, Test Explorer, debugging, Source Control,
   images, and browser surfaces from the Review view.
 - Show authoritative Codex and Claude account usage windows while keeping
@@ -22,4 +23,5 @@
   avoid authentication files and transcripts, and keep provider integrations
   session-local.
 - Add automated unit and extension-host coverage on the minimum supported and
-  current VS Code versions, plus deterministic VSIX packaging.
+  current VS Code versions, plus scripted VSIX packaging and install
+  verification.

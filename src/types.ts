@@ -46,7 +46,10 @@ export interface RunningCommand {
   readonly command: string;
 }
 
-export type ForegroundState = 'unknown' | 'working' | 'stopped';
+// Why the foreground turn is not currently working: 'stopped' means it waits
+// for the user, 'done' means the turn ended cleanly. The distinction decides
+// whether draining the last delegated agent lands on 'attention' or 'idle'.
+export type ForegroundState = 'unknown' | 'working' | 'stopped' | 'done';
 
 export interface GitBaseline {
   readonly repoRoot: string;

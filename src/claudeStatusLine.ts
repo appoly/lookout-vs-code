@@ -40,6 +40,10 @@ async function postUsage(body: object): Promise<void> {
       }
     );
     req.once('error', reject);
+    // Never let a stale endpoint stall the status line render.
+    req.setTimeout(3_000, () => {
+      req.destroy(new Error('Lookout usage post timed out'));
+    });
     req.end(serialized);
   });
 }

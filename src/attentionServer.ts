@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { AgentEvent, AgentReportedStatus } from './types';
@@ -77,7 +77,7 @@ export class AttentionServer {
       if (
         request.method !== 'POST' ||
         (request.url !== '/events' && request.url !== '/usage') ||
-        request.headers.authorization !== `Bearer ${this.token}`
+        !tokenMatches(request.headers.authorization, this.token)
       ) {
         response.writeHead(404).end();
         return;
@@ -124,7 +124,18 @@ export class AttentionServer {
       this.server?.once('error', reject);
       this.server?.listen(port, '127.0.0.1', () => resolve());
     });
+    // The pre-listen handler above is consumed by its first use; without a
+    // persistent handler a later runtime 'error' would crash the host.
+    this.server?.on('error', () => undefined);
   }
+}
+
+function tokenMatches(header: string | undefined, token: string): boolean {
+  const expected = Buffer.from(`Bearer ${token}`);
+  const received = Buffer.from(header ?? '');
+  return (
+    expected.length === received.length && timingSafeEqual(expected, received)
+  );
 }
 
 function parseAgentEvent(value: unknown): AgentEvent {

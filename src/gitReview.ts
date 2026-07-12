@@ -190,7 +190,13 @@ function runGit(cwd: string, args: readonly string[]): Promise<string> {
     execFile(
       'git',
       ['-C', cwd, ...args],
-      { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
+      {
+        encoding: 'utf8',
+        maxBuffer: 16 * 1024 * 1024,
+        // Background polling must never contend with an agent's own git
+        // commands over the optional index locks.
+        env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' }
+      },
       (error, stdout) => {
         if (error) {
           reject(error);

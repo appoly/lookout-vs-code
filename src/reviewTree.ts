@@ -172,6 +172,10 @@ export class ReviewTreeProvider
   private readonly plansByWorktree = new Map<string, ReviewTreeItem[]>();
   private planPaths = new Set<string>();
   private changeMessage = 'Select an agent with a Git baseline to review changes';
+  // Beyond this, a tree stops being reviewable; Source Control owns the full
+  // surface (D1). Keeps a stray node_modules/.venv from rendering thousands
+  // of rows every refresh tick.
+  private static readonly maxChangesPerWorktree = 100;
   private refreshGeneration = 0;
   private changeGeneration = 0;
   private refreshTimer: NodeJS.Timeout | undefined;
@@ -185,12 +189,15 @@ export class ReviewTreeProvider
     );
     const planWatcher = vscode.workspace.createFileSystemWatcher('**/*.{md,mdx,txt}');
     this.watchers = [imageWatcher, planWatcher];
+    // Agents stream writes into plan/doc files; every fs event running an
+    // un-debounced refresh (findFiles plus git per worktree) would keep the
+    // whole pipeline busy. The 250 ms debounce coalesces the bursts.
     imageWatcher.onDidCreate(() => this.refreshImagesIfEnabled());
     imageWatcher.onDidChange(() => this.refreshImagesIfEnabled());
     imageWatcher.onDidDelete(() => this.refreshImagesIfEnabled());
-    planWatcher.onDidCreate(() => void this.refresh());
-    planWatcher.onDidChange(() => void this.refresh());
-    planWatcher.onDidDelete(() => void this.refresh());
+    planWatcher.onDidCreate(() => this.scheduleRefresh());
+    planWatcher.onDidChange(() => this.scheduleRefresh());
+    planWatcher.onDidDelete(() => this.scheduleRefresh());
     this.disposables.push(
       sessions.onDidSelectSession(() => this.scheduleRefresh()),
       sessions.onDidChange(() => {
@@ -269,7 +276,7 @@ export class ReviewTreeProvider
           ? this.changeGroups
           : [
               new ReviewTreeItem('message', this.changeMessage, {
-                description: 'Launch an agent in a Git worktree'
+                description: 'Launch an agent inside a Git repository'
               })
             ];
       case 'images':
@@ -344,7 +351,7 @@ export class ReviewTreeProvider
 
   private refreshImagesIfEnabled(): void {
     if (imagesEnabled()) {
-      void this.refresh();
+      this.scheduleRefresh();
     }
   }
 
@@ -480,13 +487,18 @@ export class ReviewTreeProvider
     this.changeCount = 0;
     this.changesByWorktree.clear();
     if (worktrees.length === 0) {
-      this.changeMessage = 'No open agents have a Git worktree baseline';
+      this.changeMessage = 'No open agents have a Git baseline';
       return;
     }
 
     for (const worktree of worktrees) {
       const baseline = worktree.session.baseline!;
-      const branchChanged = worktree.state.branch !== baseline.branch;
+      // Detached checkouts both report the pseudo-branch HEAD, so the commit
+      // is the only signal that the captured baseline went stale.
+      const branchChanged =
+        worktree.state.branch !== baseline.branch ||
+        (worktree.state.branch === 'HEAD' &&
+          worktree.state.commit !== baseline.commit);
       const changes = worktree.changes
         ? excludeWorkspaceArtifacts(
             worktree.changes,
@@ -494,18 +506,36 @@ export class ReviewTreeProvider
             this.planPaths
           )
         : undefined;
-      const changeItems = changes
+      const visibleChanges = changes?.slice(
+        0,
+        ReviewTreeProvider.maxChangesPerWorktree
+      );
+      const changeItems = changes && visibleChanges
         ? changes.length > 0
-          ? changes.map(
-              (change) =>
-                new ReviewTreeItem('change', path.basename(change.path), {
-                  change,
-                  sessionId: worktree.session.id,
-                  uri: vscode.Uri.file(
-                    path.join(baseline.repoRoot, change.path)
-                  )
-                })
-            )
+          ? [
+              ...visibleChanges.map(
+                (change) =>
+                  new ReviewTreeItem('change', path.basename(change.path), {
+                    change,
+                    sessionId: worktree.session.id,
+                    uri: vscode.Uri.file(
+                      path.join(baseline.repoRoot, change.path)
+                    )
+                  })
+              ),
+              ...(changes.length > visibleChanges.length
+                ? [
+                    new ReviewTreeItem(
+                      'message',
+                      `…${changes.length - visibleChanges.length} more changes`,
+                      {
+                        description:
+                          'Open Source Control for the full list'
+                      }
+                    )
+                  ]
+                : [])
+            ]
           : [new ReviewTreeItem('message', 'No workspace changes')]
         : [new ReviewTreeItem('message', 'Git changes could not be read')];
       const childItems = branchChanged

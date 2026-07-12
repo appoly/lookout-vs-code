@@ -225,3 +225,86 @@ test('a finished turn clears any lingering running commands', () => {
   );
   assert.deepEqual(finished.runningCommands, []);
 });
+
+test('a clean turn end goes idle when the last delegated agent drains later', () => {
+  const starting = createSession('claude', 'Drain', 'claude', '/repo', 1, 's-drain');
+  const working = applyAgentEvent(
+    starting,
+    { kind: 'status', sessionId: 's-drain', status: 'running' },
+    2
+  );
+  const delegated = applyAgentEvent(
+    working,
+    {
+      kind: 'background-start',
+      sessionId: 's-drain',
+      agentId: 'child-d',
+      agentLabel: 'Explore'
+    },
+    3
+  );
+  const turnEnded = applyAgentEvent(
+    delegated,
+    { kind: 'foreground-stop', sessionId: 's-drain', reason: 'turn-end' },
+    4
+  );
+  assert.equal(turnEnded.status, 'background');
+
+  const drained = applyAgentEvent(
+    turnEnded,
+    {
+      kind: 'background-stop',
+      sessionId: 's-drain',
+      agentId: 'child-d',
+      agentLabel: 'Explore'
+    },
+    5
+  );
+  assert.equal(drained.status, 'idle');
+  assert.equal(drained.latestEvent, 'Agent finished');
+  assert.equal(drained.unread, true);
+});
+
+test('a tool call clears a mid-turn permission attention', () => {
+  const starting = createSession('claude', 'Approve', 'claude', '/repo', 1, 's-perm');
+  const working = applyAgentEvent(
+    starting,
+    { kind: 'status', sessionId: 's-perm', status: 'running' },
+    2
+  );
+  const needsPermission = applyAgentEvent(
+    working,
+    {
+      kind: 'status',
+      sessionId: 's-perm',
+      status: 'attention',
+      message: 'Claude needs permission'
+    },
+    3
+  );
+  assert.equal(needsPermission.status, 'attention');
+
+  const approved = applyAgentEvent(
+    needsPermission,
+    {
+      kind: 'command-start',
+      sessionId: 's-perm',
+      commandId: 'tool-1',
+      command: 'npm test'
+    },
+    4
+  );
+  assert.equal(approved.status, 'running');
+  assert.equal(approved.latestEvent, 'Agent is working');
+  assert.deepEqual(
+    approved.runningCommands.map((entry) => entry.command),
+    ['npm test']
+  );
+
+  const stillWaiting = applyAgentEvent(
+    needsPermission,
+    { kind: 'foreground-stop', sessionId: 's-perm' },
+    5
+  );
+  assert.equal(stillWaiting.status, 'attention');
+});

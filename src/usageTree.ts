@@ -19,7 +19,7 @@ export class UsageTreeItem extends vscode.TreeItem {
     if (value.kind === 'provider') {
       this.description = providerDescription(value.snapshot);
       this.iconPath = providerIcon(value.snapshot);
-      this.tooltip = `${value.snapshot.provider} usage from ${value.snapshot.source}\nLast checked ${new Date(value.snapshot.observedAt).toLocaleString()}`;
+      this.tooltip = `${title(value.snapshot.provider)} usage from ${sourceLabel(value.snapshot.source)}\nLast checked ${new Date(value.snapshot.observedAt).toLocaleString()}`;
     } else if (value.kind === 'window') {
       this.description = formatResetDescription(value.window.resetsAt);
       this.iconPath = usageIcon(value.window.usedPercent);
@@ -68,7 +68,7 @@ export class UsageTreeProvider
         new UsageTreeItem({
           kind: 'detail',
           label: snapshot.detail,
-          description: snapshot.status
+          description: statusLabel(snapshot.status)
         })
       );
     }
@@ -102,7 +102,6 @@ export class UsageStatusBar implements vscode.Disposable {
     this.item.command = 'workbench.view.extension.lookout';
     this.subscription = manager.onDidChange(() => this.render());
     this.render();
-    this.item.show();
   }
 
   public dispose(): void {
@@ -112,6 +111,10 @@ export class UsageStatusBar implements vscode.Disposable {
 
   private render(): void {
     const values = this.manager.list();
+    if (values.length === 0) {
+      this.item.hide();
+      return;
+    }
     const pieces = values.map((snapshot) => {
       const window = selectStatusWindow(snapshot);
       if (!window) {
@@ -127,13 +130,14 @@ export class UsageStatusBar implements vscode.Disposable {
       })
     );
     this.item.text = `$(dashboard) ${pieces.join(' · ')}`;
-    this.item.tooltip = 'Lookout usage limits — click to open the cockpit';
+    this.item.tooltip = 'Lookout usage limits — click to open the Lookout view';
     this.item.backgroundColor =
       highestUsage >= criticalThreshold()
         ? new vscode.ThemeColor('statusBarItem.errorBackground')
         : highestUsage >= warningThreshold()
           ? new vscode.ThemeColor('statusBarItem.warningBackground')
           : undefined;
+    this.item.show();
   }
 }
 
@@ -151,9 +155,19 @@ function title(provider: UsageSnapshot['provider']): string {
   return provider === 'codex' ? 'Codex' : 'Claude';
 }
 
+function sourceLabel(source: UsageSnapshot['source']): string {
+  return source === 'codex-app-server'
+    ? 'the Codex app-server'
+    : 'the Claude status line';
+}
+
+function statusLabel(status: UsageSnapshot['status']): string {
+  return status === 'authRequired' ? 'sign-in required' : status;
+}
+
 function providerDescription(snapshot: UsageSnapshot): string {
   const plan = snapshot.plan ? `${snapshot.plan} · ` : '';
-  return `${plan}${snapshot.status}`;
+  return `${plan}${statusLabel(snapshot.status)}`;
 }
 
 function providerIcon(snapshot: UsageSnapshot): vscode.ThemeIcon {

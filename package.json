@@ -1,7 +1,7 @@
 {
   "name": "lookout",
   "displayName": "Lookout",
-  "description": "Run, monitor, and review Codex, Claude Code, and custom terminal agents without leaving VS Code.",
+  "description": "Run, monitor, and review Codex, Claude Code, and custom terminal agents in parallel without leaving VS Code.",
   "version": "0.1.0",
   "publisher": "adamh",
   "license": "MIT",
@@ -377,6 +377,40 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "lookout.focusSession",
+          "when": "false"
+        },
+        {
+          "command": "lookout.renameSession",
+          "when": "false"
+        },
+        {
+          "command": "lookout.closeSession",
+          "when": "false"
+        },
+        {
+          "command": "lookout.restartSession",
+          "when": "false"
+        },
+        {
+          "command": "lookout.markNeedsAttention",
+          "when": "false"
+        },
+        {
+          "command": "lookout.copyNotifyCommand",
+          "when": "false"
+        },
+        {
+          "command": "lookout.splitSession",
+          "when": "false"
+        },
+        {
+          "command": "lookout.openReviewItem",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "lookout.launchAgent",
@@ -384,14 +418,9 @@
           "group": "navigation@1"
         },
         {
-          "command": "lookout.refreshSessions",
-          "when": "view == lookout.sessions",
-          "group": "navigation@3"
-        },
-        {
-          "command": "lookout.muteAttentionSound",
-          "when": "view == lookout.sessions && lookout.attentionSoundEnabled",
-          "group": "navigation@5"
+          "command": "lookout.launchAgentInWorktree",
+          "when": "view == lookout.sessions && isWorkspaceTrusted",
+          "group": "navigation@2"
         },
         {
           "command": "lookout.adoptTerminal",
@@ -399,9 +428,14 @@
           "group": "navigation@3"
         },
         {
-          "command": "lookout.launchAgentInWorktree",
-          "when": "view == lookout.sessions && isWorkspaceTrusted",
+          "command": "lookout.refreshSessions",
+          "when": "view == lookout.sessions",
           "group": "navigation@4"
+        },
+        {
+          "command": "lookout.muteAttentionSound",
+          "when": "view == lookout.sessions && lookout.attentionSoundEnabled",
+          "group": "navigation@5"
         },
         {
           "command": "lookout.unmuteAttentionSound",
@@ -568,7 +602,7 @@
         "lookout.attentionSound.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Play Lookout's bell when an unattended agent starts waiting for user input."
+          "description": "Play Lookout's bell when an unattended agent starts waiting for input, finishes a turn, or exits."
         },
         "lookout.attentionSound.volume": {
           "type": "number",
@@ -580,7 +614,7 @@
         "lookout.usage.codex.executable": {
           "type": "string",
           "default": "codex",
-          "description": "Codex executable used for structured rate-limit queries."
+          "description": "Codex executable used for structured rate-limit queries. Reload the window after changing this setting."
         },
         "lookout.usage.codex.enabled": {
           "type": "boolean",
