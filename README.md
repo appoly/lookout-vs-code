@@ -1,91 +1,178 @@
 # Lookout for VS Code
 
-Lookout is a VS Code-native cockpit for running parallel terminal coding agents while retaining space for the work that needs human review: diffs, plans, screenshots, and a local browser. The name describes its job directly: watch several active coding sessions, surface the one that needs a human, and return you to native VS Code review. (Previously named Paraterm, then Parful.)
+Run, monitor, and review several terminal coding agents while VS Code remains
+your editor, diff viewer, task runner, and source-control client.
 
-It takes the useful interaction model from cmux—named agent sessions, fast attention routing, split terminals, and review surfaces—but lets VS Code remain the code editor, diff viewer, image viewer, source-control client, and browser host.
+> **Preview:** Lookout 0.1 is an early public release. The core workflow is
+> tested, but provider CLI integrations and remote-platform behavior can change
+> as Codex, Claude Code, and VS Code evolve.
 
-> **Development status:** TypeScript, lint, unit/integration tests, and VSIX packaging pass. The first full manual smoke run is complete; its fixes now need a focused Extension Development Host rerun.
+Lookout is built around one loop:
 
-## Product principle: use VS Code
+```text
+launch agents → keep coding → see who needs attention → jump there → review the work
+```
 
-Lookout is an orchestration layer over VS Code, not a terminal emulator inside a webview. Agent sessions use native terminal editors and terminal splits. Changes open in `vscode.diff`; screenshots use the image editor; plans use Markdown editors; compiler/language-server diagnostics come from VS Code's Problems model; configured tasks run through the Tasks API; source control stays in SCM; and local URLs use Simple Browser when it is available.
+It uses native VS Code terminals and review surfaces instead of putting another
+terminal emulator or code viewer inside a webview.
 
-That keeps the rest of the editor ecosystem—navigation, themes, accessibility, extensions, remote workspaces, editor groups, and keyboard customization—available while several agents are running.
+## What Lookout adds
 
-## Intended workflow
+- **Agents** — launch Codex, Claude Code, or a custom command in a named native
+  terminal. Focus, split, rename, restart, adopt, and safely remove sessions from
+  one tree.
+- **Attention routing** — explicit provider lifecycle hooks distinguish working,
+  delegated-agent activity, authorization checks, finished turns, and genuine
+  waits for input. Unread badges, status-bar state, notifications, and an optional
+  bell make background work visible.
+- **Review** — open Git changes as native diffs against each session's launch
+  commit. Worktree grouping, branch-switch warnings, plans/docs, diagnostics,
+  Tasks, Test Explorer, debugging, Source Control, recent images, and a local
+  browser remain VS Code-owned surfaces.
+- **Usage Limits** — show authoritative Codex and Claude account windows and
+  reset times. Unknown, stale, unsupported, and signed-out states stay distinct
+  from zero usage.
+- **Isolated worktrees** — optionally create and launch an agent in a sibling Git
+  worktree when parallel tasks should not share a working tree.
 
-1. Launch named Codex or Claude Code sessions into terminal editors, not the bottom panel.
-2. Leave a code-review/editor group visible alongside those agents.
-3. Let an agent signal attention; jump directly to its terminal from the Lookout sidebar.
-4. Review its workspace screenshots, plans, source-control changes, or local web app without leaving VS Code.
-5. Keep an eye on the account-level Codex and Claude subscription windows before starting more work.
+## Requirements
 
-## Current design
+- VS Code Desktop 1.96.0 or newer. Lookout is not a browser/web extension.
+- At least one terminal agent command: `codex`, `claude`, or a custom command.
+- Git for change baselines, worktree creation, and the Review view.
+- Node.js on the agent terminal's `PATH` for Codex/Claude lifecycle hooks and the
+  Claude usage bridge. Core terminal launching still works when those integrations
+  are disabled.
+- A trusted workspace for anything that launches commands. Review and usage
+  remain available in Restricted Mode.
 
-The extension contributes a **Lookout** activity-bar container with:
+Lookout does not install or authenticate agent CLIs for you. Sign in through each
+provider's own CLI before relying on lifecycle or usage information.
 
-- **Agents** — the `+` action chooses an enabled provider, a working folder, and launches with a default renameable label. Existing native terminals can be adopted explicitly. Focus, split, rename, guarded restart, inline removal, unread badge, and attention-first status text keep parallel sessions scannable. An unattended waiting/completed agent plays a volume-controlled bell; the toolbar reflects mute state and links to sound settings.
-- **Review** — Git changes grouped by worktree as native diffs, with **agent name → repository** prominent and the live branch in grey description text. A branch switch is shown as `launch → current` with a stale-baseline warning. Plans & Docs contains only matching Git changes made since an attached open agent launched, grouped under the same honest worktree labels and excluded from ordinary changes. Diagnostics, Test Explorer, test tasks, debugging, Source Control, general Tasks, and browser shortcuts remain native. Canonical Compound Engineering paths are labelled by artifact type. Recent images are opt-in.
-- **Usage Limits** — independently enabled Codex and Claude account quota windows with reset times and a compact status-bar summary.
+## Quick start
 
-The default terminal location is the editor area. New terminals use the second editor column or split beside an existing agent; review resources open in the first editor column.
+1. Install Lookout from the VS Code Marketplace, or install a release VSIX with
+   **Extensions: Install from VSIX…**.
+2. Open a trusted Git workspace and select the **Lookout** icon in the Activity
+   Bar.
+3. In **Agents**, select `+`, choose Codex, Claude Code, or Custom, then choose a
+   working folder. New terminals open in the editor area by default; change
+   `lookout.terminals.location` to `panel` if preferred.
+4. Give each session a useful label, then let agents work in parallel. Select a
+   row or use **Lookout: Focus Next Agent Needing Attention** to jump directly to
+   the terminal that needs you.
+5. Use **Review** to inspect native diffs and plans, run tasks or tests, open
+   Source Control, and return to the agent with feedback.
 
-## Review it locally
+On the first Codex launch, Lookout explains the one-time `/hooks` review needed
+for full lifecycle detail. The turn-complete fallback works before those hooks
+are trusted. Claude integrations are passed through a generated, session-local
+`--settings` file; Lookout never modifies your user or repository Claude settings.
+
+## Useful commands
+
+| Command | Purpose |
+| --- | --- |
+| `Lookout: New Agent…` | Choose a provider and working folder. |
+| `Lookout: New Agent in Isolated Worktree…` | Create a sibling worktree, then launch there. |
+| `Lookout: Adopt Existing Terminal as Agent…` | Add an existing native terminal to the Agents view. |
+| `Lookout: Focus Agent…` | Jump to any named agent. |
+| `Lookout: Focus Next Agent Needing Attention` | Triage the next unread session. |
+| `Lookout: Open Review Layout` | Restore a two-column agent/review layout. |
+| `Lookout: Configure Attention Sound` | Open the bell enablement and volume settings. |
+| `Lookout: Open Browser` | Open a local URL in VS Code's browser when available. |
+
+The default shortcuts are `Ctrl+Alt+C` / `Cmd+Alt+C` for Codex,
+`Ctrl+Alt+A` / `Cmd+Alt+A` for Claude Code, and `Ctrl+Alt+N` /
+`Cmd+Alt+N` for the next agent needing attention. All shortcuts can be changed
+in Keyboard Shortcuts.
+
+## Provider and usage settings
+
+The most common settings are:
+
+- `lookout.codex.command` and `lookout.claude.command` — provider launch commands;
+- `lookout.codex.enabled` and `lookout.claude.enabled` — entries shown in the
+  new-agent picker;
+- `lookout.codex.lifecycleIntegration` and
+  `lookout.claude.lifecycleIntegration` — session-local lifecycle hooks;
+- `lookout.usage.codex.enabled` and `lookout.usage.claude.enabled` — usage
+  providers and UI;
+- `lookout.terminals.location` — `editor` or `panel`;
+- `lookout.notifyOnAttention`, `lookout.notifyOnTurnComplete`, and
+  `lookout.notifyOnAgentExit` — notification behavior;
+- `lookout.attentionSound.enabled` and `lookout.attentionSound.volume` — the
+  synthesized local bell;
+- `lookout.review.showRecentImages` — opt in to recent-image scanning.
+
+Codex usage comes from the CLI's app-server JSON-RPC rate-limit method. Claude
+usage comes from its documented custom status-line JSON after the first response
+in a Lookout-launched session. Both are account-wide limits, not per-terminal
+budgets.
+
+## Privacy and security
+
+Lookout contains no telemetry or analytics and sends nothing to a Lookout-owned
+server. It does not read authentication files or terminal output. Lifecycle
+events use a random bearer token over a size-limited HTTP server bound only to
+`127.0.0.1`; custom agent commands are not persisted. Workspace-provided command
+settings are restricted in untrusted workspaces, and execution commands are
+disabled until the workspace is trusted.
+
+The agent CLIs you launch remain separate software with their own network and
+data-handling behavior. See [PRIVACY.md](PRIVACY.md) for exactly what Lookout
+stores and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
+
+## Known limitations
+
+- Lookout never infers attention from terminal output. Custom agents must invoke
+  the copied attention-hook command when they need to signal Lookout.
+- Shared-worktree changes are attributed to the worktree and its attached agents,
+  never claimed as the work of one specific agent. Use isolated worktrees when
+  per-agent attribution matters.
+- Provider-owned delegated agents are represented as lifecycle state, not as
+  separate terminal panes.
+- Virtual workspaces such as `vscode.dev` are unsupported because Lookout needs
+  native terminals, filesystem paths, and Git processes.
+- Arbitrary tmux-style spatial layouts, terminal transcript storage, and browser
+  automation are deliberately out of scope.
+
+## Optional Compound Engineering compatibility
+
+Lookout recognizes common plan, research, solution, todo, and changelog paths.
+For a fuller artifact convention, it is compatible with
+[The Workshop](https://github.com/adamhulme/the-workshop), a separately released
+skill pack. Lookout does not bundle, install, or update it.
+
+## Development
 
 ```bash
 npm ci
 npm run check
 npm run test:integration
-```
-
-The integration command launches an isolated VS Code Extension Development
-Host and exercises the core launch → attention → review → close loop. See
-[the testing guide](docs/TESTING.md) for the automated coverage and the small
-manual compatibility checklist that remains.
-
-Open this repository in VS Code, open **Run and Debug**, select **Run Lookout**, and press `F5`. A second Extension Development Host window opens. Select the **Lookout** activity-bar icon there and use **Lookout: Launch Codex Agent** or **Lookout: Launch Claude Code Agent**.
-
-To install it like a normal extension instead:
-
-```bash
 npm run vsix
 ```
 
-Then run **Extensions: Install from VSIX…**, select `lookout-0.1.0.vsix`, and reload VS Code.
+The extension-host suite exercises activation, terminal launch and splitting,
+authenticated attention routing, Git review baselines, and terminal closure.
+CI runs it against both VS Code 1.96.0 and Stable. See
+[docs/TESTING.md](docs/TESTING.md) for test details and
+[docs/RELEASE.md](docs/RELEASE.md) for the release checklist.
 
-## Usage-limit sources
+To work interactively, open this repository in VS Code, select **Run Lookout**
+in Run and Debug, and press `F5`.
 
-This project deliberately avoids screen scraping and reading authentication files.
+## Project records
 
-- Codex uses the CLI's app-server JSON-RPC method `account/rateLimits/read`, then listens for rate-limit updates. The result contains actual rolling window percentage and reset timestamps. See [the Codex app-server documentation](https://developers.openai.com/codex/app-server).
-- Claude uses its documented custom status-line JSON for Lookout-launched Claude sessions. It provides five-hour and seven-day percentage/reset fields after the first response. See [Claude Code status lines](https://code.claude.com/docs/en/statusline).
-
-Both providers expose account-wide limits, not per-terminal budgets. “Unavailable” is intentionally distinct from zero.
-
-## Compound Engineering compatibility
-
-Lookout works with ordinary Codex, Claude Code, and custom terminal agents. For maximum compatibility, install [The Workshop](https://github.com/adamhulme/the-workshop), the separately released Compound Engineering skill pack used to shape Lookout's artifact and worktree conventions:
-
-```bash
-git clone https://github.com/adamhulme/the-workshop.git
-cd the-workshop
-./install.sh --both
-```
-
-The Workshop keeps native adapters for Claude and Codex while sharing durable artifacts under `docs/research`, `docs/brainstorms`, `docs/plans`, `docs/fleet`, `docs/solutions`, and `docs/changelog.md`. Lookout discovers these across active agent worktrees and opens them in native VS Code editors. It does not bundle, silently install, or update the skills; their release lifecycle remains independent. See [the integration plan](docs/plans/workshop-integration.md).
-
-## Scope deliberately deferred
-
-- Arbitrary cmux-like spatial layout beyond VS Code terminal-editor groups/splits.
-- Terminal-output parsing for “waiting for input.” Lookout uses provider hooks/notifications where available and otherwise reports only that the session is active.
-- tmux/SSH multiplexing, separate visual panes for provider-owned delegated agents, browser automation, and automatic worktree creation.
-- Proven attribution of a shared-worktree change to one specific agent; the current view is explicitly workspace-scoped from the captured commit.
-
-## Further reading
-
-- [Product and technical research record](docs/RESEARCH.md)
 - [Product and architecture decisions](docs/DECISIONS.md)
 - [Implementation roadmap](docs/ROADMAP.md)
-- [Workshop compatibility research](docs/research/context/the-workshop-integration.md)
-- [Workshop integration plan](docs/plans/workshop-integration.md)
-- [Latest session checkpoint](docs/sessions/2026-07-10-delegated-agents.md)
+- [Interactive release test plan](docs/TESTPLAN.txt)
+- [Product and technical research](docs/RESEARCH.md)
+
+Lookout is available under the [MIT License](LICENSE). Support requests belong in
+the [issue tracker](https://github.com/adamhulme/lookout-vs-code/issues); please
+read [SUPPORT.md](SUPPORT.md) before filing one.
+
+Lookout is an independent open-source project and is not affiliated with OpenAI
+or Anthropic. Codex, Claude, and Claude Code are trademarks of their respective
+owners.

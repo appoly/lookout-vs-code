@@ -10,7 +10,11 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,17 +24,28 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run vsix
+      - run: npm run audit:runtime
+        if: runner.os == 'Linux'
       - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
         with:
           name: lookout-vsix
           path: "*.vsix"
 
   extension-host:
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        vscode: ["1.96.0", "stable"]
+        include:
+          - os: ubuntu-latest
+            vscode: "1.96.0"
+          - os: ubuntu-latest
+            vscode: stable
+          - os: windows-latest
+            vscode: stable
+          - os: macos-latest
+            vscode: stable
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,5 +54,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: xvfb-run -a npm run test:integration
+        if: runner.os == 'Linux'
+        env:
+          LOOKOUT_VSCODE_VERSION: ${{ matrix.vscode }}
+      - run: npm run test:integration
+        if: runner.os != 'Linux'
+        env:
+          LOOKOUT_VSCODE_VERSION: ${{ matrix.vscode }}
+      - run: npm run verify:vsix
+        if: runner.os == 'Linux' && matrix.vscode == 'stable'
         env:
           LOOKOUT_VSCODE_VERSION: ${{ matrix.vscode }}

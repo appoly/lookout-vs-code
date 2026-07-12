@@ -1,10 +1,17 @@
 {
   "name": "lookout",
   "displayName": "Lookout",
-  "description": "Run and review multiple terminal coding agents without leaving VS Code.",
+  "description": "Run, monitor, and review Codex, Claude Code, and custom terminal agents without leaving VS Code.",
   "version": "0.1.0",
   "publisher": "adamh",
   "license": "MIT",
+  "preview": true,
+  "pricing": "Free",
+  "icon": "resources/icon.png",
+  "galleryBanner": {
+    "color": "#101827",
+    "theme": "dark"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/adamhulme/lookout-vs-code.git"
@@ -17,14 +24,24 @@
     "vscode": "^1.96.0"
   },
   "categories": [
-    "Other",
-    "Visualization"
+    "AI",
+    "Visualization",
+    "Other"
   ],
   "keywords": [
+    "ai",
+    "coding agent",
+    "multi-agent",
     "terminal",
     "agents",
     "codex",
+    "codex cli",
     "claude",
+    "claude code",
+    "worktree",
+    "code review",
+    "usage limits",
+    "orchestration",
     "multiplexer"
   ],
   "activationEvents": [],
@@ -38,6 +55,10 @@
         "lookout.claude.command",
         "lookout.usage.codex.executable"
       ]
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Lookout requires native terminals, local or remote filesystem paths, and Git processes."
     }
   },
   "files": [
@@ -45,6 +66,9 @@
     "resources/**",
     "README.md",
     "CHANGELOG.md",
+    "PRIVACY.md",
+    "SECURITY.md",
+    "SUPPORT.md",
     "LICENSE"
   ],
   "scripts": {
@@ -56,8 +80,11 @@
     "lint": "eslint src test",
     "test": "npm run compile && node --test out/test/**/*.test.js",
     "test:integration": "npm run compile && vscode-test --label integration --fail-zero --forbid-only",
+    "verify:vsix": "npm run vsix && node scripts/verify-vsix.mjs",
     "check": "npm run lint && npm test",
     "check:all": "npm run check && npm run test:integration",
+    "audit:runtime": "npm audit --omit=dev",
+    "check:release": "npm run check:all && npm run audit:runtime && npm run verify:vsix",
     "vsix": "vsce package --no-dependencies"
   },
   "devDependencies": {
@@ -78,45 +105,53 @@
         "command": "lookout.launchAgent",
         "title": "New Agent…",
         "category": "Lookout",
+        "enablement": "isWorkspaceTrusted",
         "icon": "$(add)"
       },
       {
         "command": "lookout.launchCodex",
         "title": "Launch Codex Agent",
         "category": "Lookout",
+        "enablement": "isWorkspaceTrusted",
         "icon": "$(add)"
       },
       {
         "command": "lookout.launchClaude",
         "title": "Launch Claude Code Agent",
         "category": "Lookout",
+        "enablement": "isWorkspaceTrusted",
         "icon": "$(add)"
       },
       {
         "command": "lookout.launchCustom",
         "title": "Launch Custom Agent",
-        "category": "Lookout"
+        "category": "Lookout",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "lookout.launchAgentInWorktree",
         "title": "New Agent in Isolated Worktree…",
         "category": "Lookout",
+        "enablement": "isWorkspaceTrusted",
         "icon": "$(git-branch-create)"
       },
       {
         "command": "lookout.splitCodex",
         "title": "Split with Codex",
-        "category": "Lookout"
+        "category": "Lookout",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "lookout.splitClaude",
         "title": "Split with Claude Code",
-        "category": "Lookout"
+        "category": "Lookout",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "lookout.splitSession",
         "title": "Split with Same Agent",
         "category": "Lookout",
+        "enablement": "isWorkspaceTrusted",
         "icon": "$(split-horizontal)"
       },
       {
@@ -143,12 +178,14 @@
       {
         "command": "lookout.restartSession",
         "title": "Restart Agent Command",
-        "category": "Lookout"
+        "category": "Lookout",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "lookout.copyNotifyCommand",
         "title": "Copy Attention Hook Command",
-        "category": "Lookout"
+        "category": "Lookout",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "lookout.focusNextAttention",
@@ -187,6 +224,7 @@
         "command": "lookout.adoptTerminal",
         "title": "Adopt Existing Terminal as Agent…",
         "category": "Lookout",
+        "enablement": "isWorkspaceTrusted",
         "icon": "$(link)"
       },
       {
@@ -247,12 +285,14 @@
         "command": "lookout.runTestTask",
         "title": "Run Test Task",
         "category": "Lookout",
+        "enablement": "isWorkspaceTrusted",
         "icon": "$(run)"
       },
       {
         "command": "lookout.startDebug",
         "title": "Start Debugging…",
         "category": "Lookout",
+        "enablement": "isWorkspaceTrusted",
         "icon": "$(debug-alt)"
       },
       {
@@ -265,6 +305,7 @@
         "command": "lookout.runTask",
         "title": "Run Workspace Task",
         "category": "Lookout",
+        "enablement": "isWorkspaceTrusted",
         "icon": "$(play)"
       },
       {
@@ -326,14 +367,20 @@
     "viewsWelcome": [
       {
         "view": "lookout.sessions",
-        "contents": "No agents are running.\n[Launch Codex](command:lookout.launchCodex)\n[Launch Claude Code](command:lookout.launchClaude)\n[Adopt an existing terminal](command:lookout.adoptTerminal)"
+        "contents": "No agents are running.\n[Launch Codex](command:lookout.launchCodex)\n[Launch Claude Code](command:lookout.launchClaude)\n[Adopt an existing terminal](command:lookout.adoptTerminal)",
+        "when": "isWorkspaceTrusted"
+      },
+      {
+        "view": "lookout.sessions",
+        "contents": "Trust this workspace to launch or adopt terminal agents. Review and usage views remain available.\n[Manage Workspace Trust](command:workbench.trust.manage)",
+        "when": "!isWorkspaceTrusted"
       }
     ],
     "menus": {
       "view/title": [
         {
           "command": "lookout.launchAgent",
-          "when": "view == lookout.sessions",
+          "when": "view == lookout.sessions && isWorkspaceTrusted",
           "group": "navigation@1"
         },
         {
@@ -348,12 +395,12 @@
         },
         {
           "command": "lookout.adoptTerminal",
-          "when": "view == lookout.sessions",
+          "when": "view == lookout.sessions && isWorkspaceTrusted",
           "group": "navigation@3"
         },
         {
           "command": "lookout.launchAgentInWorktree",
-          "when": "view == lookout.sessions",
+          "when": "view == lookout.sessions && isWorkspaceTrusted",
           "group": "navigation@4"
         },
         {
@@ -378,7 +425,7 @@
         },
         {
           "command": "lookout.runTask",
-          "when": "view == lookout.review",
+          "when": "view == lookout.review && isWorkspaceTrusted",
           "group": "navigation@3"
         },
         {
@@ -395,14 +442,14 @@
       "terminal/context": [
         {
           "command": "lookout.adoptTerminal",
-          "when": "terminalIsOpen",
+          "when": "terminalIsOpen && isWorkspaceTrusted",
           "group": "navigation@10"
         }
       ],
       "view/item/context": [
         {
           "command": "lookout.splitSession",
-          "when": "view == lookout.sessions && viewItem == lookout.session",
+          "when": "view == lookout.sessions && viewItem == lookout.session && isWorkspaceTrusted",
           "group": "inline@1"
         },
         {
@@ -412,12 +459,12 @@
         },
         {
           "command": "lookout.runTestTask",
-          "when": "view == lookout.review",
+          "when": "view == lookout.review && isWorkspaceTrusted",
           "group": "lookout@2"
         },
         {
           "command": "lookout.startDebug",
-          "when": "view == lookout.review",
+          "when": "view == lookout.review && isWorkspaceTrusted",
           "group": "lookout@3"
         },
         {
@@ -437,12 +484,12 @@
         },
         {
           "command": "lookout.restartSession",
-          "when": "view == lookout.sessions && viewItem == lookout.session",
+          "when": "view == lookout.sessions && viewItem == lookout.session && isWorkspaceTrusted",
           "group": "lookout@2"
         },
         {
           "command": "lookout.copyNotifyCommand",
-          "when": "view == lookout.sessions && viewItem == lookout.session",
+          "when": "view == lookout.sessions && viewItem == lookout.session && isWorkspaceTrusted",
           "group": "lookout@3"
         },
         {

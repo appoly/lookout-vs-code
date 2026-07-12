@@ -3,7 +3,7 @@ Plan written 2026-07-10 against commit b43bfcb. Record results in
 docs/sessions/2026-07-10-smoke.md (one line per numbered item).
 
 Already verified automatically — do not re-test manually:
-  npm run check green (29 unit tests, 10 files); the extension-host suite
+  npm run check green (34 unit tests, 11 files); the extension-host suite
   covers 6 core-loop cases on minimum and Stable VS Code; npm run vsix packages;
   zero multiTerm/paraterm/parapp remnants in code or manifest.
 
@@ -13,7 +13,8 @@ SETUP (once)
   - A scratch git repo opened as a trusted workspace.
   - Test BOTH install paths: F5 "Run Lookout" (Extension Development
     Host), then npm run vsix -> Extensions: Install from VSIX. The
-    installed-VSIX path has never been exercised.
+     interactive installed-VSIX path has never been exercised (CLI packaging,
+     installation, and identity verification are automated).
 
 A. RENAME INTEGRITY (~5 min)
   1. Activity bar shows a Lookout icon; Agents, Review, and Usage

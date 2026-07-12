@@ -13,6 +13,9 @@ npm run compile   # tsc -p ./  (outputs to out/)
 npm run lint      # eslint src test
 npm test          # compile, then node --test out/test/**/*.test.js
 npm run check     # lint + test — what CI runs
+npm run test:integration # isolated VS Code extension-host tests
+npm run verify:vsix      # package/install the VSIX and verify its identity/version
+npm run check:release    # all tests, then package the release VSIX
 npm run vsix      # package the .vsix (vsce, --no-dependencies)
 ```
 
@@ -22,7 +25,7 @@ Run a single test file (compile first — tests run against `out/`, not `src/`):
 npm run compile && node --test out/test/sessionModel.test.js
 ```
 
-Tests use Node's built-in `node:test` runner, not a framework. There is no VS Code integration-test harness; testable logic is kept in modules that don't import `vscode` (see Architecture). Manual verification uses the Extension Development Host: F5 with the **Run Lookout** launch config.
+Fast tests use Node's built-in `node:test` runner. The integration suite under `test/integration/` uses `@vscode/test-cli` and Mocha inside an isolated Extension Development Host; CI runs it against VS Code 1.96.0 and Stable. Manual verification uses F5 with the **Run Lookout** launch config and the matrix in `docs/TESTPLAN.txt`.
 
 ## Architecture
 

@@ -30,7 +30,8 @@ The implementation plan is in [the agent-cockpit plan](plans/agent-cockpit.md). 
 - [x] Recently changed plans/docs classified separately and grouped by open agent worktree, plus optional recent images, diagnostics, Tasks, SCM, and browser commands.
 - [x] Codex and Claude account usage windows with reset times/stale states.
 - [x] User-configurable Spark quota and recent-image visibility, both quiet by default.
-- [x] Lint, strict TypeScript, ten automated test files, CI, and clean VSIX packaging.
+- [x] Lint, strict TypeScript, eleven automated unit-test files, cross-platform
+  CI, extension-host coverage, and clean VSIX packaging.
 - [x] Initial interactive Extension Development Host review.
 - [x] Deep product and extension namespace rename to Parful / `parful.*` / `PARFUL_*` before publication.
 - [x] Cross-worktree Compound Engineering artifact discovery and canonical path labels.
@@ -125,15 +126,19 @@ The decision-complete design is in [the opt-in Compound Engineering plan](plans/
 - Multi-root and Remote SSH/dev-container smoke matrix.
 - [x] Extension-host integration tests on minimum and current VS Code for the core launch, attention, split, review, and close loop.
 - Add Windows and macOS CI legs for the platform-specific quoting/path branches.
-- Accessible icon polish, settings walkthrough, marketplace assets, and release automation.
+- [x] Accessible Activity Bar and 256×256 Marketplace icons, gallery banner,
+  user-first README, privacy/support/security docs, and a release checklist.
+- Settings walkthrough, real Marketplace screenshots/GIF, and publishing automation.
 
 ## Then: Marketplace release (0.1, preview)
 
 Details in [the 2026-07-10 review](sessions/2026-07-10-review.md):
 
 - Identity: publisher account, `lookout` name availability, public repository at the manifest URL, and external repository rename decision.
-- Listing: 128×128+ PNG `icon`, gallery banner, screenshots/GIF of the launch → attention → review loop, user-first README rewrite, `AI` category and agent-name keywords.
-- Build: esbuild bundling and `"preview": true`.
+- [x] Listing foundation: 256×256 PNG `icon`, gallery banner, user-first README,
+  privacy/support links, `AI` category, and agent-name keywords.
+- Listing media: screenshots/GIF of the launch → attention → review loop.
+- Build: esbuild bundling; [x] `"preview": true`.
 - Publish: tag-driven `vsce publish` and Open VSX (Cursor/VSCodium/Windsurf users).
 
 ## Release gates

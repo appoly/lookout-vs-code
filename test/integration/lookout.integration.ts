@@ -59,12 +59,15 @@ suite('Lookout extension-host integration', () => {
     assert.equal(extension?.isActive, true);
 
     const commands = new Set(await vscode.commands.getCommands(true));
-    for (const command of [
-      'lookout.launchAgent',
-      'lookout.focusNextAttention',
-      'lookout.refreshReview',
-      'lookout.openReviewItem'
-    ]) {
+    const contributedCommands = (
+      extension?.packageJSON.contributes?.commands as
+        | Array<{ command?: unknown }>
+        | undefined
+    )
+      ?.map((entry) => entry.command)
+      .filter((command): command is string => typeof command === 'string') ?? [];
+    assert.ok(contributedCommands.length > 0, 'No commands were contributed');
+    for (const command of contributedCommands) {
       assert.ok(commands.has(command), `${command} was not registered`);
     }
   });

@@ -29,6 +29,18 @@ disabled, and verifies:
 - changed-file discovery and virtual Git-baseline content;
 - closed-terminal state and session removal.
 
+The release command below packages the VSIX, installs that exact artifact into
+the isolated VS Code CLI profile, and verifies its installed ID and version:
+
+```bash
+npm run verify:vsix
+```
+
+This catches packaging and installability failures, but it does not replace the
+visual installed-VSIX walkthrough in the manual checks below.
+
+CI runs the installability check after the Stable Linux extension-host suite.
+
 Set `LOOKOUT_VSCODE_VERSION` to run another supported VS Code version. CI runs
 both the minimum declared version and Stable.
 
