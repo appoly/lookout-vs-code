@@ -68,17 +68,35 @@ export async function readGitWorktreeState(
 export async function listWorkspaceChanges(
   baseline: GitBaseline
 ): Promise<WorkspaceChange[]> {
+  return listChangesSince(baseline.repoRoot, baseline.commit);
+}
+
+/**
+ * Lists only changes that have not been committed in the current worktree.
+ * Unlike listWorkspaceChanges, this deliberately ignores commits made since an
+ * agent launched so a clean, committed branch is not presented as work at risk.
+ */
+export async function listUncommittedChanges(
+  repoRoot: string
+): Promise<WorkspaceChange[]> {
+  return listChangesSince(repoRoot, 'HEAD');
+}
+
+async function listChangesSince(
+  repoRoot: string,
+  revision: string
+): Promise<WorkspaceChange[]> {
   const [tracked, untracked] = await Promise.all([
-    runGit(baseline.repoRoot, [
+    runGit(repoRoot, [
       'diff',
       '--name-status',
       '-z',
       '--find-renames',
       '--no-ext-diff',
-      baseline.commit,
+      revision,
       '--'
     ]),
-    runGit(baseline.repoRoot, [
+    runGit(repoRoot, [
       'ls-files',
       '--others',
       '--exclude-standard',

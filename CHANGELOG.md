@@ -2,6 +2,10 @@
 
 ## 0.1.0 — Unreleased
 
+- Only warn about uncommitted work when removing an agent. Clean commits made
+  since launch no longer trigger the changes warning, and the prompt now makes
+  clear that removing an agent does not delete worktree files or Git commits.
+
 - Launch, name, focus, split, restart, adopt, and safely remove Codex, Claude
   Code, and custom agents in native VS Code terminals.
 - Route explicit working, authorization, delegated-agent, turn-complete,

@@ -13,7 +13,7 @@ import {
   withCodexLifecycleIntegration,
   type LaunchShell
 } from './agentCommand';
-import { captureGitBaseline, listWorkspaceChanges } from './gitReview';
+import { captureGitBaseline, listUncommittedChanges } from './gitReview';
 import {
   createSession,
   isActiveSession,
@@ -435,24 +435,26 @@ export class SessionManager implements vscode.Disposable {
     const session = this.sessions.get(id);
     if (terminal && session) {
       const running = isActiveSession(session);
-      let changeCount = 0;
+      let uncommittedCount = 0;
       if (session.baseline) {
         try {
-          changeCount = (await listWorkspaceChanges(session.baseline)).length;
+          uncommittedCount = (
+            await listUncommittedChanges(session.baseline.repoRoot)
+          ).length;
         } catch {
           // An unreadable Git state should not make a session impossible to remove.
         }
       }
-      if (running || changeCount > 0) {
+      if (running || uncommittedCount > 0) {
         const risks = [
           ...(running ? ['its agent command is still running'] : []),
-          ...(changeCount > 0
-            ? [`its worktree has ${changeCount} unreviewed change${changeCount === 1 ? '' : 's'}`]
+          ...(uncommittedCount > 0
+            ? [`its worktree has ${uncommittedCount} uncommitted file${uncommittedCount === 1 ? '' : 's'}`]
             : [])
         ];
         const detail = joinRisks(risks);
         const choice = await vscode.window.showWarningMessage(
-          `Remove ${session.label}? ${detail.charAt(0).toUpperCase()}${detail.slice(1)}.`,
+          `Remove ${session.label}? ${detail.charAt(0).toUpperCase()}${detail.slice(1)}. Removing the agent closes its terminal and removes its Lookout review baseline. It does not delete worktree files or Git commits.`,
           { modal: true },
           'Review Changes',
           'Remove Agent'

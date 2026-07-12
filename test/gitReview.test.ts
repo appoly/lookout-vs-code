@@ -7,6 +7,7 @@ import test from 'node:test';
 import {
   captureGitBaseline,
   excludeWorkspaceArtifacts,
+  listUncommittedChanges,
   listWorkspaceChanges,
   parseNameStatus,
   parseNullList,
@@ -68,6 +69,20 @@ test('captures a Git baseline and lists working tree changes', async () => {
       [
         ['modified', 'tracked.txt'],
         ['untracked', 'new file.txt']
+      ]
+    );
+    assert.equal((await listUncommittedChanges(directory)).length, 2);
+
+    git(directory, ['add', '.']);
+    git(directory, ['commit', '-qm', 'agent changes']);
+    assert.equal((await listUncommittedChanges(directory)).length, 0);
+    assert.deepEqual(
+      (await listWorkspaceChanges(baseline)).map(
+        ({ kind, path: filePath }) => [kind, filePath]
+      ),
+      [
+        ['added', 'new file.txt'],
+        ['modified', 'tracked.txt']
       ]
     );
     assert.equal(await readBaselineFile(baseline, 'tracked.txt'), 'baseline\n');
