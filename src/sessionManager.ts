@@ -28,6 +28,7 @@ import type {
   AgentEvent,
   AgentReportedStatus,
   AgentSession,
+  CommandResult,
   LaunchRequest
 } from './types';
 import type { UsageBridgeEvent } from './usageTypes';
@@ -35,9 +36,12 @@ import type { UsageBridgeEvent } from './usageTypes';
 const STORAGE_KEY = 'lookout.sessions.v1';
 const BRIDGE_STORAGE_KEY = 'lookout.attentionEndpoint.v1';
 const CODEX_HOOK_NOTICE_KEY = 'lookout.codexHookNotice.v1';
+const MAX_COMMAND_RESULTS_PER_SESSION = 12;
 
 export class SessionManager implements vscode.Disposable {
   private readonly sessions = new Map<string, AgentSession>();
+  private readonly commandResults = new Map<string, CommandResult[]>();
+  private commandResultSequence = 0;
   private readonly terminals = new Map<string, vscode.Terminal>();
   private readonly agentExecutions = new Map<
     string,
@@ -206,6 +210,7 @@ export class SessionManager implements vscode.Disposable {
         }
         this.terminals.delete(id);
         this.agentExecutions.delete(id);
+        this.commandResults.delete(id);
         this.sessionIdsByTerminal.delete(terminal);
         this.topologyEmitter.fire();
         this.updateSession(id, 'closed', terminal.exitStatus?.code, 'Terminal closed');
@@ -218,6 +223,15 @@ export class SessionManager implements vscode.Disposable {
         if (id) {
           this.markRead(id);
           this.selectSession(id);
+        }
+      }),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (
+          event.affectsConfiguration('lookout.review.captureCommandOutput') &&
+          !this.captureCommandOutputEnabled()
+        ) {
+          this.commandResults.clear();
+          this.changedEmitter.fire();
         }
       })
     );
@@ -233,6 +247,10 @@ export class SessionManager implements vscode.Disposable {
 
   public get(id: string): AgentSession | undefined {
     return this.sessions.get(id);
+  }
+
+  public commandResultsFor(id: string): readonly CommandResult[] {
+    return this.commandResults.get(id) ?? [];
   }
 
   public get activeCount(): number {
@@ -305,6 +323,11 @@ export class SessionManager implements vscode.Disposable {
               ),
               LOOKOUT_USAGE_URL: endpoint.url.replace(/\/events$/, '/usage')
             }
+          : {}),
+        ...(endpoint &&
+        this.captureCommandOutputEnabled() &&
+        (request.kind === 'codex' || request.kind === 'claude')
+          ? { LOOKOUT_CAPTURE_COMMAND_OUTPUT: '1' }
           : {})
       }
     });
@@ -450,6 +473,7 @@ export class SessionManager implements vscode.Disposable {
       this.sessionIdsByTerminal.delete(terminal);
       terminal.dispose();
     }
+    this.commandResults.delete(id);
     if (!this.sessions.delete(id)) {
       return;
     }
@@ -485,6 +509,7 @@ export class SessionManager implements vscode.Disposable {
     session.unread = false;
     session.backgroundAgents = [];
     session.runningCommands = [];
+    this.commandResults.delete(id);
     session.foregroundState = 'unknown';
     session.latestEvent = 'Restarting agent command';
     session.updatedAt = Date.now();
@@ -666,6 +691,25 @@ export class SessionManager implements vscode.Disposable {
       return;
     }
     let updated = applyAgentEvent(session, event);
+    if (
+      event.kind === 'command-stop' &&
+      event.result &&
+      this.captureCommandOutputEnabled()
+    ) {
+      const results = this.commandResults.get(event.sessionId) ?? [];
+      const result: CommandResult = {
+        id: `${event.commandId}-${++this.commandResultSequence}`,
+        command: event.command,
+        completedAt: Date.now(),
+        ...event.result
+      };
+      this.commandResults.set(
+        event.sessionId,
+        [...results, result].slice(
+          -MAX_COMMAND_RESULTS_PER_SESSION
+        )
+      );
+    }
     const terminal = this.terminals.get(event.sessionId);
     if (
       vscode.window.state.focused &&
@@ -717,6 +761,12 @@ export class SessionManager implements vscode.Disposable {
       .then(() => this.context.workspaceState.update(STORAGE_KEY, snapshot));
     this.changedEmitter.fire();
     return this.persistChain;
+  }
+
+  private captureCommandOutputEnabled(): boolean {
+    return vscode.workspace
+      .getConfiguration('lookout.review')
+      .get('captureCommandOutput', false);
   }
 
   private async prepareLaunchCommand(
@@ -819,6 +869,9 @@ export class SessionManager implements vscode.Disposable {
         { matcher: 'Bash', ...hookGroup(notifyHelperPath, 'command-start') }
       ],
       PostToolUse: [
+        { matcher: 'Bash', ...hookGroup(notifyHelperPath, 'command-stop') }
+      ],
+      PostToolUseFailure: [
         { matcher: 'Bash', ...hookGroup(notifyHelperPath, 'command-stop') }
       ]
     };

@@ -10,6 +10,7 @@ type EventAction =
   | 'command-start'
   | 'command-stop';
 type HookProvider = 'claude' | 'codex';
+const MAX_CAPTURED_OUTPUT_BYTES = 8 * 1024;
 
 const statuses = new Set<EventStatus>([
   'running',
@@ -49,7 +50,8 @@ async function main(): Promise<void> {
     sessionId,
     parsedArguments.action,
     parsedArguments.message,
-    providerPayload
+    providerPayload,
+    process.env.LOOKOUT_CAPTURE_COMMAND_OUTPUT === '1'
   );
 
   // PreToolUse/PostToolUse can fire for tools other than the shell (apply_patch,
@@ -140,7 +142,8 @@ function normalizeEvent(
   sessionId: string,
   action: EventAction,
   explicitMessage: string,
-  providerPayload: Record<string, unknown> | undefined
+  providerPayload: Record<string, unknown> | undefined,
+  captureCommandOutput: boolean
 ): Record<string, unknown> {
   if (action === 'turn-end') {
     return {
@@ -182,7 +185,10 @@ function normalizeEvent(
           'call_id',
           'callId'
         ]) || command,
-      command
+      command,
+      ...(action === 'command-stop' && captureCommandOutput
+        ? { result: commandResultFromPayload(providerPayload) }
+        : {})
     };
   }
   return {
@@ -191,6 +197,102 @@ function normalizeEvent(
     status: action,
     message: explicitMessage || summarizePayload(providerPayload)
   };
+}
+
+function commandResultFromPayload(
+  payload: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  const response = payload?.tool_response ?? payload?.toolResponse;
+  const responseRecord = isRecord(response) ? response : undefined;
+  const error = providerString(payload, ['error']);
+  const stdout = responseText(responseRecord, ['stdout', 'output']) ||
+    (typeof response === 'string' ? response : '');
+  const stderr = responseText(responseRecord, ['stderr']);
+  const exitCode = providerNumber(responseRecord, ['exit_code', 'exitCode']) ??
+    providerNumber(payload, ['exit_code', 'exitCode']);
+  const interrupted = responseRecord?.interrupted === true || payload?.is_interrupt === true;
+  const bounded = boundOutput(stdout, stderr);
+  return {
+    outcome: interrupted ? 'interrupted' : error || (exitCode !== undefined && exitCode !== 0) ? 'failed' : 'completed',
+    ...(typeof payload?.duration_ms === 'number' ? { durationMs: payload.duration_ms } : {}),
+    ...(exitCode !== undefined ? { exitCode } : {}),
+    ...(bounded.stdout ? { stdout: bounded.stdout } : {}),
+    ...(bounded.stderr ? { stderr: bounded.stderr } : {}),
+    ...(error ? { error } : {}),
+    ...(bounded.truncated ? { truncated: true } : {})
+  };
+}
+
+function responseText(
+  response: Record<string, unknown> | undefined,
+  keys: readonly string[]
+): string {
+  for (const key of keys) {
+    const value = response?.[key];
+    if (typeof value === 'string') {
+      return value;
+    }
+  }
+  return '';
+}
+
+function providerNumber(
+  payload: Record<string, unknown> | undefined,
+  keys: readonly string[]
+): number | undefined {
+  for (const key of keys) {
+    const value = payload?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function boundOutput(stdout: string, stderr: string): {
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly truncated: boolean;
+} {
+  const cleanStdout = sanitizeOutput(stdout);
+  const cleanStderr = sanitizeOutput(stderr);
+  const hasBoth = cleanStdout.length > 0 && cleanStderr.length > 0;
+  const stdoutLimit = hasBoth ? MAX_CAPTURED_OUTPUT_BYTES / 2 : MAX_CAPTURED_OUTPUT_BYTES;
+  const stderrLimit = hasBoth ? MAX_CAPTURED_OUTPUT_BYTES / 2 : MAX_CAPTURED_OUTPUT_BYTES;
+  const boundedStdout = tailBytes(cleanStdout, stdoutLimit);
+  const boundedStderr = tailBytes(cleanStderr, stderrLimit);
+  return {
+    stdout: boundedStdout.value,
+    stderr: boundedStderr.value,
+    truncated: boundedStdout.truncated || boundedStderr.truncated
+  };
+}
+
+function sanitizeOutput(value: string): string {
+  const ansiSequence = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, 'g');
+  return value.replace(ansiSequence, '').replace(/\0/g, '');
+}
+
+function tailBytes(value: string, limit: number): { readonly value: string; readonly truncated: boolean } {
+  if (Buffer.byteLength(value) <= limit) {
+    return { value, truncated: false };
+  }
+  const marker = '… output truncated …\n';
+  const contentLimit = limit - Buffer.byteLength(marker);
+  let start = value.length;
+  let size = 0;
+  while (start > 0) {
+    const codePoint = value.codePointAt(start - 1) ?? 0;
+    const width = codePoint > 0xffff ? 2 : 1;
+    const nextStart = start - width;
+    const nextSize = size + Buffer.byteLength(value.slice(nextStart, start));
+    if (nextSize > contentLimit) {
+      break;
+    }
+    start = nextStart;
+    size = nextSize;
+  }
+  return { value: `${marker}${value.slice(start)}`, truncated: true };
 }
 
 function isJsonObject(value: string | undefined): boolean {
@@ -217,6 +319,10 @@ function parseRecord(input: string): Record<string, unknown> | undefined {
   } catch {
     return undefined;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 async function readStdin(): Promise<string> {

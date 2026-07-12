@@ -46,6 +46,21 @@ export interface RunningCommand {
   readonly command: string;
 }
 
+// An explicitly opted-in, bounded result from a provider shell-tool hook. This
+// deliberately lives outside AgentSession so command output is never persisted.
+export interface CommandResult {
+  readonly id: string;
+  readonly command: string;
+  readonly outcome: 'completed' | 'failed' | 'interrupted';
+  readonly completedAt: number;
+  readonly durationMs?: number;
+  readonly exitCode?: number;
+  readonly stdout?: string;
+  readonly stderr?: string;
+  readonly error?: string;
+  readonly truncated?: boolean;
+}
+
 // Why the foreground turn is not currently working: 'stopped' means it waits
 // for the user, 'done' means the turn ended cleanly. The distinction decides
 // whether draining the last delegated agent lands on 'attention' or 'idle'.
@@ -92,6 +107,7 @@ export interface AgentCommandEvent {
   readonly sessionId: string;
   readonly commandId: string;
   readonly command: string;
+  readonly result?: Omit<CommandResult, 'id' | 'command' | 'completedAt'>;
 }
 
 export type AgentEvent =

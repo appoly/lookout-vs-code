@@ -655,6 +655,12 @@
           "default": false,
           "description": "Show and scan the Recent Images group in the Review view."
         },
+        "lookout.review.captureCommandOutput": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "Capture up to 8 KiB of explicit Codex and Claude command results for newly launched sessions. Results are kept only in memory until the window reloads or session closes and may contain sensitive data."
+        },
         "lookout.review.imageGlob": {
           "type": "string",
           "default": "**/*.{png,jpg,jpeg,gif,webp}",

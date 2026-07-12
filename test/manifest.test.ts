@@ -16,6 +16,9 @@ interface Manifest {
   readonly contributes?: {
     readonly commands?: ManifestCommand[];
     readonly viewsWelcome?: Array<{ readonly when?: string }>;
+    readonly configuration?: {
+      readonly properties?: Record<string, { readonly scope?: string; readonly default?: unknown }>;
+    };
   };
 }
 
@@ -67,4 +70,12 @@ test('disables command-launching contributions outside trusted workspaces', () =
   );
   assert.ok(welcomeStates.has('isWorkspaceTrusted'));
   assert.ok(welcomeStates.has('!isWorkspaceTrusted'));
+});
+
+test('keeps command-output capture globally opt-in', () => {
+  const setting = manifest.contributes?.configuration?.properties?.[
+    'lookout.review.captureCommandOutput'
+  ];
+  assert.equal(setting?.default, false);
+  assert.equal(setting?.scope, 'application');
 });

@@ -127,6 +127,27 @@ test('accepts authenticated agent and usage events on loopback', async (context)
       command: 'npm test'
     });
 
+    const resultHook = await runNotify(
+      endpoint,
+      ['--hook', 'claude', 'command-stop'],
+      {
+        tool_name: 'Bash',
+        tool_input: { command: 'npm test' },
+        tool_use_id: 'result-1',
+        duration_ms: 24,
+        tool_response: { stdout: 'passed', stderr: '' }
+      },
+      { LOOKOUT_CAPTURE_COMMAND_OUTPUT: '1' }
+    );
+    assert.equal(resultHook.code, 0);
+    assert.deepEqual(agentEvents[7], {
+      kind: 'command-stop',
+      sessionId: 'session-from-hook',
+      commandId: 'result-1',
+      command: 'npm test',
+      result: { outcome: 'completed', durationMs: 24, stdout: 'passed' }
+    });
+
     const usageResponse = await post(
       endpoint.url.replace(/\/events$/, '/usage'),
       endpoint.token,
@@ -169,7 +190,8 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 async function runNotify(
   endpoint: AttentionEndpoint,
   args: readonly string[],
-  input: object
+  input: object,
+  extraEnvironment: NodeJS.ProcessEnv = {}
 ): Promise<{ code: number | null; stdout: string }> {
   const child = spawn(
     process.execPath,
@@ -179,7 +201,8 @@ async function runNotify(
         ...process.env,
         LOOKOUT_NOTIFY_URL: endpoint.url,
         LOOKOUT_NOTIFY_TOKEN: endpoint.token,
-        LOOKOUT_SESSION_ID: 'session-from-hook'
+        LOOKOUT_SESSION_ID: 'session-from-hook',
+        ...extraEnvironment
       },
       stdio: ['pipe', 'pipe', 'pipe']
     }

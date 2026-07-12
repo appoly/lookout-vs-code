@@ -51,7 +51,8 @@ The implementation plan is in [the agent-cockpit plan](plans/agent-cockpit.md). 
    - [x] Make adoption discoverable from terminal context menus and the empty Agents view; reuse the shell-integration cwd when VS Code provides it.
 9. [x] Put the remove action inline beside split; rerun the skipped custom-hook and restored-custom-session cases.
 10. Activate the parent terminal before requesting a native sibling split; manually retest placement in editor and panel modes.
-11. Rerun the full matrix and clear the release gates.
+11. [x] Rerun the full matrix in `TESTPLAN.txt`. Clearing the release gates
+    remains contingent on its recorded results.
 
 ## Then: make the first stranger's run succeed
 

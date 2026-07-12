@@ -1,7 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { AgentEvent, AgentReportedStatus } from './types';
+import type { AgentEvent, AgentReportedStatus, CommandResult } from './types';
 import type { UsageBridgeEvent, UsageWindow } from './usageTypes';
 
 const EVENT_STATUSES = new Set<AgentReportedStatus>([
@@ -178,11 +178,14 @@ function parseAgentEvent(value: unknown): AgentEvent {
       typeof value.commandId === 'string' && value.commandId.length > 0
         ? value.commandId.slice(0, 200)
         : command;
+    const result =
+      value.kind === 'command-stop' ? parseCommandResult(value.result) : undefined;
     return {
       kind: value.kind,
       sessionId: value.sessionId,
       commandId,
-      command
+      command,
+      ...(result ? { result } : {})
     };
   }
   if (
@@ -198,6 +201,43 @@ function parseAgentEvent(value: unknown): AgentEvent {
     ...(typeof value.message === 'string' ? { message: value.message.slice(0, 240) } : {}),
     ...(typeof value.exitCode === 'number' ? { exitCode: value.exitCode } : {})
   };
+}
+
+function parseCommandResult(value: unknown):
+  | Omit<CommandResult, 'id' | 'command' | 'completedAt'>
+  | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  if (
+    value.outcome !== 'completed' &&
+    value.outcome !== 'failed' &&
+    value.outcome !== 'interrupted'
+  ) {
+    return undefined;
+  }
+  const stdout = boundedOutput(value.stdout);
+  const stderr = boundedOutput(value.stderr);
+  const error = boundedOutput(value.error, 240);
+  return {
+    outcome: value.outcome,
+    ...(typeof value.durationMs === 'number' && Number.isFinite(value.durationMs)
+      ? { durationMs: Math.max(0, Math.floor(value.durationMs)) }
+      : {}),
+    ...(typeof value.exitCode === 'number' && Number.isFinite(value.exitCode)
+      ? { exitCode: Math.floor(value.exitCode) }
+      : {}),
+    ...(stdout ? { stdout } : {}),
+    ...(stderr ? { stderr } : {}),
+    ...(error ? { error } : {}),
+    ...(value.truncated === true ? { truncated: true } : {})
+  };
+}
+
+function boundedOutput(value: unknown, maximum = 8 * 1024): string | undefined {
+  return typeof value === 'string' && Buffer.byteLength(value) <= maximum
+    ? value
+    : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -204,6 +204,26 @@ test('keeps concurrent commands distinct and removes only the one that stops', (
   assert.deepEqual(buildDone.runningCommands, [{ id: 't', command: 'npm test' }]);
 });
 
+test('clears the newest matching command when a provider changes its tool-use ID', () => {
+  const base = createSession('codex', 'Commands', 'codex', '/repo', 1, 'c-mismatch');
+  const first = applyAgentEvent(
+    base,
+    { kind: 'command-start', sessionId: 'c-mismatch', commandId: 'one', command: 'git status' },
+    2
+  );
+  const second = applyAgentEvent(
+    first,
+    { kind: 'command-start', sessionId: 'c-mismatch', commandId: 'two', command: 'git status' },
+    3
+  );
+  const stopped = applyAgentEvent(
+    second,
+    { kind: 'command-stop', sessionId: 'c-mismatch', commandId: 'changed', command: 'git status' },
+    4
+  );
+  assert.deepEqual(stopped.runningCommands, [{ id: 'one', command: 'git status' }]);
+});
+
 test('a finished turn clears any lingering running commands', () => {
   const base = createSession('claude', 'Builds', 'claude', '/repo', 1, 'c3');
   const working = applyAgentEvent(

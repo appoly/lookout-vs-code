@@ -14,8 +14,12 @@ its UI:
 - Git repository, branch, and launch-commit metadata used for review baselines;
 - configured Codex and Claude launch commands (custom-agent commands are not
   persisted);
-- brief provider lifecycle messages and currently running shell-command labels,
-  but never terminal transcripts or command output;
+- brief provider lifecycle messages and currently running shell-command labels.
+  By default it never retains command output. If you globally opt in to
+  `lookout.review.captureCommandOutput`, Lookout keeps up to 8 KiB from each
+  completed Codex or Claude shell-tool result in memory only, until the window
+  reloads or session closes; it never reads terminal scrollback or persists
+  those results;
 - a random bearer token and loopback endpoint used by session-local attention
   hooks;
 - recent Claude usage-limit snapshots and whether the one-time Codex hook notice

@@ -13,9 +13,10 @@ import {
   type WorkspaceChange
 } from './gitReview';
 import type { SessionManager } from './sessionManager';
-import type { AgentSession } from './types';
+import type { AgentSession, CommandResult } from './types';
 
 const BASELINE_SCHEME = 'lookout-baseline';
+const COMMAND_RESULT_SCHEME = 'lookout-command-result';
 type ReviewKind =
   | 'group'
   | 'image'
@@ -25,8 +26,15 @@ type ReviewKind =
   | 'artifact-worktree'
   | 'diagnostic'
   | 'runtime'
+  | 'command-result'
   | 'message';
-type ReviewGroup = 'changes' | 'diagnostics' | 'images' | 'plans' | 'runtime';
+type ReviewGroup =
+  | 'changes'
+  | 'diagnostics'
+  | 'images'
+  | 'plans'
+  | 'runtime'
+  | 'results';
 
 interface ReviewTreeItemOptions {
   readonly group?: ReviewGroup;
@@ -93,7 +101,7 @@ export class ReviewTreeItem extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon('info');
       return;
     }
-    if (kind === 'runtime') {
+    if (kind === 'runtime' || kind === 'command-result') {
       this.description = options.description;
       this.tooltip = options.tooltip;
       this.iconPath = new vscode.ThemeIcon(
@@ -166,6 +174,7 @@ export class ReviewTreeProvider
   private changeCount = 0;
   private diagnostics: ReviewTreeItem[] = [];
   private runtime: ReviewTreeItem[] = [];
+  private commandResults: ReviewTreeItem[] = [];
   private images: ReviewTreeItem[] = [];
   private plans: ReviewTreeItem[] = [];
   private planCount = 0;
@@ -247,6 +256,14 @@ export class ReviewTreeProvider
           group: 'runtime',
           count: this.runtime.length
         }),
+        ...(this.commandResults.length > 0
+          ? [
+              new ReviewTreeItem('group', 'Recent Command Results', {
+                group: 'results',
+                count: this.commandResults.length
+              })
+            ]
+          : []),
         new ReviewTreeItem('group', 'Plans & Docs', {
           group: 'plans',
           count: this.planCount
@@ -295,6 +312,8 @@ export class ReviewTreeProvider
                 { description: 'Agent commands, tasks, and debug sessions appear here' }
               )
             ];
+      case 'results':
+        return this.commandResults;
       default:
         return [];
     }
@@ -385,6 +404,7 @@ export class ReviewTreeProvider
 
   public refreshRuntime(): void {
     const items: ReviewTreeItem[] = [];
+    const results: ReviewTreeItem[] = [];
     // Agent-run shell commands first: this is what a reviewer actually cares
     // about (builds, tests, dev servers the agents are running right now).
     for (const session of this.sessions.list()) {
@@ -401,6 +421,9 @@ export class ReviewTreeProvider
             }
           })
         );
+      }
+      for (const result of this.sessions.commandResultsFor(session.id)) {
+        results.push(commandResultItem(session, result));
       }
     }
     const debugSession = vscode.debug.activeDebugSession;
@@ -427,6 +450,9 @@ export class ReviewTreeProvider
       );
     }
     this.runtime = items;
+    this.commandResults = results.sort(
+      (left, right) => (right.modifiedAt ?? 0) - (left.modifiedAt ?? 0)
+    );
     this.changedEmitter.fire();
   }
 
@@ -453,6 +479,17 @@ export class ReviewTreeProvider
   }
 
   public async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
+    if (uri.scheme === COMMAND_RESULT_SCHEME) {
+      const resultId = decodeUriPath(uri.path.slice(1));
+      const result = this.sessions
+        .commandResultsFor(uri.authority)
+        .find((candidate) => candidate.id === resultId);
+      if (!result) {
+        throw vscode.FileSystemError.FileNotFound(uri);
+      }
+      const session = this.sessions.get(uri.authority);
+      return commandResultContent(session, result);
+    }
     const session = this.sessions.get(uri.authority);
     if (!session?.baseline) {
       throw vscode.FileSystemError.FileNotFound(uri);
@@ -895,8 +932,72 @@ function groupIcon(group: ReviewGroup | undefined): vscode.ThemeIcon {
       return new vscode.ThemeIcon('warning');
     case 'runtime':
       return new vscode.ThemeIcon('pulse');
+    case 'results':
+      return new vscode.ThemeIcon('output');
     default:
       return new vscode.ThemeIcon('notebook');
+  }
+}
+
+function commandResultItem(
+  session: AgentSession,
+  result: CommandResult
+): ReviewTreeItem {
+  const uri = vscode.Uri.from({
+    scheme: COMMAND_RESULT_SCHEME,
+    authority: session.id,
+    path: `/${encodeURIComponent(result.id)}`
+  });
+  const outcome = result.outcome === 'completed' ? 'completed' : result.outcome;
+  const duration = result.durationMs === undefined
+    ? ''
+    : ` · ${formatDuration(result.durationMs)}`;
+  return new ReviewTreeItem('command-result', result.command, {
+    uri,
+    modifiedAt: result.completedAt,
+    description: `${session.label} · ${outcome}${duration}`,
+    tooltip: `${result.command}\n\n${session.label} · ${outcome}${duration}`,
+    command: {
+      command: 'lookout.openReviewItem',
+      title: 'Open Command Result',
+      arguments: [{ uri, kind: 'command-result' }]
+    }
+  });
+}
+
+function commandResultContent(
+  session: AgentSession | undefined,
+  result: CommandResult
+): string {
+  const metadata = [
+    `Command: ${result.command}`,
+    `Agent: ${session?.label ?? 'Unknown agent'}`,
+    `Provider: ${session?.kind ?? 'unknown'}`,
+    `Outcome: ${result.outcome}`,
+    ...(result.exitCode === undefined ? [] : [`Exit code: ${result.exitCode}`]),
+    ...(result.durationMs === undefined ? [] : [`Duration: ${formatDuration(result.durationMs)}`]),
+    ...(result.truncated ? ['Output: trailing 8 KiB retained'] : [])
+  ];
+  return [
+    ...metadata,
+    '',
+    ...(result.stdout ? ['stdout', '------', result.stdout, ''] : []),
+    ...(result.stderr ? ['stderr', '------', result.stderr, ''] : []),
+    ...(result.error ? ['error', '-----', result.error, ''] : [])
+  ].join('\n');
+}
+
+function formatDuration(durationMs: number): string {
+  return durationMs < 1_000
+    ? `${durationMs} ms`
+    : `${(durationMs / 1_000).toFixed(durationMs < 10_000 ? 1 : 0)} s`;
+}
+
+function decodeUriPath(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
   }
 }
 

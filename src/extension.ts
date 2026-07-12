@@ -50,6 +50,10 @@ export async function activate(
       'lookout-baseline',
       reviewTree
     ),
+    vscode.workspace.registerTextDocumentContentProvider(
+      'lookout-command-result',
+      reviewTree
+    ),
     vscode.window.registerTreeDataProvider('lookout.usage', usageTree),
     register('lookout.launchAgent', () => chooseAndLaunchAgent(sessions)),
     register('lookout.launchCodex', () => launchAgent(sessions, 'codex')),

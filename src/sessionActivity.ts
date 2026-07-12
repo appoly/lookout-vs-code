@@ -27,7 +27,7 @@ export function applyAgentEvent(
     case 'command-start':
       return applyCommandStart(session, event.commandId, event.command, now);
     case 'command-stop':
-      return applyCommandStop(session, event.commandId, now);
+      return applyCommandStop(session, event.commandId, event.command, now);
   }
 }
 
@@ -224,12 +224,28 @@ function applyCommandStart(
 function applyCommandStop(
   session: AgentSession,
   commandId: string,
+  command: string,
   now: number
 ): AgentSession {
-  const runningCommands = session.runningCommands.filter(
-    (entry) => entry.id !== commandId
-  );
-  if (runningCommands.length === session.runningCommands.length) {
+  let removed = false;
+  const runningCommands = session.runningCommands.filter((entry) => {
+    if (entry.id === commandId) {
+      removed = true;
+      return false;
+    }
+    return true;
+  });
+  // Provider versions occasionally omit or change their tool-use ID between
+  // start and stop. Fall back to the newest identical command, never clearing
+  // every matching concurrent command.
+  if (!removed) {
+    const index = runningCommands.map((entry) => entry.command).lastIndexOf(command);
+    if (index >= 0) {
+      runningCommands.splice(index, 1);
+      removed = true;
+    }
+  }
+  if (!removed) {
     return session;
   }
   return { ...session, runningCommands, updatedAt: now };

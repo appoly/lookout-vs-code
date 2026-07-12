@@ -110,6 +110,8 @@ The most common settings are:
 - `lookout.attentionSound.enabled` and `lookout.attentionSound.volume` — the
   synthesized local bell;
 - `lookout.review.showRecentImages` — opt in to recent-image scanning.
+- `lookout.review.captureCommandOutput` — globally opt in to transient,
+  bounded Codex/Claude command results for newly launched sessions.
 
 Codex usage comes from the CLI's app-server JSON-RPC rate-limit method. Claude
 usage comes from its documented custom status-line JSON after the first response
@@ -119,11 +121,13 @@ budgets.
 ## Privacy and security
 
 Lookout contains no telemetry or analytics and sends nothing to a Lookout-owned
-server. It does not read authentication files or terminal output. Lifecycle
-events use a random bearer token over a size-limited HTTP server bound only to
-`127.0.0.1`; custom agent commands are not persisted. Workspace-provided command
-settings are restricted in untrusted workspaces, and execution commands are
-disabled until the workspace is trusted.
+server. It does not read authentication files or scrape terminal output. When
+you explicitly enable command-result capture, it retains up to 8 KiB from the
+provider's completed shell-tool result in memory only; it is never persisted.
+Lifecycle events use a random bearer token over a size-limited HTTP server bound
+only to `127.0.0.1`; custom agent commands are not persisted. Workspace-provided
+command settings are restricted in untrusted workspaces, and execution commands
+are disabled until the workspace is trusted.
 
 The agent CLIs you launch remain separate software with their own network and
 data-handling behavior. See [PRIVACY.md](PRIVACY.md) for exactly what Lookout

@@ -69,6 +69,10 @@ C. LIFECYCLE, ATTENTION, AND THE BELL (~20 min — the heart of it)
      stdin to check message extraction.
  15. Exit an unattended agent (exit / ctrl-d) -> completed/failed with
      exit code and bell; notification honors lookout.notifyOnAgentExit.
+     With lookout.review.captureCommandOutput enabled before launch, a finished
+     Codex/Claude Bash command leaves Running and opens a bounded, transient
+     result under Recent Command Results. Disable the setting -> results clear;
+     reload -> no result remains.
 
 D. NAVIGATION (~5 min)
  16. Tree click focuses the exact terminal. Focus Agent quick-pick
