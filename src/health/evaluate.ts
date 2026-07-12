@@ -42,7 +42,9 @@ export function evaluateHealth(inputs: HealthInputs): HealthReport {
         baselineCheck(session.baseline, scope)
       ];
     }),
-    ...inputs.usage.map(usageCheck)
+    ...inputs.usage.map(usageCheck),
+    ...(inputs.globalHistory ? [globalHistoryCheck(inputs.globalHistory)] : []),
+    ...(inputs.coordination ? [coordinationCheck(inputs.coordination)] : [])
   ];
   const totals: Record<HealthStatus, number> = {
     healthy: 0,
@@ -61,6 +63,83 @@ export function evaluateHealth(inputs: HealthInputs): HealthReport {
     checks,
     totals
   };
+}
+
+function globalHistoryCheck(
+  state: NonNullable<HealthInputs['globalHistory']>
+): HealthCheck {
+  switch (state) {
+    case 'current':
+      return check(
+        'global-history',
+        'healthy',
+        'Cross-project history is available on this execution host.',
+        'none'
+      );
+    case 'disabled':
+      return check(
+        'global-history',
+        'degraded',
+        'Cross-project history is disabled.',
+        'none'
+      );
+    case 'unavailable':
+      return check(
+        'global-history',
+        'unavailable',
+        'Cross-project history storage is unavailable.',
+        'none'
+      );
+  }
+}
+
+function coordinationCheck(
+  state: NonNullable<HealthInputs['coordination']>
+): HealthCheck {
+  switch (state) {
+    case 'healthy-owner':
+      return check(
+        'cross-window-coordination',
+        'healthy',
+        'This window owns the execution-host coordinator.',
+        'none'
+      );
+    case 'healthy-client':
+      return check(
+        'cross-window-coordination',
+        'healthy',
+        'This window is connected to the execution-host coordinator.',
+        'none'
+      );
+    case 'starting':
+      return check(
+        'cross-window-coordination',
+        'unknown',
+        'Cross-window coordination is starting.',
+        'none'
+      );
+    case 'disabled':
+      return check(
+        'cross-window-coordination',
+        'healthy',
+        'Experimental cross-window coordination is disabled.',
+        'enable-cross-window-coordination'
+      );
+    case 'degraded':
+      return check(
+        'cross-window-coordination',
+        'degraded',
+        'Cross-window coordination is unavailable on this execution host.',
+        'enable-cross-window-coordination'
+      );
+    case 'incompatible':
+      return check(
+        'cross-window-coordination',
+        'blocked',
+        'Another Lookout protocol version owns the coordinator.',
+        'none'
+      );
+  }
 }
 
 function dependencyCheck(

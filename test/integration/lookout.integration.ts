@@ -93,6 +93,43 @@ suite('Lookout extension-host integration', () => {
     assert.equal(options.location, vscode.TerminalLocation.Panel);
   });
 
+  test('projects current metadata into host-local global history', async () => {
+    const record = await waitForValue(
+      () => api.globalHistory
+        .list()
+        .find((candidate) => candidate.sourceSessionId === session.id),
+      'The session was not projected into cross-project history'
+    );
+    assert.equal(record.workspace.key, api.globalHistory.workspace?.key);
+    assert.equal(record.kind, 'custom');
+    assert.equal(record.provider, undefined);
+    assert.doesNotMatch(JSON.stringify(record), /lookout-integration/);
+    assert.equal(api.coordination.health().state, 'disabled');
+  });
+
+  test('starts and stops the authenticated execution-host coordinator', async () => {
+    const configuration = vscode.workspace.getConfiguration('lookout.experimental');
+    await configuration.update(
+      'crossWindowCoordination',
+      true,
+      vscode.ConfigurationTarget.Global
+    );
+    await waitFor(
+      () => api.coordination.health().state === 'healthy-owner',
+      `Coordinator did not become healthy: ${api.coordination.health().detail}`
+    );
+    assert.deepEqual(api.coordination.windows(), []);
+    await configuration.update(
+      'crossWindowCoordination',
+      false,
+      vscode.ConfigurationTarget.Global
+    );
+    await waitFor(
+      () => api.coordination.health().state === 'disabled',
+      'Coordinator did not stop after its setting was disabled'
+    );
+  });
+
   test('routes explicit lifecycle attention and focuses the exact unread agent', async () => {
     const observer = vscode.window.createTerminal({
       name: 'Lookout Integration Observer',

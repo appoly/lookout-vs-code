@@ -183,6 +183,40 @@ J. DOCTOR, SUPPORT, AND VERIFICATION HONESTY (~10 min)
      first: the baseline must not jump. Switch/rewrite HEAD or make evidence
      partial: readiness becomes stale/incomplete, never a false green claim.
 
+K. CROSS-PROJECT HISTORY AND LIVE WINDOWS (~20 min per host)
+ 39. With global history enabled, launch and close managed/custom sessions in
+     project A, then open project B. History groups current rows separately from
+     Other Projects, marks managed provider history resumable, keeps custom
+     history terminal-only, and never says the old terminal is live.
+ 40. From project B, select a resumable project-A row. Confirm the first modal
+     names the provider, project, operation, and cwd. The owning project opens;
+     its Lookout window claims the expiring handoff, rechecks Workspace Trust
+     and provider configuration, then shows the final provider command modal.
+     Cancel at either modal -> no terminal and no later surprise launch.
+ 41. Repeat while project A is already open. The existing window claims the
+     handoff without requiring reload. Expire an intent before claim -> nothing
+     launches. Delete history while another window is open -> the stale window
+     cannot immediately resurrect it; genuinely newer provider activity may.
+ 42. Verify lookout.experimental.crossWindowCoordination is false by default.
+     Enable it in two windows on the same host/profile: one Doctor reports owner,
+     the other client, and History shows leased live rows under Live in Other
+     Windows without exposing cwd/provider IDs in the live payload.
+ 43. Trigger attention in window A while using window B. Focus Next Attention
+     or the live row sends one request; A reveals the exact terminal and reports
+     the routed action. Close A -> its row expires within the lease window.
+ 44. Attempt to resume a provider ID already live in A: B refuses duplicate
+     resume and offers Focus Existing / Fork Instead. Disable/break coordination
+     while global history still says live: Lookout refuses to guess and offers
+     fork, open project, or coordinator configuration.
+ 45. Kill the coordinator-owning extension host, then keep the client alive.
+     After stale-owner expiry a remaining window elects a replacement and
+     Doctor returns healthy. Exercise a port conflict and mixed protocol fixture:
+     no unauthenticated connection, split brain, or silent version takeover.
+ 46. Repeat 39-45 separately on local desktop, WSL, one Remote SSH host, and one
+     dev container. Same-host windows coordinate; local/WSL/SSH/container rows
+     never federate or claim that another execution host is reachable. Repeat
+     with two VS Code profiles and confirm their coordinators/history are isolated.
+
 EXIT CRITERIA (ROADMAP release gates)
   - launch -> monitor -> jump -> review loop passes interactively
   - no provider limit shown as zero when it is unknown
@@ -190,5 +224,7 @@ EXIT CRITERIA (ROADMAP release gates)
   - no user auth file or terminal output is read
   - provider and Lookout session IDs remain distinct; duplicate resume is refused
   - support export passes the adversarial redaction check
+  - global history reopens the correct project without inventing live state
+  - live coordination expires dead windows and never crosses execution hosts
   - shared-worktree changes are never misattributed to one agent
   - package, CI, and the documented manual matrix are green

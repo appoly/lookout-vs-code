@@ -45,13 +45,23 @@ import type {
   AgentReportedStatus,
   AgentSession,
   CommandResult,
-  LaunchRequest
+  LaunchRequest,
+  ManagedAgentKind
 } from './types';
 import type { UsageBridgeEvent } from './usageTypes';
 
 const BRIDGE_STORAGE_KEY = 'lookout.attentionEndpoint.v1';
 const CODEX_HOOK_NOTICE_KEY = 'lookout.codexHookNotice.v1';
 const MAX_COMMAND_RESULTS_PER_SESSION = 12;
+
+export interface ProviderContinuationSource {
+  readonly kind: ManagedAgentKind;
+  readonly label: string;
+  readonly cwd: string;
+  readonly configuredCommand: string;
+  readonly sourceLookoutSessionId: string;
+  readonly providerSessionId: string;
+}
 
 export class SessionManager implements vscode.Disposable {
   private readonly sessions = new Map<string, AgentSession>();
@@ -531,11 +541,44 @@ export class SessionManager implements vscode.Disposable {
       return undefined;
     }
 
+    return this.continueProviderReference({
+      kind: source.kind,
+      label: source.label,
+      cwd: source.cwd,
+      configuredCommand: source.providerCommand ?? source.command,
+      sourceLookoutSessionId: source.id,
+      providerSessionId: reference.id
+    }, operation);
+  }
+
+  public async continueProviderReference(
+    source: ProviderContinuationSource,
+    operation: 'resume' | 'fork',
+    options: { readonly confirm?: boolean } = {}
+  ): Promise<AgentSession | undefined> {
+    if (!vscode.workspace.isTrusted) {
+      void vscode.window.showWarningMessage(
+        'Trust this workspace before resuming or forking an agent session.'
+      );
+      return undefined;
+    }
+    try {
+      const directory = await vscode.workspace.fs.stat(vscode.Uri.file(source.cwd));
+      if ((directory.type & vscode.FileType.Directory) === 0) {
+        throw new Error('Not a directory');
+      }
+    } catch {
+      void vscode.window.showWarningMessage(
+        `The recorded working directory is unavailable on this execution host: ${source.cwd}`
+      );
+      return undefined;
+    }
+
     const collision = providerSessionCollision(
       this.history(),
       '__new-session__',
-      reference.provider,
-      reference.id,
+      source.kind,
+      source.providerSessionId,
       (sessionId) => this.isOpen(sessionId)
     );
     if (operation === 'resume' && collision) {
@@ -550,7 +593,7 @@ export class SessionManager implements vscode.Disposable {
         return undefined;
       }
       if (choice === 'Fork Instead') {
-        return this.continueProviderSession(id, 'fork');
+        return this.continueProviderReference(source, 'fork', options);
       }
       return undefined;
     }
@@ -559,13 +602,13 @@ export class SessionManager implements vscode.Disposable {
     const continuation =
       operation === 'resume'
         ? adapter.buildResume({
-            configuredCommand: source.providerCommand ?? source.command,
-            providerSessionId: reference.id,
+            configuredCommand: source.configuredCommand,
+            providerSessionId: source.providerSessionId,
             shell: classifyShell(vscode.env.shell)
           })
         : adapter.buildFork({
-            configuredCommand: source.providerCommand ?? source.command,
-            providerSessionId: reference.id,
+            configuredCommand: source.configuredCommand,
+            providerSessionId: source.providerSessionId,
             shell: classifyShell(vscode.env.shell)
           });
     if (!continuation.available || !continuation.command) {
@@ -574,27 +617,29 @@ export class SessionManager implements vscode.Disposable {
       );
       return undefined;
     }
-    const choice = await vscode.window.showInformationMessage(
-      `${operation === 'resume' ? 'Resume' : 'Fork'} ${source.label} in ${source.cwd}?\n\n${continuation.command}`,
-      { modal: true },
-      operation === 'resume' ? 'Resume Agent' : 'Fork Agent'
-    );
-    if (!choice) {
-      return undefined;
+    if (options.confirm !== false) {
+      const choice = await vscode.window.showInformationMessage(
+        `${operation === 'resume' ? 'Resume' : 'Fork'} ${source.label} with ${adapter.displayName} in ${source.cwd}?\n\n${continuation.command}`,
+        { modal: true },
+        operation === 'resume' ? 'Resume Agent' : 'Fork Agent'
+      );
+      if (!choice) {
+        return undefined;
+      }
     }
     return this.launch({
       kind: source.kind,
       label: `${source.label} ${operation === 'resume' ? 'resumed' : 'fork'}`,
       command: continuation.command,
-      providerCommand: source.providerCommand ?? source.command,
+      providerCommand: source.configuredCommand,
       cwd: source.cwd,
       lineage: {
         operation,
-        sourceLookoutSessionId: source.id,
-        sourceProviderSessionId: reference.id
+        sourceLookoutSessionId: source.sourceLookoutSessionId,
+        sourceProviderSessionId: source.providerSessionId
       },
       ...(operation === 'resume'
-        ? { expectedProviderSessionId: reference.id }
+        ? { expectedProviderSessionId: source.providerSessionId }
         : {})
     });
   }

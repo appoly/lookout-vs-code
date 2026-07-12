@@ -18,6 +18,13 @@
 - Add metadata-only Inbox and History views with unread navigation, safe
   provider resume/fork, collision refusal, archive/unarchive, and bounded
   retention.
+- Extend History across projects on the same execution host, with atomic
+  multi-window storage, deletion tombstones, expiring reopen/resume handoffs,
+  and explicit trust/provider revalidation in the target window.
+- Add opt-in authenticated live coordination between Lookout windows on one VS
+  Code profile and execution host: leased metadata-only snapshots, cross-window
+  attention focus, duplicate-provider-session detection, crash recovery, and
+  strict local/WSL/SSH/container boundaries.
 - Add a non-installing provider profile catalog and privacy-bounded session
   templates for reusable folder, worktree, task, browser, and review recipes.
 - Add stable verification contexts, diagnostic hash baselines, freshness-aware

@@ -32,6 +32,12 @@ terminal emulator or code viewer inside a webview.
 - **Inbox and continuity** — triage a bounded, metadata-only event ledger, move
   through unread events, browse closed history, and explicitly resume or fork
   supported provider-owned sessions without reading their transcripts.
+- **Cross-project history** — reopen a previous project and hand a confirmed
+  provider resume or fork to its Lookout window. Historical rows never claim
+  that an old terminal is still live.
+- **Live coordination (experimental)** — optionally see metadata-only agent
+  state from other VS Code windows on the same profile and execution host,
+  route attention to the owning window, and refuse duplicate provider resumes.
 - **Profiles and templates** — detect direct provider CLIs, explain degraded
   wrapper capabilities, and save reusable launch recipes without persisting raw
   commands, arguments, environment variables, prompts, or credentials.
@@ -94,6 +100,7 @@ modifies your user or repository Claude settings.
 | `Lookout: Focus Agent…` | Jump to any named agent. |
 | `Lookout: Focus Next Agent Needing Attention` | Triage the next unread session. |
 | `Lookout: Browse Agent History` | Inspect resumable and terminal-only Lookout records. |
+| `Lookout: Configure Cross-Window Coordination` | Enable or inspect the experimental same-host live coordinator. |
 | `Lookout: Launch Agent from Template…` | Recreate a saved profile/folder/worktree/review recipe. |
 | `Lookout: Open Review Layout` | Restore a two-column agent/review layout. |
 | `Lookout: Run Verification Task…` | Run a native Test task and bind its observed exit to current review evidence. |
@@ -126,6 +133,10 @@ The most common settings are:
 - `lookout.review.showRecentImages` — opt in to recent-image scanning.
 - `lookout.review.captureCommandOutput` — globally opt in to transient,
   bounded Codex/Claude command results for newly launched sessions.
+- `lookout.history.globalEnabled` — retain bounded host-local history across
+  projects; enabled by default and never registered for Settings Sync.
+- `lookout.experimental.crossWindowCoordination` — share live metadata between
+  Lookout windows on the same execution host; disabled by default.
 
 Codex usage comes from the CLI's app-server JSON-RPC rate-limit method. Claude
 usage comes from its documented custom status-line JSON after the first response
@@ -149,6 +160,14 @@ and read state, never hook messages, prompts, command text, tool output, or
 transcript paths. Support export is an explicit command and passes through an
 allow-list plus defensive path, token, URL, and identifier redaction.
 
+Cross-project history additionally stores the workspace/folder URI, working
+directory, user-visible label, coarse host kind, provider identity, fixed
+counters, and timestamps in Lookout's extension-global storage on that host.
+It is not Settings Sync data. Experimental live coordination keeps window and
+session summaries in memory behind an authenticated loopback protocol; its
+shared secret is stored through VS Code SecretStorage. It does not persist live
+snapshots or send them between local, WSL, SSH, and container hosts.
+
 The agent CLIs you launch remain separate software with their own network and
 data-handling behavior. See [PRIVACY.md](PRIVACY.md) for exactly what Lookout
 stores and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
@@ -168,6 +187,11 @@ stores and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
   separate terminal panes.
 - Virtual workspaces such as `vscode.dev` are unsupported because Lookout needs
   native terminals, filesystem paths, and Git processes.
+- Live coordination is one-profile, one-execution-host only. It can coordinate
+  local windows with local windows, or windows on the same WSL/SSH/container
+  host, but it does not federate those environments. Revealing a terminal in
+  another window is a routed request; OS focus-stealing policies may still
+  require selecting that window.
 - Arbitrary tmux-style spatial layouts, terminal transcript storage, and browser
   automation are deliberately out of scope.
 
@@ -189,7 +213,9 @@ npm run vsix
 ```
 
 The extension-host suite exercises activation, terminal launch and splitting,
-authenticated attention routing, Git review baselines, and terminal closure.
+authenticated attention routing, Git review baselines, host-local history
+projection, and terminal closure. Domain tests additionally exercise concurrent
+history writers and real authenticated loopback coordinator clients.
 CI runs Stable on Linux, Windows, and macOS, plus VS Code 1.96.0 on Linux. See
 [docs/TESTING.md](docs/TESTING.md) for test details and
 [docs/RELEASE.md](docs/RELEASE.md) for the release checklist.

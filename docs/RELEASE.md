@@ -45,6 +45,10 @@ assessed separately; no development dependency is included in the VSIX.
 - Complete the installed-VSIX pass in `TESTPLAN.txt` on desktop, WSL, Remote
   SSH, and a dev container, plus the multi-root cases. Any unavailable host is
   an explicit release decision, not an implicit pass.
+- Complete the two-window global-history/coordinator section separately on
+  local, WSL, Remote SSH, and dev-container execution hosts. Record coordinator
+  owner replacement, lease expiry, profile isolation, duplicate-resume refusal,
+  and the fact that different execution hosts do not federate.
 - Inspect the extension details page: icon, Preview badge, description,
   categories, README links, license, privacy, support, repository, and issue
   links must all render.

@@ -14,6 +14,15 @@ import {
   sessionOperationalStats
 } from './sessionStats';
 import type { AgentSession } from './types';
+import type {
+  GlobalHistoryRecord
+} from './globalHistoryModel';
+import type { GlobalHistoryService } from './globalHistoryStore';
+import type {
+  CoordinatedSession,
+  CoordinatedWindow
+} from './coordinationModel';
+import type { CoordinationService } from './coordinationService';
 
 const HISTORY_ICONS: Readonly<Record<HistoryAvailability, vscode.ThemeIcon>> = {
   open: new vscode.ThemeIcon('terminal', new vscode.ThemeColor('charts.green')),
@@ -22,6 +31,30 @@ const HISTORY_ICONS: Readonly<Record<HistoryAvailability, vscode.ThemeIcon>> = {
   closed: new vscode.ThemeIcon('circle-slash'),
   archived: new vscode.ThemeIcon('archive')
 };
+
+export type HistoryTreeElement =
+  | HistoryGroupItem
+  | HistoryTreeItem
+  | GlobalHistoryTreeItem
+  | LiveHistoryTreeItem;
+
+export class HistoryGroupItem extends vscode.TreeItem {
+  public constructor(
+    public readonly group: 'current' | 'projects' | 'live',
+    label: string,
+    count: number
+  ) {
+    super(label, vscode.TreeItemCollapsibleState.Expanded);
+    this.id = `history-group-${group}`;
+    this.contextValue = `lookout.historyGroup.${group}`;
+    this.description = String(count);
+    this.iconPath = group === 'current'
+      ? new vscode.ThemeIcon('window')
+      : group === 'projects'
+        ? new vscode.ThemeIcon('folder-library')
+        : new vscode.ThemeIcon('broadcast');
+  }
+}
 
 export class HistoryTreeItem extends vscode.TreeItem {
   public readonly session: AgentSession;
@@ -68,25 +101,168 @@ export class HistoryTreeItem extends vscode.TreeItem {
   }
 }
 
+export class GlobalHistoryTreeItem extends vscode.TreeItem {
+  public constructor(public readonly record: GlobalHistoryRecord) {
+    super(record.label, vscode.TreeItemCollapsibleState.None);
+    const resumable = record.provider?.state === 'available' &&
+      record.archivedAt === undefined;
+    const availability = record.archivedAt !== undefined
+      ? 'archived'
+      : resumable
+        ? 'resumable'
+        : 'terminal-only';
+    this.id = `global-history-${record.id}`;
+    this.contextValue = `lookout.globalHistory.${availability}`;
+    this.description = `${record.workspace.label} · ${resumable ? 'resumable' : 'history only'}`;
+    this.iconPath = resumable
+      ? new vscode.ThemeIcon('debug-restart')
+      : new vscode.ThemeIcon('folder');
+    this.tooltip = [
+      record.label,
+      `Project: ${record.workspace.label}`,
+      `Execution host: ${hostLabel(record.workspace.hostKind)}`,
+      `Provider: ${record.kind}`,
+      `Directory: ${record.cwd}`,
+      `State when last observed: ${record.status}`,
+      `Recorded events: ${record.eventCount}`,
+      `Attention events: ${record.attentionEventCount}`,
+      `Last activity: ${new Date(record.updatedAt).toLocaleString()}`,
+      'This is historical metadata; it does not claim the old terminal is live.'
+    ].join('\n');
+    this.command = resumable
+      ? {
+          command: 'lookout.resumeGlobalSession',
+          title: 'Open Project and Resume',
+          arguments: [this]
+        }
+      : {
+          command: 'lookout.openGlobalHistory',
+          title: 'Open Project',
+          arguments: [this]
+        };
+    this.accessibilityInformation = {
+      label: `${record.label}, ${record.workspace.label}, ${resumable ? 'resumable' : 'history only'}`
+    };
+  }
+}
+
+export class LiveHistoryTreeItem extends vscode.TreeItem {
+  public constructor(
+    public readonly coordinatedWindow: CoordinatedWindow,
+    public readonly coordinatedSession: CoordinatedSession
+  ) {
+    super(coordinatedSession.label, vscode.TreeItemCollapsibleState.None);
+    this.id = `live-${coordinatedWindow.windowId}-${coordinatedSession.sessionId}`;
+    this.contextValue = 'lookout.liveSession';
+    this.description = `${coordinatedWindow.workspaceLabel} · ${coordinatedSession.status}${coordinatedSession.unread ? ' · unread' : ''}`;
+    this.iconPath = coordinatedSession.status === 'attention'
+      ? new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('list.warningForeground'))
+      : new vscode.ThemeIcon('broadcast');
+    this.tooltip = [
+      coordinatedSession.label,
+      `Owning project: ${coordinatedWindow.workspaceLabel}`,
+      `Provider: ${coordinatedSession.kind}`,
+      `Live status: ${coordinatedSession.status}`,
+      `Execution host: ${hostLabel(coordinatedWindow.hostKind)}`,
+      `Lease expires: ${new Date(coordinatedWindow.leaseExpiresAt).toLocaleTimeString()}`,
+      'Lookout will ask the owning window to reveal this terminal.'
+    ].join('\n');
+    this.command = {
+      command: 'lookout.focusRemoteSession',
+      title: 'Focus Agent in Owning Window',
+      arguments: [this]
+    };
+    this.accessibilityInformation = {
+      label: `${coordinatedSession.label}, ${coordinatedWindow.workspaceLabel}, live ${coordinatedSession.status}`
+    };
+  }
+}
+
 export class HistoryTreeProvider
-  implements vscode.TreeDataProvider<HistoryTreeItem>, vscode.Disposable
+  implements vscode.TreeDataProvider<HistoryTreeElement>, vscode.Disposable
 {
   private readonly changedEmitter = new vscode.EventEmitter<void>();
-  private readonly subscription: vscode.Disposable;
+  private readonly subscriptions: vscode.Disposable[];
   public readonly onDidChangeTreeData = this.changedEmitter.event;
 
   public constructor(
     private readonly manager: SessionManager,
+    private readonly globalHistory: GlobalHistoryService,
+    private readonly coordination: CoordinationService,
     private readonly maximum = 100
   ) {
-    this.subscription = manager.onDidChange(() => this.changedEmitter.fire());
+    this.subscriptions = [
+      manager.onDidChange(() => this.changedEmitter.fire()),
+      globalHistory.onDidChange(() => this.changedEmitter.fire()),
+      coordination.onDidChange(() => this.changedEmitter.fire())
+    ];
   }
 
-  public getTreeItem(element: HistoryTreeItem): vscode.TreeItem {
+  public getTreeItem(element: HistoryTreeElement): vscode.TreeItem {
     return element;
   }
 
-  public getChildren(): HistoryTreeItem[] {
+  public getChildren(element?: HistoryTreeElement): HistoryTreeElement[] {
+    const local = this.localItems();
+    const projects = this.globalHistory
+      .list()
+      .filter((record) => !this.globalHistory.isCurrentWorkspace(record))
+      .slice(0, this.maximum)
+      .map((record) => new GlobalHistoryTreeItem(record));
+    const live = this.coordination
+      .windows()
+      .flatMap((window) =>
+        window.sessions.map((session) => new LiveHistoryTreeItem(window, session))
+      )
+      .sort((left, right) => {
+        const leftAttention = left.coordinatedSession.status === 'attention' ||
+          left.coordinatedSession.unread;
+        const rightAttention = right.coordinatedSession.status === 'attention' ||
+          right.coordinatedSession.unread;
+        return Number(rightAttention) - Number(leftAttention) ||
+          right.coordinatedSession.updatedAt - left.coordinatedSession.updatedAt;
+      });
+    if (!element) {
+      return [
+        new HistoryGroupItem('current', 'Current Workspace', local.length),
+        ...(projects.length > 0
+          ? [new HistoryGroupItem('projects', 'Other Projects', projects.length)]
+          : []),
+        ...(this.coordination.health().state !== 'disabled'
+          ? [new HistoryGroupItem('live', 'Live in Other Windows', live.length)]
+          : [])
+      ];
+    }
+    if (!(element instanceof HistoryGroupItem)) {
+      return [];
+    }
+    switch (element.group) {
+      case 'current': return local;
+      case 'projects': return projects;
+      case 'live':
+        return live.length > 0
+          ? live
+          : [new vscode.TreeItem(
+              this.coordination.health().state === 'degraded'
+                ? 'Coordinator unavailable'
+                : 'No other Lookout windows are live',
+              vscode.TreeItemCollapsibleState.None
+            ) as HistoryTreeElement];
+    }
+  }
+
+  public refresh(): void {
+    this.changedEmitter.fire();
+  }
+
+  public dispose(): void {
+    for (const subscription of this.subscriptions) {
+      subscription.dispose();
+    }
+    this.changedEmitter.dispose();
+  }
+
+  private localItems(): HistoryTreeItem[] {
     return buildHistoryEntries(
       this.manager.history(),
       this.manager.eventsFor(),
@@ -100,13 +276,14 @@ export class HistoryTreeProvider
         )
     );
   }
+}
 
-  public refresh(): void {
-    this.changedEmitter.fire();
-  }
-
-  public dispose(): void {
-    this.subscription.dispose();
-    this.changedEmitter.dispose();
+function hostLabel(kind: GlobalHistoryRecord['workspace']['hostKind']): string {
+  switch (kind) {
+    case 'local': return 'local';
+    case 'wsl': return 'WSL';
+    case 'ssh': return 'Remote SSH';
+    case 'dev-container': return 'dev container';
+    case 'other': return 'remote extension host';
   }
 }

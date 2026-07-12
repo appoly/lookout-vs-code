@@ -126,6 +126,26 @@ adopted terminals remain honestly terminal-only. This resolves former open
 decisions 2 and 5 in favor of provider-native continuity plus a metadata-only
 Lookout inbox.
 
+## D14 — Global history is host-local; live coordination is explicit and leased
+
+**Decision:** keep workspace restoration state in `workspaceState`, and project
+only a bounded metadata allow-list into an atomic extension-global history file
+shared by Lookout windows on the same VS Code profile and execution host. Do not
+register this history for Settings Sync. Cross-project continuation uses an
+expiring, one-shot intent: the originating window confirms the project and
+operation, the target window claims the intent, then revalidates Workspace
+Trust, provider configuration, working directory, and duplicate live bindings
+before showing the provider command confirmation.
+
+Live coordination is a separate opt-in experimental facility. One authenticated
+loopback coordinator is elected per profile/execution host. Windows publish
+bounded in-memory summaries under expiring leases and accept only fixed routed
+actions such as revealing an owned terminal. Provider IDs cross that boundary
+only as one-way fingerprints for duplicate-resume detection; live snapshots and
+actions are never persisted. Local, WSL, SSH, and container extension hosts are
+not federated, and a historical record never becomes "live" merely because its
+project was reopened.
+
 ## Open decisions
 
 1. Should “new agent” optionally create a Git worktree by default, or remain a separate advanced command?

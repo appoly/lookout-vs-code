@@ -43,6 +43,11 @@ existing attribution and privacy guarantees.
 - [x] Cross-worktree Compound Engineering artifact discovery and canonical path labels.
 - [x] Manual MVP smoke test executed and findings recorded in [the 2026-07-10 smoke report](sessions/2026-07-10-smoke.md).
 - [x] Deep product and extension namespace rename to Lookout / `lookout.*` / `LOOKOUT_*` before Marketplace preview, per [the rename plan](plans/lookout-rename.md).
+- [x] Host-local cross-project history with reopen/resume handoffs that never
+  invent live terminal state.
+- [x] Experimental same-profile/same-execution-host live coordination with
+  authenticated loopback leases, cross-window focus routing, and duplicate
+  resume detection.
 
 ## Next: close the manual smoke findings
 
@@ -84,6 +89,8 @@ existing attribution and privacy guarantees.
   and known exit result. Worktree diff stats and native verification outcome
   live in Review; arbitrary debug-result inference remains out of scope.
 - [x] Resume supported Codex/Claude sessions through provider-owned IDs; browse prior Lookout session metadata and clearly distinguish resumable, terminal-only, and unavailable records.
+- [x] Extend bounded History across projects and reopen the owning workspace
+  with an expiring one-shot resume/fork handoff.
 - [x] Offer a privacy-safe support export of identifier-free health metadata, not a transcript or raw event stream.
 - [x] Display session integration health in Agent tooltips and a dedicated Doctor report: lifecycle bridge state, hook-trust state, usage availability/staleness, remote-host scope, dependencies, provider identity, and worktree baseline availability.
 
@@ -151,10 +158,10 @@ The decision-complete design is in [the opt-in Compound Engineering plan](plans/
 - [x] Run lint, unit tests, packaging, and stable extension-host coverage on
   Windows and macOS as well as Linux; keep the minimum VS Code extension-host
   leg on Linux.
-- Prototype cross-workspace coordination behind an experimental setting. One
-  coordinator covers one VS Code profile on one execution host/remote
-  authority; do not claim transparent federation between local, WSL, SSH, and
-  container hosts.
+- [x] Prototype cross-workspace coordination behind an experimental setting.
+  One authenticated loopback coordinator covers one VS Code profile on one
+  execution host/remote authority, with leased live summaries and routed focus;
+  it does not claim federation between local, WSL, SSH, and container hosts.
 - [x] Accessible Activity Bar and 256×256 Marketplace icons, gallery banner,
   user-first README, privacy/support/security docs, and a release checklist.
 - Settings walkthrough, real Marketplace screenshots/GIF, and publishing automation.

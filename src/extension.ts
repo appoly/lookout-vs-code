@@ -15,7 +15,11 @@ import type { AgentKind, LaunchRequest } from './types';
 import { UsageManager } from './usageManager';
 import { UsageStatusBar, UsageTreeProvider } from './usageTree';
 import { InboxTreeProvider } from './inboxTree';
-import { HistoryTreeProvider } from './historyTree';
+import {
+  GlobalHistoryTreeItem,
+  HistoryTreeProvider,
+  LiveHistoryTreeItem
+} from './historyTree';
 import {
   buildProfileCatalog,
   type AgentProfile
@@ -42,11 +46,23 @@ import {
   createSupportBundle,
   serializeSupportBundle
 } from './supportBundle';
+import {
+  GlobalHistoryService,
+  GlobalHistoryStore
+} from './globalHistoryStore';
+import type {
+  GlobalHistoryIntent,
+  GlobalHistoryRecord
+} from './globalHistoryModel';
+import { currentWorkspaceIdentity } from './workspaceIdentity';
+import { CoordinationService } from './coordinationService';
 
 export interface LookoutExtensionTestApi {
   readonly sessions: SessionManager;
   readonly sessionTree: SessionTreeProvider;
   readonly reviewTree: ReviewTreeProvider;
+  readonly globalHistory: GlobalHistoryService;
+  readonly coordination: CoordinationService;
 }
 
 export async function activate(
@@ -65,7 +81,38 @@ export async function activate(
   const usageTree = new UsageTreeProvider(usage);
   const usageStatus = new UsageStatusBar(usage);
   const inboxTree = new InboxTreeProvider(sessions);
-  const historyTree = new HistoryTreeProvider(sessions);
+  const workspaceIdentity = currentWorkspaceIdentity(context);
+  const globalHistory = new GlobalHistoryService(
+    vscode,
+    new GlobalHistoryStore(context.globalStorageUri.fsPath),
+    sessions,
+    workspaceIdentity,
+    vscode.workspace
+      .getConfiguration('lookout.history')
+      .get('globalEnabled', true)
+  );
+  const coordination = new CoordinationService(
+    context,
+    sessions,
+    workspaceIdentity
+  );
+  await coordination.initialize();
+  const globalIntentSubscription = globalHistory.onDidReceiveIntent(
+    ({ intent, record }) => {
+      void processPendingGlobalHistoryIntent(
+        intent,
+        record,
+        sessions,
+        coordination
+      );
+    }
+  );
+  await globalHistory.initialize();
+  const historyTree = new HistoryTreeProvider(
+    sessions,
+    globalHistory,
+    coordination
+  );
   const templates = new TemplateManager(context.globalState);
   const doctorOutput = vscode.window.createOutputChannel('Lookout Doctor', {
     log: true
@@ -82,6 +129,9 @@ export async function activate(
     usageStatus,
     inboxTree,
     historyTree,
+    globalHistory,
+    coordination,
+    globalIntentSubscription,
     doctorOutput,
     vscode.window.registerTreeDataProvider('lookout.review', reviewTree),
     vscode.workspace.registerTextDocumentContentProvider(
@@ -98,10 +148,10 @@ export async function activate(
     register('lookout.launchAgent', () => chooseAndLaunchAgent(sessions)),
     register('lookout.configureProfiles', () => configureProfiles()),
     register('lookout.runDoctor', () =>
-      runDoctor(context, sessions, usage, doctorOutput)
+      runDoctor(context, sessions, usage, coordination, globalHistory, doctorOutput)
     ),
     register('lookout.exportSupportBundle', () =>
-      exportSupportBundle(context, sessions, usage)
+      exportSupportBundle(context, sessions, usage, coordination, globalHistory)
     ),
     register('lookout.createTemplate', () => createSessionTemplate(templates)),
     register('lookout.launchTemplate', () =>
@@ -130,7 +180,9 @@ export async function activate(
       const id = sessionId(item);
       return id ? sessions.focus(id) : undefined;
     }),
-    register('lookout.focusNextAttention', () => sessions.focusNextAttention()),
+    register('lookout.focusNextAttention', () =>
+      focusNextAttentionAcrossWindows(sessions, coordination)
+    ),
     register('lookout.focusNextUnread', () => sessions.focusAdjacentUnread(1)),
     register('lookout.focusPreviousUnread', () =>
       sessions.focusAdjacentUnread(-1)
@@ -162,12 +214,86 @@ export async function activate(
     }),
     register('lookout.resumeSession', (item?: SessionItemLike) => {
       const id = sessionId(item);
-      return id ? sessions.continueProviderSession(id, 'resume') : undefined;
+      return id
+        ? continueLocalSessionWithCoordination(
+            id,
+            'resume',
+            sessions,
+            coordination,
+            globalHistory
+          )
+        : undefined;
     }),
     register('lookout.forkSession', (item?: SessionItemLike) => {
       const id = sessionId(item);
-      return id ? sessions.continueProviderSession(id, 'fork') : undefined;
+      return id
+        ? continueLocalSessionWithCoordination(
+            id,
+            'fork',
+            sessions,
+            coordination,
+            globalHistory
+          )
+        : undefined;
     }),
+    register('lookout.openGlobalHistory', (item?: GlobalHistoryTreeItem) =>
+      item ? openGlobalHistoryRecord(item.record) : undefined
+    ),
+    register('lookout.resumeGlobalSession', (item?: GlobalHistoryTreeItem) =>
+      item
+        ? continueGlobalHistoryRecord(
+            item.record,
+            'resume',
+            sessions,
+            globalHistory,
+            coordination
+          )
+        : undefined
+    ),
+    register('lookout.forkGlobalSession', (item?: GlobalHistoryTreeItem) =>
+      item
+        ? continueGlobalHistoryRecord(
+            item.record,
+            'fork',
+            sessions,
+            globalHistory,
+            coordination
+          )
+        : undefined
+    ),
+    register('lookout.deleteGlobalHistory', async (item?: GlobalHistoryTreeItem) => {
+      if (!item) {
+        return;
+      }
+      const choice = await vscode.window.showWarningMessage(
+        `Delete Lookout history for ${item.record.label} in ${item.record.workspace.label}? Provider history and project files are not affected.`,
+        { modal: true },
+        'Delete Lookout History'
+      );
+      if (choice === 'Delete Lookout History') {
+        await globalHistory.deleteRecord(item.record.id);
+      }
+    }),
+    register('lookout.focusRemoteSession', async (item?: LiveHistoryTreeItem) => {
+      if (!item) {
+        return;
+      }
+      const accepted = await coordination.focusRemote(
+        item.coordinatedWindow.windowId,
+        item.coordinatedSession.sessionId
+      );
+      void vscode.window.showInformationMessage(
+        accepted
+          ? `Asked ${item.coordinatedWindow.workspaceLabel} to reveal ${item.coordinatedSession.label}.`
+          : 'The owning Lookout window is no longer available.'
+      );
+    }),
+    register('lookout.configureCrossWindowCoordination', () =>
+      vscode.commands.executeCommand(
+        'workbench.action.openSettings',
+        'lookout.experimental.crossWindowCoordination'
+      )
+    ),
     register('lookout.archiveSession', (item?: SessionItemLike) => {
       const id = sessionId(item);
       return id ? sessions.archiveSession(id) : undefined;
@@ -180,6 +306,7 @@ export async function activate(
       await vscode.commands.executeCommand('workbench.view.extension.lookout');
       await vscode.commands.executeCommand('lookout.history.focus');
     }),
+    register('lookout.refreshHistory', () => historyTree.refresh()),
     register('lookout.deleteHistory', async () => {
       const choice = await vscode.window.showWarningMessage(
         'Delete closed and archived Lookout history? This removes only Lookout metadata and does not delete provider conversations, terminals, worktrees, files, or commits.',
@@ -187,7 +314,11 @@ export async function activate(
         'Delete Lookout History'
       );
       if (choice === 'Delete Lookout History') {
-        const removed = await sessions.deleteClosedHistory();
+        const [localRemoved, globalRemoved] = await Promise.all([
+          sessions.deleteClosedHistory(),
+          globalHistory.deleteClosedHistory()
+        ]);
+        const removed = Math.max(localRemoved, globalRemoved);
         void vscode.window.showInformationMessage(
           `Deleted ${removed} Lookout history entr${removed === 1 ? 'y' : 'ies'}.`
         );
@@ -265,16 +396,23 @@ export async function activate(
   );
 
   const updateSessionBadge = (): void => {
-    const unread = sessions.list().filter((session) => session.unread).length;
+    const localUnread = sessions.list().filter((session) => session.unread).length;
+    const remoteUnread = coordination
+      .windows()
+      .flatMap((window) => window.sessions)
+      .filter((session) => session.unread || session.status === 'attention')
+      .length;
+    const unread = localUnread + remoteUnread;
     sessionTreeView.badge = unread > 0
       ? {
           value: unread,
-          tooltip: `${unread} unread agent update${unread === 1 ? '' : 's'}`
+          tooltip: `${unread} unread agent update${unread === 1 ? '' : 's'}${remoteUnread > 0 ? ` · ${remoteUnread} in other windows` : ''}`
         }
       : undefined;
   };
   context.subscriptions.push(
     sessions.onDidChange(updateSessionBadge),
+    coordination.onDidChange(updateSessionBadge),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('lookout.attentionSound.enabled')) {
         void updateSoundContext();
@@ -288,7 +426,7 @@ export async function activate(
   usage.initialize();
 
   return process.env.LOOKOUT_TEST === '1'
-    ? { sessions, sessionTree, reviewTree }
+    ? { sessions, sessionTree, reviewTree, globalHistory, coordination }
     : undefined;
 }
 
@@ -1041,13 +1179,333 @@ function nonEmpty(value: string): string | undefined {
   return value.trim() ? undefined : 'Enter a value';
 }
 
+async function focusNextAttentionAcrossWindows(
+  sessions: SessionManager,
+  coordination: CoordinationService
+): Promise<void> {
+  const local = sessions
+    .list()
+    .filter((session) => sessions.isOpen(session.id))
+    .find((session) => session.status === 'attention' || session.unread);
+  if (local) {
+    await sessions.focus(local.id);
+    return;
+  }
+  const remote = coordination
+    .windows()
+    .flatMap((window) =>
+      window.sessions.map((session) => ({ window, session }))
+    )
+    .find(({ session }) => session.status === 'attention' || session.unread);
+  if (remote) {
+    const accepted = await coordination.focusRemote(
+      remote.window.windowId,
+      remote.session.sessionId
+    );
+    if (accepted) {
+      void vscode.window.showInformationMessage(
+        `Asked ${remote.window.workspaceLabel} to reveal ${remote.session.label}.`
+      );
+      return;
+    }
+  }
+  void vscode.window.showInformationMessage(
+    'No agents need attention in this or another coordinated window.'
+  );
+}
+
+async function openGlobalHistoryRecord(
+  record: GlobalHistoryRecord
+): Promise<void> {
+  const choice = await vscode.window.showInformationMessage(
+    `Open ${record.workspace.label}? This historical row does not restore or claim the old terminal.`,
+    { modal: true },
+    'Open Project'
+  );
+  if (choice !== 'Open Project') {
+    return;
+  }
+  await vscode.commands.executeCommand(
+    'vscode.openFolder',
+    vscode.Uri.parse(record.workspace.uri, true),
+    { forceNewWindow: true }
+  );
+}
+
+async function continueLocalSessionWithCoordination(
+  id: string,
+  operation: 'resume' | 'fork',
+  sessions: SessionManager,
+  coordination: CoordinationService,
+  globalHistory: GlobalHistoryService
+): Promise<void> {
+  const session = sessions.get(id);
+  const provider = session?.providerSessions.at(-1);
+  if (operation === 'resume' && provider) {
+    const collision = coordination.providerCollision(provider.provider, provider.id);
+    if (collision) {
+      const choice = await vscode.window.showWarningMessage(
+        `${session?.label ?? 'This provider session'} is already live in ${collision.window.workspaceLabel}.`,
+        { modal: true },
+        'Focus Existing',
+        'Fork Instead'
+      );
+      if (choice === 'Focus Existing') {
+        await coordination.focusRemote(
+          collision.window.windowId,
+          collision.sessionId
+        );
+        return;
+      }
+      if (choice === 'Fork Instead') {
+        await sessions.continueProviderSession(id, 'fork');
+      }
+      return;
+    }
+    const remotelyLiveRecord = globalHistory.list().find(
+      (record) =>
+        record.provider?.provider === provider.provider &&
+        record.provider.id === provider.id &&
+        !globalHistory.isCurrentWorkspace(record) &&
+        potentiallyLiveHistoryStatus(record.status)
+    );
+    if (
+      remotelyLiveRecord &&
+      !coordination.health().state.startsWith('healthy-')
+    ) {
+      const choice = await vscode.window.showWarningMessage(
+        `${session?.label ?? 'This provider session'} was last recorded live in ${remotelyLiveRecord.workspace.label}. Enable live coordination to confirm its owner, or fork instead.`,
+        { modal: true },
+        'Fork Instead',
+        'Configure Coordination'
+      );
+      if (choice === 'Fork Instead') {
+        await sessions.continueProviderSession(id, 'fork');
+      } else if (choice === 'Configure Coordination') {
+        await vscode.commands.executeCommand(
+          'workbench.action.openSettings',
+          'lookout.experimental.crossWindowCoordination'
+        );
+      }
+      return;
+    }
+  }
+  await sessions.continueProviderSession(id, operation);
+}
+
+async function continueGlobalHistoryRecord(
+  record: GlobalHistoryRecord,
+  operation: 'resume' | 'fork',
+  sessions: SessionManager,
+  globalHistory: GlobalHistoryService,
+  coordination: CoordinationService
+): Promise<void> {
+  const provider = record.provider;
+  if (!provider || provider.state !== 'available') {
+    void vscode.window.showWarningMessage(
+      'This global history row has no available provider session to continue.'
+    );
+    return;
+  }
+  if (operation === 'resume') {
+    const collision = coordination.providerCollision(provider.provider, provider.id);
+    if (collision) {
+      const choice = await vscode.window.showWarningMessage(
+        `${record.label} already appears live in ${collision.window.workspaceLabel}. Resuming would attach two terminals to one provider history.`,
+        { modal: true },
+        'Focus Existing',
+        'Fork Instead'
+      );
+      if (choice === 'Focus Existing') {
+        await coordination.focusRemote(
+          collision.window.windowId,
+          collision.sessionId
+        );
+        return;
+      }
+      if (choice === 'Fork Instead') {
+        return continueGlobalHistoryRecord(
+          record,
+          'fork',
+          sessions,
+          globalHistory,
+          coordination
+        );
+      }
+      return;
+    }
+    if (
+      potentiallyLiveHistoryStatus(record.status) &&
+      !coordination.health().state.startsWith('healthy-')
+    ) {
+      const choice = await vscode.window.showWarningMessage(
+        `${record.label} was last recorded as ${record.status}, and live coordination is not available to prove that its old terminal is gone. Lookout will not create a possible duplicate resume.`,
+        { modal: true },
+        'Fork Instead',
+        'Open Project',
+        'Configure Coordination'
+      );
+      if (choice === 'Fork Instead') {
+        return continueGlobalHistoryRecord(
+          record,
+          'fork',
+          sessions,
+          globalHistory,
+          coordination
+        );
+      }
+      if (choice === 'Open Project') {
+        await openGlobalHistoryRecord(record);
+      } else if (choice === 'Configure Coordination') {
+        await vscode.commands.executeCommand(
+          'workbench.action.openSettings',
+          'lookout.experimental.crossWindowCoordination'
+        );
+      }
+      return;
+    }
+  }
+  if (globalHistory.isCurrentWorkspace(record)) {
+    const profile = (await currentProfiles()).find(
+      (candidate) => candidate.kind === provider.provider
+    );
+    if (profile?.availability.state !== 'available') {
+      void vscode.window.showWarningMessage(
+        `${displayKind(provider.provider)} is not available as a direct provider command in this extension host.`
+      );
+      return;
+    }
+    await sessions.continueProviderReference(
+      continuationSource(record),
+      operation
+    );
+    return;
+  }
+  const choice = await vscode.window.showInformationMessage(
+    `${operation === 'resume' ? 'Resume' : 'Fork'} ${record.label} with ${displayKind(record.provider.provider)}? Lookout will open ${record.workspace.label} in a new window, revalidate trust and the provider command there, then ask for final confirmation.\n\nWorking directory: ${record.cwd}`,
+    { modal: true },
+    operation === 'resume' ? 'Open Project to Resume' : 'Open Project to Fork'
+  );
+  if (!choice) {
+    return;
+  }
+  const created = await globalHistory.createIntent(record.id, operation);
+  if (!created.intent) {
+    void vscode.window.showWarningMessage(
+      'Lookout could not create the short-lived continuation handoff.'
+    );
+    return;
+  }
+  await vscode.commands.executeCommand(
+    'vscode.openFolder',
+    vscode.Uri.parse(record.workspace.uri, true),
+    { forceNewWindow: true }
+  );
+}
+
+async function processPendingGlobalHistoryIntent(
+  intent: GlobalHistoryIntent,
+  record: GlobalHistoryRecord,
+  sessions: SessionManager,
+  coordination: CoordinationService
+): Promise<void> {
+  if (!record.provider) {
+    return;
+  }
+  if (!vscode.workspace.isTrusted) {
+    void vscode.window.showWarningMessage(
+      `Lookout opened ${record.workspace.label}, but Workspace Trust is required before ${intent.operation === 'resume' ? 'resuming' : 'forking'} the provider session. The historical row remains available.`
+    );
+    return;
+  }
+  const profile = (await currentProfiles()).find(
+    (candidate) => candidate.kind === record.provider?.provider
+  );
+  if (profile?.availability.state !== 'available') {
+    const choice = await vscode.window.showWarningMessage(
+      `${displayKind(record.provider.provider)} is not available as a direct provider command in this extension host. The continuation was not launched.`,
+      'Configure Profiles'
+    );
+    if (choice === 'Configure Profiles') {
+      await configureProfiles();
+    }
+    return;
+  }
+  if (intent.operation === 'resume') {
+    const collision = coordination.providerCollision(
+      record.provider.provider,
+      record.provider.id
+    );
+    if (collision) {
+      const choice = await vscode.window.showWarningMessage(
+        `${record.label} is already live in ${collision.window.workspaceLabel}.`,
+        { modal: true },
+        'Focus Existing',
+        'Fork Instead'
+      );
+      if (choice === 'Focus Existing') {
+        await coordination.focusRemote(
+          collision.window.windowId,
+          collision.sessionId
+        );
+        return;
+      }
+      if (choice !== 'Fork Instead') {
+        return;
+      }
+      await sessions.continueProviderReference(
+        continuationSource(record),
+        'fork'
+      );
+      return;
+    }
+  }
+  await sessions.continueProviderReference(
+    continuationSource(record),
+    intent.operation
+  );
+}
+
+function continuationSource(
+  record: GlobalHistoryRecord
+): import('./sessionManager').ProviderContinuationSource {
+  if (!record.provider) {
+    throw new Error('Global history record has no provider reference');
+  }
+  return {
+    kind: record.provider.provider,
+    label: record.label,
+    cwd: record.cwd,
+    configuredCommand: vscode.workspace
+      .getConfiguration(`lookout.${record.provider.provider}`)
+      .get('command', record.provider.provider),
+    sourceLookoutSessionId: record.sourceSessionId,
+    providerSessionId: record.provider.id
+  };
+}
+
+function potentiallyLiveHistoryStatus(
+  status: GlobalHistoryRecord['status']
+): boolean {
+  return status === 'starting' || status === 'active' || status === 'running' ||
+    status === 'background' || status === 'attention' || status === 'idle' ||
+    status === 'unknown';
+}
+
 async function runDoctor(
   context: vscode.ExtensionContext,
   sessions: SessionManager,
   usage: UsageManager,
+  coordination: CoordinationService,
+  globalHistory: GlobalHistoryService,
   output: vscode.LogOutputChannel
 ): Promise<void> {
-  const report = await collectHealth(sessions, usage);
+  const report = await collectHealth(
+    sessions,
+    usage,
+    coordination,
+    globalHistory
+  );
   output.clear();
   for (const line of formatDoctorReport(report, productHeader(context))) {
     output.appendLine(line);
@@ -1058,7 +1516,9 @@ async function runDoctor(
 async function exportSupportBundle(
   context: vscode.ExtensionContext,
   sessions: SessionManager,
-  usage: UsageManager
+  usage: UsageManager,
+  coordination: CoordinationService,
+  globalHistory: GlobalHistoryService
 ): Promise<void> {
   const destination = await vscode.window.showSaveDialog({
     title: 'Export Sanitized Lookout Support Bundle',
@@ -1068,7 +1528,12 @@ async function exportSupportBundle(
   if (!destination) {
     return;
   }
-  const report = await collectHealth(sessions, usage);
+  const report = await collectHealth(
+    sessions,
+    usage,
+    coordination,
+    globalHistory
+  );
   const bundle = createSupportBundle({
     generatedAt: Date.now(),
     product: productHeader(context),
@@ -1082,7 +1547,10 @@ async function exportSupportBundle(
         .get('lifecycleIntegration', true),
       resultCapture: vscode.workspace
         .getConfiguration('lookout.review')
-        .get('captureCommandOutput', false)
+        .get('captureCommandOutput', false),
+      globalHistory: globalHistory.health() === 'current',
+      crossWindowCoordination:
+        coordination.health().state !== 'disabled'
     },
     redaction: {
       homePaths: [homedir()],
@@ -1102,7 +1570,9 @@ async function exportSupportBundle(
 
 async function collectHealth(
   sessions: SessionManager,
-  usage: UsageManager
+  usage: UsageManager,
+  coordination: CoordinationService,
+  globalHistory: GlobalHistoryService
 ): Promise<HealthReport> {
   const [profiles, git, node] = await Promise.all([
     currentProfiles(),
@@ -1135,7 +1605,9 @@ async function collectHealth(
             snapshots.find((snapshot) => snapshot.provider === provider)?.status
           )
         : 'disabled'
-    }))
+    })),
+    globalHistory: globalHistory.health(),
+    coordination: coordination.health().state
   });
 }
 

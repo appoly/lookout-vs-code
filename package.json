@@ -275,6 +275,50 @@
         "icon": "$(history)"
       },
       {
+        "command": "lookout.refreshHistory",
+        "title": "Refresh Agent History",
+        "category": "Lookout",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "lookout.configureCrossWindowCoordination",
+        "title": "Configure Cross-Window Coordination",
+        "category": "Lookout",
+        "icon": "$(broadcast)"
+      },
+      {
+        "command": "lookout.openGlobalHistory",
+        "title": "Open Historical Project",
+        "category": "Lookout",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "lookout.resumeGlobalSession",
+        "title": "Open Project and Resume Provider Session",
+        "category": "Lookout",
+        "enablement": "isWorkspaceTrusted",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "lookout.forkGlobalSession",
+        "title": "Open Project and Fork Provider Session",
+        "category": "Lookout",
+        "enablement": "isWorkspaceTrusted",
+        "icon": "$(git-branch-create)"
+      },
+      {
+        "command": "lookout.deleteGlobalHistory",
+        "title": "Delete Cross-Project History",
+        "category": "Lookout",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "lookout.focusRemoteSession",
+        "title": "Focus Agent in Owning Window",
+        "category": "Lookout",
+        "icon": "$(broadcast)"
+      },
+      {
         "command": "lookout.deleteHistory",
         "title": "Delete Closed Lookout History",
         "category": "Lookout",
@@ -530,6 +574,26 @@
         {
           "command": "lookout.unarchiveSession",
           "when": "false"
+        },
+        {
+          "command": "lookout.openGlobalHistory",
+          "when": "false"
+        },
+        {
+          "command": "lookout.resumeGlobalSession",
+          "when": "false"
+        },
+        {
+          "command": "lookout.forkGlobalSession",
+          "when": "false"
+        },
+        {
+          "command": "lookout.deleteGlobalHistory",
+          "when": "false"
+        },
+        {
+          "command": "lookout.focusRemoteSession",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -622,6 +686,16 @@
           "command": "lookout.deleteHistory",
           "when": "view == lookout.history",
           "group": "navigation@1"
+        },
+        {
+          "command": "lookout.configureCrossWindowCoordination",
+          "when": "view == lookout.history",
+          "group": "navigation@2"
+        },
+        {
+          "command": "lookout.refreshHistory",
+          "when": "view == lookout.history",
+          "group": "navigation@3"
         }
       ],
       "terminal/context": [
@@ -711,6 +785,31 @@
           "command": "lookout.unarchiveSession",
           "when": "view == lookout.history && viewItem == lookout.historySession.archived",
           "group": "lookout@2"
+        },
+        {
+          "command": "lookout.openGlobalHistory",
+          "when": "view == lookout.history && (viewItem == lookout.globalHistory.terminal-only || viewItem == lookout.globalHistory.archived)",
+          "group": "inline@1"
+        },
+        {
+          "command": "lookout.resumeGlobalSession",
+          "when": "view == lookout.history && viewItem == lookout.globalHistory.resumable && isWorkspaceTrusted",
+          "group": "inline@1"
+        },
+        {
+          "command": "lookout.forkGlobalSession",
+          "when": "view == lookout.history && viewItem == lookout.globalHistory.resumable && isWorkspaceTrusted",
+          "group": "lookout@1"
+        },
+        {
+          "command": "lookout.deleteGlobalHistory",
+          "when": "view == lookout.history && (viewItem == lookout.globalHistory.resumable || viewItem == lookout.globalHistory.terminal-only || viewItem == lookout.globalHistory.archived)",
+          "group": "lookout@2"
+        },
+        {
+          "command": "lookout.focusRemoteSession",
+          "when": "view == lookout.history && viewItem == lookout.liveSession",
+          "group": "inline@1"
         }
       ]
     },
@@ -759,7 +858,7 @@
           {
             "id": "lookout.walkthrough.continuity",
             "title": "Resume provider-owned work",
-            "description": "[Browse Lookout history](command:lookout.browseHistory) to resume supported provider sessions without reading their transcripts.",
+            "description": "[Browse Lookout history](command:lookout.browseHistory) to reopen projects and resume supported provider sessions without reading their transcripts. Live coordination across same-host windows remains an explicit experimental setting.",
             "media": {
               "image": "resources/icon.png",
               "altText": "Lookout session history"
@@ -914,6 +1013,18 @@
           "minimum": 1,
           "maximum": 100,
           "description": "Maximum recent review items shown in each group."
+        },
+        "lookout.history.globalEnabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "Keep bounded cross-project Lookout history in extension-global storage on this execution host. Reload the window after changing this setting. History is not Settings Sync data."
+        },
+        "lookout.experimental.crossWindowCoordination": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "Share live, metadata-only agent state between Lookout windows on the same VS Code profile and execution host through an authenticated loopback coordinator. Local, WSL, SSH, and container hosts are never federated."
         },
         "lookout.browser.defaultUrl": {
           "type": "string",

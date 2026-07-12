@@ -26,6 +26,7 @@ disabled, and verifies:
   credentials;
 - authenticated lifecycle attention, unread state, and attention navigation;
 - provider identity binding without conflating provider and Lookout IDs;
+- projection into the host-local cross-project history boundary;
 - native sibling-split requests relative to the parent terminal;
 - changed-file discovery and virtual Git-baseline content;
 - closed-terminal state and session removal.
@@ -59,6 +60,15 @@ performs bounded, unauthenticated help/version/surface inspection against the
 installed CLIs and writes only redacted advisory output. A scheduled three-OS
 workflow uploads those reports but does not block normal CI when a provider
 changes or an installer is temporarily unavailable.
+
+The fast suite also creates real loopback coordinator servers and separate
+cross-process store instances. It verifies authenticated requests, one-owner
+election, client attachment, lease expiry, one-shot action delivery, protocol
+drift refusal, tombstone behavior, expiring continuation intents, malformed
+metadata recovery, and concurrent updates without lost writes. These tests do
+not replace the installed two-window checks: OS foreground behavior, VS Code
+profile isolation, remote extension-host storage, and crash/upgrade recovery
+must still be exercised interactively.
 
 ## Manual release checks
 

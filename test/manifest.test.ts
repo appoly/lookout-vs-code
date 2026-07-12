@@ -61,6 +61,8 @@ test('disables command-launching contributions outside trusted workspaces', () =
     'lookout.restartSession',
     'lookout.resumeSession',
     'lookout.forkSession',
+    'lookout.resumeGlobalSession',
+    'lookout.forkGlobalSession',
     'lookout.runTask',
     'lookout.runTestTask',
     'lookout.runVerification',
@@ -101,4 +103,21 @@ test('ships a passive getting-started walkthrough', () => {
   );
   assert.ok(walkthrough);
   assert.ok((walkthrough.steps?.length ?? 0) >= 4);
+});
+
+test('ships host-local history with experimental live coordination off by default', () => {
+  const properties = manifest.contributes?.configuration?.properties;
+  assert.equal(properties?.['lookout.history.globalEnabled']?.default, true);
+  assert.equal(
+    properties?.['lookout.history.globalEnabled']?.scope,
+    'application'
+  );
+  assert.equal(
+    properties?.['lookout.experimental.crossWindowCoordination']?.default,
+    false
+  );
+  assert.equal(
+    properties?.['lookout.experimental.crossWindowCoordination']?.scope,
+    'application'
+  );
 });

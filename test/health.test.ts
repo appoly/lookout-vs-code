@@ -77,3 +77,19 @@ test('doctor formatting is line-safe and redacts injected token-shaped text', ()
   assert.equal(lines.join('\n').includes('CANARY_TOKEN_1234567890'), false);
   assert.match(lines.join('\n'), /<redacted-secret>/);
 });
+
+test('reports global history and live coordination without host identifiers', () => {
+  const report = evaluateHealth(inputs({
+    globalHistory: 'current',
+    coordination: 'healthy-client'
+  }));
+  assert.equal(
+    report.checks.find((item) => item.code === 'global-history')?.status,
+    'healthy'
+  );
+  assert.equal(
+    report.checks.find((item) => item.code === 'cross-window-coordination')?.status,
+    'healthy'
+  );
+  assert.doesNotMatch(JSON.stringify(report), /hostname|windowId|remote\.example/);
+});

@@ -31,6 +31,28 @@ its UI:
 - recent Claude usage-limit snapshots and whether the one-time Codex hook notice
   has been acknowledged.
 
+When `lookout.history.globalEnabled` is enabled (the default), Lookout also
+keeps a bounded cross-project history file in its extension-global storage on
+the current execution host. Each record may contain the workspace/folder URI,
+working directory, user-visible session label, provider type and opaque session
+ID, coarse local/WSL/SSH/container kind, status, fixed event counters,
+timestamps, archive state, lineage kind, and known exit code. It never contains
+launch commands, arguments, environment variables, prompts, transcripts,
+terminal output, hook messages, or provider credentials. Deletion tombstones
+prevent another open window from immediately restoring stale records. This file
+is not registered for VS Code Settings Sync.
+
+When the experimental cross-window coordinator is explicitly enabled, Lookout
+shares bounded live summaries with other Lookout extension hosts on the same VS
+Code profile and execution host. Those in-memory summaries contain the project
+label, window/session identifiers, user-visible agent label, provider, status,
+unread flag, timestamp, and a one-way provider-session fingerprint used to
+prevent duplicate resumes. They contain no raw provider session ID, workspace
+path, command, environment, prompt, transcript, event message, or output. The
+coordinator binds only to `127.0.0.1`, authenticates every request with a random
+secret stored in VS Code SecretStorage, expires window leases, and persists
+neither live snapshots nor actions.
+
 The explicit **Export Sanitized Support Bundle** command writes only versioned,
 allow-listed health codes, status totals, product versions, a coarse
 local/WSL/SSH/container host kind, and primitive feature states to the file you
@@ -53,6 +75,8 @@ It also:
   enabled;
 - receives lifecycle and Claude status-line events through a size-limited HTTP
   server bound only to `127.0.0.1` and protected by a random bearer token;
+- when explicitly enabled, runs or connects to one size-limited authenticated
+  loopback coordinator for live Lookout windows on that execution host;
 - invokes a local operating-system audio player for attention sounds;
 - opens a URL only when you use the Open Browser command.
 

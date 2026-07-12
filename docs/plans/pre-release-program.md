@@ -68,14 +68,21 @@ the release program:
 - Doctor and explicit sanitized support export cover trust, execution-host
   kind, dependencies, profiles, lifecycle, provider identity, usage, and Git
   baseline availability without emitting provider/Lookout IDs;
+- cross-project History now uses a versioned, file-locked, host-local index with
+  deletion tombstones and bounded one-shot reopen/resume intents; the target
+  window revalidates trust, provider configuration, cwd, and live collisions;
+- experimental live coordination elects one authenticated loopback owner per
+  profile/execution host, publishes bounded in-memory window/session summaries
+  under leases, routes fixed focus actions, recovers stale ownership, refuses
+  protocol drift, and fingerprints rather than shares provider IDs;
 - deterministic fake providers and an advisory three-OS compatibility workflow
   exercise lifecycle, privacy, resume, fork, help, and version surfaces;
 - the terminal-panel default, passive Getting Started walkthrough, release
   documentation, and cross-platform CI claims are reconciled.
 
 The remaining release-critical work is deliberately visible rather than marked
-complete: complete coordinator and remote-host experiments only if they clear
-their privacy and reliability gates; capture real listing media; prove the
+complete: run the coordinator and global-history implementation through the
+two-window crash/upgrade and supported remote-host matrix; capture real listing media; prove the
 configured registry identities with a protected candidate/publish run; and
 execute the full installed-VSIX/manual remote and multi-root matrix.
 
@@ -458,6 +465,12 @@ hosts, and support reports can be diagnosed without sensitive data.
   prompts, transcripts, or captured command output.
 
 #### P4.2 Cross-workspace coordination
+
+**Implementation status:** global history, reopen/resume handoff, coordinator
+election/authentication, leased live snapshots, focus routing, collision
+detection, stale-owner recovery, protocol refusal, Doctor state, and the native
+History UI are implemented. The coordinator remains disabled by default until
+the installed two-window and remote matrix below is recorded.
 
 - First ship global history that can reopen a folder and resume a provider
   session without claiming the old terminal is live.

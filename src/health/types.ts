@@ -18,7 +18,9 @@ export type HealthCheckCode =
   | 'provider-identity'
   | 'usage-codex'
   | 'usage-claude'
-  | 'git-baseline';
+  | 'git-baseline'
+  | 'global-history'
+  | 'cross-window-coordination';
 
 export type RemediationCode =
   | 'none'
@@ -34,7 +36,8 @@ export type RemediationCode =
   | 'sign-in-codex'
   | 'sign-in-claude'
   | 'refresh-usage'
-  | 'refresh-git-baseline';
+  | 'refresh-git-baseline'
+  | 'enable-cross-window-coordination';
 
 export type RemoteKind =
   | 'local'
@@ -122,4 +125,12 @@ export interface HealthInputs {
   readonly profiles: readonly ProfileHealthInput[];
   readonly sessions: readonly SessionHealthInput[];
   readonly usage: readonly UsageHealthInput[];
+  readonly globalHistory?: 'current' | 'disabled' | 'unavailable';
+  readonly coordination?:
+    | 'disabled'
+    | 'starting'
+    | 'healthy-owner'
+    | 'healthy-client'
+    | 'degraded'
+    | 'incompatible';
 }
