@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import assert from 'node:assert/strict';
@@ -43,7 +43,12 @@ test('removes discovered plans and docs from ordinary workspace changes', () => 
 });
 
 test('captures a Git baseline and lists working tree changes', async () => {
-  const directory = mkdtempSync(path.join(tmpdir(), 'lookout-git-'));
+  // Git reports canonical paths; the OS temp dir may be a symlink (macOS
+  // /var -> /private/var) or an 8.3 short name (Windows RUNNER~1), so
+  // canonicalize before comparing repo roots against it.
+  const directory = realpathSync.native(
+    mkdtempSync(path.join(tmpdir(), 'lookout-git-'))
+  );
   try {
     git(directory, ['init', '-q']);
     git(directory, ['config', 'user.name', 'Lookout Tests']);
