@@ -113,7 +113,7 @@ test('skips Codex hook injection when the launch shell is unknown', () => {
   assert.equal(
     withCodexLifecycleIntegration(
       'codex',
-      'C:\\Users\\Adam Hulme\\ext\\notify.js',
+      'C:\\Users\\Appoly User\\ext\\notify.js',
       'unknown',
       'win32'
     ),
@@ -125,7 +125,7 @@ test('skips Codex hook injection when the launch shell is unknown', () => {
 // trip through the shell that parses the typed command line and the
 // CommandLineToArgvW pass in the launched codex.exe.
 
-const WINDOWS_HELPER = 'C:\\Users\\Adam Hulme\\.vscode\\ext\\notify.js';
+const WINDOWS_HELPER = 'C:\\Users\\Appoly User\\.vscode\\ext\\notify.js';
 
 function windowsCommand(shell: 'powershell' | 'windows-powershell' | 'cmd'): string {
   const command = withCodexLifecycleIntegration(
@@ -226,7 +226,7 @@ test('windows-powershell injection rides the verbatim --% stop-parsing token', (
   assert.ok(stop);
   assert.match(
     stop,
-    /command = "node \\"C:\\\\Users\\\\Adam Hulme\\\\\.vscode\\\\ext\\\\notify\.js\\" --hook codex turn-end \\"Codex finished\\""/
+    /command = "node \\"C:\\\\Users\\\\Appoly User\\\\\.vscode\\\\ext\\\\notify\.js\\" --hook codex turn-end \\"Codex finished\\""/
   );
 });
 

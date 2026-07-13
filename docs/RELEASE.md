@@ -18,10 +18,11 @@ Implementation sequencing and the expanded acceptance criteria live in the
 - Create and verify the Appoly Open VSX namespace `appoly`. Confirm the Appoly
   accounts that own both registries are organization-controlled and have at
   least two administrators with recovery access.
-- Confirm the current overview and usage images under `assets/screenshots/`
-  still match the release candidate. Add an attention-state screenshot and a
-  native Review diff before publication; prefer a short launch → attention →
-  review recording as an additional asset.
+- Confirm the current overview, notification/status, and usage images under
+  `assets/screenshots/` still match the release candidate. The overview and
+  notification include attention states; add a native Review diff before
+  publication. Prefer a short launch → attention → review recording as an
+  additional asset.
 
 ## 2. Automated gates
 

@@ -36,7 +36,7 @@ The Lookout sidebar keeps active agents, cross-project history, live sessions
 from other windows, review evidence, and plans in one place.
 
 <p align="center">
-  <img src="assets/screenshots/lookout-overview.png" width="520" alt="Lookout sidebar showing an active Codex agent, local and cross-project history, another live window, workspace changes, recent verification commands, and plans" />
+  <img src="assets/screenshots/lookout-overview.png" width="520" alt="Lookout sidebar showing Codex and Claude agents, a finished-turn attention state, local and cross-project history, another live window, review evidence, workspace changes, and provider usage limits" />
 </p>
 
 ## What Lookout adds
@@ -167,9 +167,10 @@ provider windows:
 
 ![Lookout Usage Limits view showing Codex and Claude quota windows and reset times](assets/screenshots/usage-limits.png)
 
-The same limits can remain visible as a compact status-bar summary:
+The same limits can remain visible as a compact status-bar summary while a
+Lookout notification routes you back to an agent that has finished:
 
-![Lookout status bar showing compact Codex and Claude usage percentages](assets/screenshots/usage-status.png)
+![Lookout notification for a finished Claude agent with a Focus Agent action and a status-bar pill showing compact Codex and Claude usage percentages](assets/screenshots/usage-status.png)
 
 ## Privacy and security
 
@@ -226,9 +227,8 @@ stores and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 ## Optional Compound Engineering compatibility
 
 Lookout recognizes common plan, research, solution, todo, and changelog paths.
-For a fuller artifact convention, it is compatible with
-[The Workshop](https://github.com/adamhulme/the-workshop), a separately released
-skill pack. Lookout does not bundle, install, or update it.
+For a fuller artifact convention, it is compatible with The Workshop, a
+separately released skill pack. Lookout does not bundle, install, or update it.
 
 ## Development
 
