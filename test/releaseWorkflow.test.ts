@@ -8,6 +8,10 @@ const workflow = readFileSync(
   path.join(repositoryRoot, '.github', 'workflows', 'release.yml'),
   'utf8'
 );
+const ciWorkflow = readFileSync(
+  path.join(repositoryRoot, '.github', 'workflows', 'ci.yml'),
+  'utf8'
+);
 const allWorkflows = readdirSync(path.join(repositoryRoot, '.github', 'workflows'))
   .filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'))
   .map((file) => readFileSync(path.join(repositoryRoot, '.github', 'workflows', file), 'utf8'))
@@ -60,4 +64,12 @@ test('third-party actions are pinned to full commit SHAs', () => {
   for (const reference of actionReferences) {
     assert.match(reference, /@[a-f0-9]{40}$/i, `${reference} is not SHA-pinned`);
   }
+});
+
+test('Linux installed-VSIX smoke tests run under a virtual display', () => {
+  assert.match(
+    ciWorkflow,
+    /- run: xvfb-run -a npm run verify:vsix\r?\n\s+if: runner\.os == 'Linux' && matrix\.vscode == 'stable'/
+  );
+  assert.doesNotMatch(ciWorkflow, /- run: npm run verify:vsix\s*$/m);
 });

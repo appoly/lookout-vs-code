@@ -68,7 +68,7 @@ jobs:
         if: runner.os != 'Linux'
         env:
           LOOKOUT_VSCODE_VERSION: ${{ matrix.vscode }}
-      - run: npm run verify:vsix
+      - run: xvfb-run -a npm run verify:vsix
         if: runner.os == 'Linux' && matrix.vscode == 'stable'
         env:
           LOOKOUT_VSCODE_VERSION: ${{ matrix.vscode }}
