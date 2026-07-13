@@ -169,7 +169,8 @@ export type AgentEvent =
 
 export interface LaunchRequest {
   readonly kind: AgentKind;
-  readonly label: string;
+  /** Explicit label; omitted for plain launches so Lookout infers one. */
+  readonly label?: string;
   readonly command: string;
   readonly cwd: string;
   readonly parentSessionId?: string;

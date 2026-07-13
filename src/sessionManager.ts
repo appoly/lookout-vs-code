@@ -14,6 +14,7 @@ import {
   type LaunchShell
 } from './agentCommand';
 import { captureGitBaseline, listUncommittedChanges } from './gitReview';
+import { inferSessionLabel } from './sessionNaming';
 import {
   createSession,
   isActiveSession,
@@ -345,9 +346,19 @@ export class SessionManager implements vscode.Disposable {
 
   public async launch(request: LaunchRequest): Promise<AgentSession> {
     const baseline = await captureGitBaseline(request.cwd);
+    const label =
+      request.label?.trim() ||
+      inferSessionLabel({
+        kind: request.kind,
+        cwd: request.cwd,
+        ...(baseline?.branch ? { branch: baseline.branch } : {}),
+        existingLabels: [...this.sessions.values()].map(
+          (session) => session.label
+        )
+      });
     const created = createSession(
       request.kind,
-      request.label,
+      label,
       request.command,
       request.cwd
     );

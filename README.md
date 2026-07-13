@@ -29,9 +29,9 @@ terminal emulator or code viewer inside a webview.
   delegated-agent activity, authorization checks, finished turns, and genuine
   waits for input. Unread badges, status-bar state, notifications, and an optional
   bell make background work visible.
-- **Inbox and continuity** — triage a bounded, metadata-only event ledger, move
-  through unread events, browse closed history, and explicitly resume or fork
-  supported provider-owned sessions without reading their transcripts.
+- **Continuity** — move through unread agent events, browse closed history
+  backed by a bounded, metadata-only event ledger, and explicitly resume or
+  fork supported provider-owned sessions without reading their transcripts.
 - **Cross-project history** — reopen a previous project and hand a confirmed
   provider resume or fork to its Lookout window. Historical rows never claim
   that an old terminal is still live.

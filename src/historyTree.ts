@@ -2,7 +2,9 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
   buildHistoryEntries,
+  dedupeCoordinatedSessions,
   historyAvailabilityLabel,
+  liveSessionKey,
   safeHistoryLatestEvent,
   type HistoryAvailability,
   type HistoryEntry
@@ -203,16 +205,30 @@ export class HistoryTreeProvider
   }
 
   public getChildren(element?: HistoryTreeElement): HistoryTreeElement[] {
-    const local = this.localItems();
+    // A session live in another window would otherwise surface twice: once as
+    // a coordinated live row and once as its history record (global for other
+    // projects, workspaceState-shared for this workspace opened twice).
+    const liveSessions = dedupeCoordinatedSessions(this.coordination.windows());
+    const liveKeys = new Set(
+      liveSessions.map((entry) =>
+        liveSessionKey(entry.window.workspaceKey, entry.session.sessionId)
+      )
+    );
+    const local = this.localItems(liveKeys);
     const projects = this.globalHistory
       .list()
-      .filter((record) => !this.globalHistory.isCurrentWorkspace(record))
+      .filter(
+        (record) =>
+          !this.globalHistory.isCurrentWorkspace(record) &&
+          !liveKeys.has(
+            liveSessionKey(record.workspace.key, record.sourceSessionId)
+          )
+      )
       .slice(0, this.maximum)
       .map((record) => new GlobalHistoryTreeItem(record));
-    const live = this.coordination
-      .windows()
-      .flatMap((window) =>
-        window.sessions.map((session) => new LiveHistoryTreeItem(window, session))
+    const live = liveSessions
+      .map(
+        ({ window, session }) => new LiveHistoryTreeItem(window, session)
       )
       .sort((left, right) => {
         const leftAttention = left.coordinatedSession.status === 'attention' ||
@@ -262,19 +278,27 @@ export class HistoryTreeProvider
     this.changedEmitter.dispose();
   }
 
-  private localItems(): HistoryTreeItem[] {
+  private localItems(liveKeys: ReadonlySet<string>): HistoryTreeItem[] {
+    const workspaceKey = this.coordination.workspace?.key;
     return buildHistoryEntries(
       this.manager.history(),
       this.manager.eventsFor(),
       (id) => this.manager.isOpen(id),
       this.maximum
-    ).map(
-      (entry) =>
-        new HistoryTreeItem(
-          entry,
-          this.manager.eventsFor(entry.session.id)
-        )
-    );
+    )
+      .filter(
+        (entry) =>
+          entry.availability === 'open' ||
+          !workspaceKey ||
+          !liveKeys.has(liveSessionKey(workspaceKey, entry.session.id))
+      )
+      .map(
+        (entry) =>
+          new HistoryTreeItem(
+            entry,
+            this.manager.eventsFor(entry.session.id)
+          )
+      );
   }
 }
 

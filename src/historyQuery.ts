@@ -1,5 +1,9 @@
-import { safeEventPresentation } from './inboxQuery';
+import { safeEventPresentation } from './sessionEventPresentation';
 import { providerFor } from './providers/providerRegistry';
+import type {
+  CoordinatedSession,
+  CoordinatedWindow
+} from './coordinationModel';
 import type { SessionEvent } from './sessionEvents';
 import type { AgentSession } from './types';
 
@@ -88,4 +92,37 @@ export function historyAvailabilityLabel(value: HistoryAvailability): string {
 
 export function safeHistoryLatestEvent(event: SessionEvent | undefined): string {
   return event ? safeEventPresentation(event).label : 'No recorded events';
+}
+
+export interface LiveCoordinatedSession {
+  readonly window: CoordinatedWindow;
+  readonly session: CoordinatedSession;
+}
+
+/**
+ * One row per live session. A window reload re-registers under a fresh window
+ * ID while the previous lease has not yet expired, so the same session can be
+ * reported by two coordinated windows for up to the lease duration.
+ */
+export function dedupeCoordinatedSessions(
+  windows: readonly CoordinatedWindow[]
+): LiveCoordinatedSession[] {
+  const byKey = new Map<string, LiveCoordinatedSession>();
+  for (const window of windows) {
+    for (const session of window.sessions) {
+      const key = liveSessionKey(window.workspaceKey, session.sessionId);
+      const existing = byKey.get(key);
+      if (!existing || existing.window.observedAt < window.observedAt) {
+        byKey.set(key, { window, session });
+      }
+    }
+  }
+  return [...byKey.values()];
+}
+
+export function liveSessionKey(
+  workspaceKey: string,
+  sessionId: string
+): string {
+  return `${workspaceKey}\u0000${sessionId}`;
 }

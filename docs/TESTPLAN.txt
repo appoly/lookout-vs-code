@@ -148,14 +148,15 @@ H. TRUST (~5 min)
      readable; launching agents and running tasks is blocked with the
      trust warning; the three command settings are shown restricted.
 
-I. INBOX, HISTORY, PROFILES, AND TEMPLATES (~15 min)
+I. ATTENTION ROUTING, HISTORY, PROFILES, AND TEMPLATES (~15 min)
  32. Configure Agent Profiles reports direct Codex/Claude executables as
      detected, missing executables as unavailable, and wrapper commands as
      launch-only without claiming identity/resume/fork support.
- 33. Inbox shows fixed operational labels for lifecycle/attention events,
-     action-required unread events first. Next/Previous Unread cycles and
-     focusing the session clears only its event read state. No prompt, hook
-     message, command text, tool output, or transcript path appears.
+ 33. Agent rows and the status bar surface unread/attention state from fixed
+     operational labels. Next/Previous Unread cycles and focusing the session
+     clears only its event read state. History tooltips show the latest fixed
+     event label. No prompt, hook message, command text, tool output, or
+     transcript path appears anywhere.
  34. Close a managed session after its SessionStart identity arrives. History
      marks it resumable; Custom/adopted rows remain terminal-only. Resume opens
      the provider's native continuation in the original folder. A duplicate
@@ -200,7 +201,10 @@ K. CROSS-PROJECT HISTORY AND LIVE WINDOWS (~20 min per host)
  42. Verify lookout.experimental.crossWindowCoordination is false by default.
      Enable it in two windows on the same host/profile: one Doctor reports owner,
      the other client, and History shows leased live rows under Live in Other
-     Windows without exposing cwd/provider IDs in the live payload.
+     Windows without exposing cwd/provider IDs in the live payload. A session
+     live in another window appears only as its live row — not additionally
+     under Other Projects or Current Workspace — and reloading a window never
+     leaves the same session listed twice under two leases.
  43. Trigger attention in window A while using window B. Focus Next Attention
      or the live row sends one request; A reveals the exact terminal and reports
      the routed action. Close A -> its row expires within the lease window.

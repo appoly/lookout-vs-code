@@ -492,11 +492,6 @@
           "icon": "$(terminal)"
         },
         {
-          "id": "lookout.inbox",
-          "name": "Inbox",
-          "icon": "$(inbox)"
-        },
-        {
           "id": "lookout.history",
           "name": "History",
           "icon": "$(history)"
@@ -673,16 +668,6 @@
           "group": "navigation@1"
         },
         {
-          "command": "lookout.focusPreviousUnread",
-          "when": "view == lookout.inbox",
-          "group": "navigation@1"
-        },
-        {
-          "command": "lookout.focusNextUnread",
-          "when": "view == lookout.inbox",
-          "group": "navigation@2"
-        },
-        {
           "command": "lookout.deleteHistory",
           "when": "view == lookout.history",
           "group": "navigation@1"
@@ -840,10 +825,10 @@
           {
             "id": "lookout.walkthrough.attention",
             "title": "Triage explicit agent events",
-            "description": "Use the **Inbox** and [focus the next unread event](command:lookout.focusNextUnread). Lookout uses provider hooks and never scrapes terminal output.",
+            "description": "Watch the **Agents** view badges and status bar, and [focus the next unread agent](command:lookout.focusNextUnread). Lookout uses provider hooks and never scrapes terminal output.",
             "media": {
               "image": "resources/icon.png",
-              "altText": "Lookout attention inbox"
+              "altText": "Lookout attention routing"
             }
           },
           {

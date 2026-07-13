@@ -146,11 +146,27 @@ actions are never persisted. Local, WSL, SSH, and container extension hosts are
 not federated, and a historical record never becomes "live" merely because its
 project was reopened.
 
+## D15 — Attention routing lives on agent rows, not a feed view
+
+**Decision:** remove the dedicated Inbox view. The bounded operational event
+ledger from [D13](#d13--provider-identity-and-lookout-history-are-metadata-only)
+remains — it still drives session status, unread state, next/previous-unread
+navigation, History tooltips, and live-coordination summaries — but its
+feed-style presentation is gone.
+
+Because event text is deliberately enum-only (D3/D13), a feed row could never
+say *what* an agent wants; users always ended at the terminal, which the Agents
+tree already reaches in one click with the same attention badges. Unread
+triage stays on agent rows, the status bar, and the
+`lookout.focusNextUnread`/`lookout.focusPreviousUnread` commands. Per-event
+read state remains ledger bookkeeping only; no future surface should reintroduce
+a view whose rows cannot carry more information than the row they link to.
+
 ## Open decisions
 
 1. Should “new agent” optionally create a Git worktree by default, or remain a separate advanced command?
 2. ~~Should session resume IDs be captured for `codex resume` and `claude --resume`, and what stable source should provide them?~~ Resolved by [D13](#d13--provider-identity-and-lookout-history-are-metadata-only): authenticated documented hook fields provide the identity; transcripts are never read.
 3. ~~Should the Review view expose discovered tests directly, or only open the native Test Explorer/run tasks?~~ Resolved by [D11](#d11--the-review-running-group-surfaces-agent-commands-authoritatively): running agent commands (including test runs) are surfaced directly in the Running group.
 4. How should existing Claude status-line commands be composed without executing arbitrary global configuration implicitly?
-5. ~~Should Lookout expose a notification feed view, or keep unread/latest-event state only in agent rows?~~ Resolved by [D13](#d13--provider-identity-and-lookout-history-are-metadata-only): persist a bounded operational event ledger and add its inbox UI in Phase 2.
+5. ~~Should Lookout expose a notification feed view, or keep unread/latest-event state only in agent rows?~~ Resolved by [D13](#d13--provider-identity-and-lookout-history-are-metadata-only) then revised by [D15](#d15--attention-routing-lives-on-agent-rows-not-a-feed-view): the bounded event ledger persists, but unread/attention state lives on agent rows and navigation commands; the Phase 2 inbox UI was removed.
 6. How should a user's global Codex `notify` command be composed with Lookout's session-only notifier?

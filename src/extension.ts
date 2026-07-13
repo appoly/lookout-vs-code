@@ -17,7 +17,6 @@ import {
 import type { AgentKind, LaunchRequest } from './types';
 import { UsageManager } from './usageManager';
 import { UsageStatusBar, UsageTreeProvider } from './usageTree';
-import { InboxTreeProvider } from './inboxTree';
 import {
   GlobalHistoryTreeItem,
   HistoryTreeProvider,
@@ -83,7 +82,6 @@ export async function activate(
   const usage = new UsageManager(context, sessions);
   const usageTree = new UsageTreeProvider(usage);
   const usageStatus = new UsageStatusBar(usage);
-  const inboxTree = new InboxTreeProvider(sessions);
   const workspaceIdentity = currentWorkspaceIdentity(context);
   const globalHistory = new GlobalHistoryService(
     vscode,
@@ -130,7 +128,6 @@ export async function activate(
     usage,
     usageTree,
     usageStatus,
-    inboxTree,
     historyTree,
     globalHistory,
     coordination,
@@ -146,7 +143,6 @@ export async function activate(
       reviewTree
     ),
     vscode.window.registerTreeDataProvider('lookout.usage', usageTree),
-    vscode.window.registerTreeDataProvider('lookout.inbox', inboxTree),
     vscode.window.registerTreeDataProvider('lookout.history', historyTree),
     register('lookout.launchAgent', () => chooseAndLaunchAgent(sessions)),
     register('lookout.configureProfiles', () => configureProfiles()),
@@ -500,11 +496,8 @@ async function launchAgent(
       return;
     }
   }
-  const ordinal = sessions.list().filter((session) => session.kind === kind).length + 1;
-  const label = `${displayKind(kind)} ${ordinal}`;
   const request: LaunchRequest = {
     kind,
-    label,
     command,
     cwd,
     ...(parentSessionId ? { parentSessionId } : {})
