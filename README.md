@@ -7,6 +7,16 @@ your editor, diff viewer, task runner, and source-control client.
 > tested, but provider CLI integrations and remote-platform behavior can change
 > as Codex, Claude Code, and VS Code evolve.
 
+> **Use at your own risk:** Lookout launches third-party coding agents and other
+> commands you select. Those tools can read, change, or delete files and can run
+> further commands with your user account's permissions. Review commands,
+> provider permissions, and agent-produced changes; use source control and keep
+> appropriate backups. Lookout is provided **as is**, without warranties or a
+> guarantee that it will prevent data loss, security incidents, incorrect code,
+> or other damage. To the fullest extent permitted by law, Appoly and Lookout's
+> contributors are not liable for losses or claims arising from its use. The
+> [MIT License](LICENSE) contains the governing warranty and liability terms.
+
 Lookout is built around one loop:
 
 ```text
@@ -19,6 +29,15 @@ working until an agent actually needs you.
 
 It uses native VS Code terminals and review surfaces instead of putting another
 terminal emulator or code viewer inside a webview.
+
+## Lookout at a glance
+
+The Lookout sidebar keeps active agents, cross-project history, live sessions
+from other windows, review evidence, and plans in one place.
+
+<p align="center">
+  <img src="assets/screenshots/lookout-overview.png" width="520" alt="Lookout sidebar showing an active Codex agent, local and cross-project history, another live window, workspace changes, recent verification commands, and plans" />
+</p>
 
 ## What Lookout adds
 
@@ -143,6 +162,15 @@ usage comes from its documented custom status-line JSON after the first response
 in a Lookout-launched session. Both are account-wide limits, not per-terminal
 budgets.
 
+The Usage Limits view distinguishes available, stale, exhausted, and reset-due
+provider windows:
+
+![Lookout Usage Limits view showing Codex and Claude quota windows and reset times](assets/screenshots/usage-limits.png)
+
+The same limits can remain visible as a compact status-bar summary:
+
+![Lookout status bar showing compact Codex and Claude usage percentages](assets/screenshots/usage-status.png)
+
 ## Privacy and security
 
 Lookout contains no telemetry or analytics and sends nothing to a Lookout-owned
@@ -231,8 +259,9 @@ in Run and Debug, and press `F5`.
 - [Interactive release test plan](docs/TESTPLAN.txt)
 - [Product and technical research](docs/RESEARCH.md)
 
-Lookout is available under the [MIT License](LICENSE). Support requests belong in
-the [issue tracker](https://github.com/adamhulme/lookout-vs-code/issues); please
+Lookout is an Appoly open-source project available under the
+[MIT License](LICENSE). Support requests belong in the
+[issue tracker](https://github.com/appoly/lookout-vs-code/issues); please
 read [SUPPORT.md](SUPPORT.md) before filing one.
 
 Lookout is an independent open-source project and is not affiliated with OpenAI

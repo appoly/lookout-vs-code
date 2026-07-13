@@ -21,7 +21,7 @@ function fixture(): {
   const output = path.join(root, 'artifact');
   writeFileSync(
     manifest,
-    JSON.stringify({ name: 'lookout', version: '1.2.3', publisher: 'adamh' })
+    JSON.stringify({ name: 'lookout', version: '1.2.3', publisher: 'appoly' })
   );
   writeFileSync(source, 'exact-vsix-bytes');
   return { root, manifest, source, output };
@@ -59,7 +59,7 @@ test('prepares and independently verifies an exact release artifact', () => {
   const metadata = JSON.parse(
     readFileSync(path.join(candidate.output, 'release-metadata.json'), 'utf8')
   ) as { extensionId: string; file: string; tag: string; sha256: string };
-  assert.equal(metadata.extensionId, 'adamh.lookout');
+  assert.equal(metadata.extensionId, 'appoly.lookout');
   assert.equal(metadata.file, 'lookout-1.2.3.vsix');
   assert.equal(metadata.tag, 'v1.2.3');
   assert.match(metadata.sha256, /^[a-f0-9]{64}$/);

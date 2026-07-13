@@ -7,15 +7,21 @@ Implementation sequencing and the expanded acceptance criteria live in the
 
 ## 1. Identity and public listing
 
-- Confirm the Marketplace publisher ID is `adamh` and the extension ID is
-  `adamh.lookout`.
+- Confirm Appoly controls the Marketplace publisher ID `appoly` and the
+  extension ID is `appoly.lookout`. Because an extension identifier cannot be
+  renamed in place, do not publish under a temporary personal publisher.
 - Confirm both `lookout` and the display name `Lookout` remain available before
   the first upload.
-- Make `https://github.com/adamhulme/lookout-vs-code` publicly reachable, with
+- Transfer the repository to `appoly/lookout-vs-code`, update the local remote,
+  and make `https://github.com/appoly/lookout-vs-code` publicly reachable, with
   Issues and private security advisories enabled.
-- Prepare at least three current screenshots: Agents during parallel work, an
-  attention state, and a native Review diff. Prefer a short launch → attention →
-  review recording as the fourth asset.
+- Create and verify the Appoly Open VSX namespace `appoly`. Confirm the Appoly
+  accounts that own both registries are organization-controlled and have at
+  least two administrators with recovery access.
+- Confirm the current overview and usage images under `assets/screenshots/`
+  still match the release candidate. Add an attention-state screenshot and a
+  native Review diff before publication; prefer a short launch → attention →
+  review recording as an additional asset.
 
 ## 2. Automated gates
 
@@ -78,12 +84,13 @@ only builds the candidate; it never publishes. To publish, manually dispatch
 the workflow against an existing `v<package-version>` tag and explicitly enable
 each target.
 
-Protect the `visual-studio-marketplace` and `open-vsx` GitHub environments with
-required reviewers. Configure Marketplace environment variables
+Protect `main` and release tags under the Appoly repository rules, and protect
+the `visual-studio-marketplace` and `open-vsx` GitHub environments with required
+reviewers. Configure Marketplace environment variables
 `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` for a GitHub-OIDC federated Microsoft
-Entra identity authorized as Contributor on publisher `adamh`; no VSCE PAT is
-used. Open VSX currently uses the environment secret `OVSX_PAT` for namespace
-`adamh`. Keep all registry credentials out of the repository and generated
+Entra identity authorized as Contributor on publisher `appoly`; no VSCE PAT is
+used. Open VSX uses the environment secret `OVSX_PAT` for namespace `appoly`.
+Keep all registry credentials out of the repository and generated
 VSIX.
 
 Bundling is not a release gate while the extension remains a small,

@@ -9,6 +9,11 @@ interface ManifestCommand {
 }
 
 interface Manifest {
+  readonly name?: string;
+  readonly publisher?: string;
+  readonly repository?: { readonly url?: string };
+  readonly homepage?: string;
+  readonly bugs?: { readonly url?: string };
   readonly preview?: boolean;
   readonly icon?: string;
   readonly categories?: string[];
@@ -31,6 +36,14 @@ const manifest = JSON.parse(
   readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8')
 ) as Manifest;
 
+test('uses the Appoly public and registry identity', () => {
+  assert.equal(manifest.publisher, 'appoly');
+  assert.equal(manifest.name, 'lookout');
+  assert.equal(manifest.repository?.url, 'https://github.com/appoly/lookout-vs-code.git');
+  assert.equal(manifest.homepage, 'https://github.com/appoly/lookout-vs-code#readme');
+  assert.equal(manifest.bugs?.url, 'https://github.com/appoly/lookout-vs-code/issues');
+});
+
 test('ships the minimum Marketplace presentation metadata', () => {
   assert.equal(manifest.preview, true);
   assert.equal(manifest.icon, 'resources/icon.png');
@@ -38,11 +51,25 @@ test('ships the minimum Marketplace presentation metadata', () => {
   assert.ok(manifest.files?.includes('PRIVACY.md'));
   assert.ok(manifest.files?.includes('SECURITY.md'));
   assert.ok(manifest.files?.includes('SUPPORT.md'));
+  assert.ok(manifest.files?.includes('assets/screenshots/**'));
 
   const icon = readFileSync(path.join(repositoryRoot, manifest.icon));
   assert.equal(icon.subarray(1, 4).toString('ascii'), 'PNG');
   assert.ok(icon.readUInt32BE(16) >= 128, 'Marketplace icon is too narrow');
   assert.ok(icon.readUInt32BE(20) >= 128, 'Marketplace icon is too short');
+
+  for (const screenshot of [
+    'lookout-overview.png',
+    'usage-limits.png',
+    'usage-status.png'
+  ]) {
+    const image = readFileSync(
+      path.join(repositoryRoot, 'assets', 'screenshots', screenshot)
+    );
+    assert.equal(image.subarray(1, 4).toString('ascii'), 'PNG');
+    assert.ok(image.readUInt32BE(16) >= 400, `${screenshot} is too narrow`);
+    assert.ok(image.readUInt32BE(20) >= 50, `${screenshot} is too short`);
+  }
 });
 
 test('disables command-launching contributions outside trusted workspaces', () => {

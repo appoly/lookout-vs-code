@@ -6,7 +6,7 @@ import * as vscode from 'vscode';
 import type { LookoutExtensionTestApi } from '../../src/extension';
 import type { AgentEvent, AgentSession } from '../../src/types';
 
-const EXTENSION_ID = 'adamh.lookout';
+const EXTENSION_ID = 'appoly.lookout';
 const SESSION_PREFIX = 'Lookout: Integration Agent';
 
 suite('Lookout extension-host integration', () => {

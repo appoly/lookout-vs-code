@@ -8,7 +8,7 @@ version; older preview builds are not maintained separately.
 ## Reporting a vulnerability
 
 Please use a private
-[GitHub security advisory](https://github.com/adamhulme/lookout-vs-code/security/advisories/new)
+[GitHub security advisory](https://github.com/appoly/lookout-vs-code/security/advisories/new)
 instead of a public issue. Include the affected version, impact, reproduction,
 and any suggested mitigation. Do not include real credentials or third-party
 user data.

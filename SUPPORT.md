@@ -1,7 +1,9 @@
 # Support
 
 Lookout is currently a preview. Bug reports and focused feature requests are
-welcome in the [GitHub issue tracker](https://github.com/adamhulme/lookout-vs-code/issues).
+welcome in the [GitHub issue tracker](https://github.com/appoly/lookout-vs-code/issues).
+It is provided as an open-source project without a support SLA or a guarantee
+that a report or request will be resolved.
 
 Before opening an issue, check the README's requirements and known limitations,
 then try the latest published version.

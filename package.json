@@ -3,7 +3,7 @@
   "displayName": "Lookout",
   "description": "Run, monitor, and review Codex, Claude Code, and custom terminal agents in parallel without leaving VS Code.",
   "version": "0.1.0",
-  "publisher": "adamh",
+  "publisher": "appoly",
   "license": "MIT",
   "preview": true,
   "pricing": "Free",
@@ -14,11 +14,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/adamhulme/lookout-vs-code.git"
+    "url": "https://github.com/appoly/lookout-vs-code.git"
   },
-  "homepage": "https://github.com/adamhulme/lookout-vs-code#readme",
+  "homepage": "https://github.com/appoly/lookout-vs-code#readme",
   "bugs": {
-    "url": "https://github.com/adamhulme/lookout-vs-code/issues"
+    "url": "https://github.com/appoly/lookout-vs-code/issues"
   },
   "engines": {
     "vscode": "^1.96.0"
@@ -62,6 +62,7 @@
     }
   },
   "files": [
+    "assets/screenshots/**",
     "out/src/**",
     "resources/**",
     "README.md",

@@ -2,6 +2,9 @@
 
 ## 0.1.0 — Unreleased
 
+- Prepare the first public release under Appoly's publisher and repository
+  identity, with explicit README risk, warranty, and liability guidance.
+- Add current sidebar and usage screenshots to the Marketplace README.
 - Open new agent terminals in VS Code's native terminal panel by default while
   retaining editor-area terminals as an explicit setting.
 - Capture documented Codex and Claude provider session identity through

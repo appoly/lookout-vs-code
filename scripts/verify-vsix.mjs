@@ -21,7 +21,11 @@ const options = {
   version: process.env.LOOKOUT_VSCODE_VERSION ?? 'stable',
   spawn: { cwd: repositoryRoot }
 };
-const profileRoot = path.join(repositoryRoot, '.vscode-test', 'vsix-profile');
+const profileRoot = path.join(
+  repositoryRoot,
+  '.vscode-test',
+  `vsix-profile-${manifest.publisher}.${manifest.name}`
+);
 const profileArgs = [
   `--extensions-dir=${path.join(profileRoot, 'extensions')}`,
   `--user-data-dir=${path.join(profileRoot, 'user-data')}`

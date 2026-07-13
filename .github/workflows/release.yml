@@ -130,7 +130,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: visual-studio-marketplace
-      url: https://marketplace.visualstudio.com/items?itemName=adamh.lookout
+      url: https://marketplace.visualstudio.com/items?itemName=appoly.lookout
     permissions:
       contents: read
       id-token: write
@@ -184,7 +184,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: open-vsx
-      url: https://open-vsx.org/extension/adamh/lookout
+      url: https://open-vsx.org/extension/appoly/lookout
     permissions:
       contents: read
     steps:
