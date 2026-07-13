@@ -82,6 +82,8 @@ interface WorktreeChanges {
   readonly state: GitWorktreeState;
 }
 
+type ReviewErrorReporter = (scope: string, error: unknown) => void;
+
 export class ReviewTreeItem extends vscode.TreeItem {
   public readonly group?: ReviewGroup;
   public readonly uri?: vscode.Uri;
@@ -230,12 +232,15 @@ export class ReviewTreeProvider
   private persistChain: Promise<void> = Promise.resolve();
   private refreshTimer: NodeJS.Timeout | undefined;
   private worktreeRefreshTimer: NodeJS.Timeout | undefined;
+  private initialized = false;
+  private visible = true;
   public readonly onDidChangeTreeData = this.changedEmitter.event;
   public readonly onDidChange = this.contentChangedEmitter.event;
 
   public constructor(
     private readonly sessions: SessionManager,
-    private readonly workspaceState?: vscode.Memento
+    private readonly workspaceState?: vscode.Memento,
+    private readonly reportError: ReviewErrorReporter = () => undefined
   ) {
     const imageWatcher = vscode.workspace.createFileSystemWatcher(
       '**/*.{png,jpg,jpeg,gif,webp}'
@@ -264,22 +269,26 @@ export class ReviewTreeProvider
       }),
       vscode.workspace.onDidSaveTextDocument((document) => {
         this.invalidateEvidenceForUri(document.uri);
-        void this.refreshChanges();
+        if (this.visible) {
+          this.runBackground('save-refresh', () => this.refreshChanges());
+        }
       }),
       vscode.languages.onDidChangeDiagnostics((event) => {
         for (const root of this.diagnosticsSource.noteChanges(event.uris)) {
           this.verification?.invalidateRoot(root);
         }
-        this.refreshDiagnostics();
-        void this.refreshChanges();
+        if (this.visible) {
+          this.refreshDiagnostics();
+          this.runBackground('diagnostic-refresh', () => this.refreshChanges());
+        }
       }),
       vscode.tasks.onDidStartTask(() => this.refreshRuntime()),
       vscode.tasks.onDidEndTask(() => this.refreshRuntime()),
       vscode.debug.onDidStartDebugSession(() => this.refreshRuntime()),
       vscode.debug.onDidTerminateDebugSession(() => this.refreshRuntime()),
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (event.affectsConfiguration('lookout.review')) {
-          void this.refresh();
+        if (this.visible && event.affectsConfiguration('lookout.review')) {
+          this.runBackground('configuration-refresh', () => this.refresh());
         }
       })
     );
@@ -297,13 +306,29 @@ export class ReviewTreeProvider
         diagnosticBaselines: [...initial.diagnosticBaselines]
       }
     });
+    this.initialized = true;
     this.reconcileVerificationContexts();
-    await this.refresh();
     this.refreshRuntime();
-    this.worktreeRefreshTimer = setInterval(
-      () => void this.refreshChanges(),
-      10_000
-    );
+    if (this.visible) {
+      await this.refresh();
+      this.startWorktreePolling();
+    }
+  }
+
+  public setVisible(visible: boolean): void {
+    if (this.visible === visible) {
+      return;
+    }
+    this.visible = visible;
+    if (!this.initialized) {
+      return;
+    }
+    if (visible) {
+      this.startWorktreePolling();
+      this.runBackground('visible-refresh', () => this.refresh());
+    } else {
+      this.stopWorktreePolling();
+    }
   }
 
   public getTreeItem(element: ReviewTreeItem): vscode.TreeItem {
@@ -445,12 +470,15 @@ export class ReviewTreeProvider
   }
 
   private scheduleRefresh(): void {
+    if (!this.visible) {
+      return;
+    }
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
     }
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
-      void this.refresh();
+      this.runBackground('scheduled-refresh', () => this.refresh());
     }, 250);
   }
 
@@ -559,7 +587,7 @@ export class ReviewTreeProvider
     const running = startTaskVerificationRun(context.id, identity);
     verification.recordRun(running);
     this.persistVerificationSnapshot();
-    void this.refreshChanges();
+    this.runBackground('verification-start-refresh', () => this.refreshChanges());
 
     const completion = await observeTaskCompletion(selection.task);
     let signature: import('./verification/verificationTypes').VerificationFreshnessSignature | undefined;
@@ -635,9 +663,7 @@ export class ReviewTreeProvider
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
     }
-    if (this.worktreeRefreshTimer) {
-      clearInterval(this.worktreeRefreshTimer);
-    }
+    this.stopWorktreePolling();
     this.verification?.dispose();
     for (const watcher of this.watchers) {
       watcher.dispose();
@@ -647,6 +673,27 @@ export class ReviewTreeProvider
     }
     this.changedEmitter.dispose();
     this.contentChangedEmitter.dispose();
+  }
+
+  private startWorktreePolling(): void {
+    if (this.worktreeRefreshTimer) {
+      return;
+    }
+    this.worktreeRefreshTimer = setInterval(
+      () => this.runBackground('poll-refresh', () => this.refreshChanges()),
+      10_000
+    );
+  }
+
+  private stopWorktreePolling(): void {
+    if (this.worktreeRefreshTimer) {
+      clearInterval(this.worktreeRefreshTimer);
+      this.worktreeRefreshTimer = undefined;
+    }
+  }
+
+  private runBackground(scope: string, operation: () => Promise<void>): void {
+    void operation().catch((error: unknown) => this.reportError(scope, error));
   }
 
   private reconcileVerificationContexts(): void {

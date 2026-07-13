@@ -79,14 +79,16 @@
     "package": "npm run clean && tsc -p ./ --sourceMap false",
     "clean": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\"",
     "lint": "eslint src test",
-    "test": "npm run compile && node --test out/test/**/*.test.js",
-    "test:provider-compat": "npm run compile && node --test out/test/providerCompatibility.test.js",
+    "test": "npm run clean && npm run compile && node --test out/test/**/*.test.js",
+    "test:provider-compat": "npm run clean && npm run compile && node --test out/test/providerCompatibility.test.js",
     "compat:providers": "node scripts/provider-compat.mjs",
     "test:integration": "npm run compile && vscode-test --label integration --fail-zero --forbid-only",
     "verify:vsix": "npm run vsix && node scripts/verify-vsix.mjs",
-    "check": "npm run lint && npm test",
+    "verify:vsix-contents": "node scripts/verify-vsix-contents.mjs",
+    "check": "npm run check:repository && npm run lint && npm test",
     "check:all": "npm run check && npm run test:integration",
     "audit:runtime": "npm audit --omit=dev",
+    "check:repository": "node scripts/check-repository.mjs",
     "check:release": "npm run check:all && npm run audit:runtime && npm run verify:vsix",
     "vsix": "vsce package --no-dependencies"
   },
@@ -99,8 +101,10 @@
     "@vscode/test-electron": "^3.0.0",
     "@vscode/vsce": "^3.9.2",
     "eslint": "^9.31.0",
+    "ovsx": "1.0.2",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.37.0"
+    "typescript-eslint": "^8.37.0",
+    "yauzl": "3.4.0"
   },
   "contributes": {
     "commands": [
@@ -512,7 +516,7 @@
     "viewsWelcome": [
       {
         "view": "lookout.sessions",
-        "contents": "No agents are running.\n[Launch Codex](command:lookout.launchCodex)\n[Launch Claude Code](command:lookout.launchClaude)\n[Adopt an existing terminal](command:lookout.adoptTerminal)",
+        "contents": "No agents are running.\n[Launch an agent](command:lookout.launchAgent)\n[Check agent profiles](command:lookout.configureProfiles)\n[Adopt an existing terminal](command:lookout.adoptTerminal)",
         "when": "isWorkspaceTrusted"
       },
       {
@@ -589,6 +593,38 @@
         },
         {
           "command": "lookout.focusRemoteSession",
+          "when": "false"
+        },
+        {
+          "command": "lookout.splitCodex",
+          "when": "false"
+        },
+        {
+          "command": "lookout.splitClaude",
+          "when": "false"
+        },
+        {
+          "command": "lookout.refreshSessions",
+          "when": "false"
+        },
+        {
+          "command": "lookout.refreshHistory",
+          "when": "false"
+        },
+        {
+          "command": "lookout.refreshReview",
+          "when": "false"
+        },
+        {
+          "command": "lookout.refreshUsage",
+          "when": "false"
+        },
+        {
+          "command": "lookout.muteAttentionSound",
+          "when": "false"
+        },
+        {
+          "command": "lookout.unmuteAttentionSound",
           "when": "false"
         }
       ],
@@ -809,45 +845,60 @@
             "id": "lookout.walkthrough.profiles",
             "title": "Check your agent profiles",
             "description": "[Inspect detected Codex, Claude Code, and generic terminal profiles](command:lookout.configureProfiles). Lookout never installs or authenticates a provider for you.",
+            "completionEvents": [
+              "onCommand:lookout.configureProfiles"
+            ],
             "media": {
-              "image": "resources/icon.png",
-              "altText": "Lookout icon"
+              "image": "assets/screenshots/lookout-overview.png",
+              "altText": "Lookout Agents, History, Review, and Usage views"
             }
           },
           {
             "id": "lookout.walkthrough.launch",
             "title": "Launch a native agent terminal",
             "description": "[Launch an agent](command:lookout.launchAgent) or [create a reusable session template](command:lookout.createTemplate). Provider UX stays in its real terminal.",
+            "completionEvents": [
+              "onCommand:lookout.launchAgent"
+            ],
             "media": {
-              "image": "resources/icon.png",
-              "altText": "Lookout agent launch"
+              "image": "assets/screenshots/lookout-overview.png",
+              "altText": "Lookout sidebar with native terminal agents"
             }
           },
           {
             "id": "lookout.walkthrough.attention",
             "title": "Triage explicit agent events",
             "description": "Watch the **Agents** view badges and status bar, and [focus the next unread agent](command:lookout.focusNextUnread). Lookout uses provider hooks and never scrapes terminal output.",
+            "completionEvents": [
+              "onCommand:lookout.focusNextUnread"
+            ],
             "media": {
-              "image": "resources/icon.png",
-              "altText": "Lookout attention routing"
+              "image": "assets/screenshots/usage-status.png",
+              "altText": "Lookout finished-turn notification and status bar"
             }
           },
           {
             "id": "lookout.walkthrough.review",
             "title": "Review and verify in VS Code",
             "description": "[Open the review layout](command:lookout.openReviewLayout) for native diffs, Problems, Tasks, tests, debugging, and browser tools.",
+            "completionEvents": [
+              "onCommand:lookout.openReviewLayout"
+            ],
             "media": {
-              "image": "resources/icon.png",
-              "altText": "Lookout review workflow"
+              "image": "assets/screenshots/lookout-overview.png",
+              "altText": "Lookout Review view with workspace evidence"
             }
           },
           {
             "id": "lookout.walkthrough.continuity",
             "title": "Resume provider-owned work",
             "description": "[Browse Lookout history](command:lookout.browseHistory) to reopen projects and resume supported provider sessions without reading their transcripts. Live coordination across same-host windows remains an explicit experimental setting.",
+            "completionEvents": [
+              "onCommand:lookout.browseHistory"
+            ],
             "media": {
-              "image": "resources/icon.png",
-              "altText": "Lookout session history"
+              "image": "assets/screenshots/lookout-overview.png",
+              "altText": "Lookout History view with current and previous projects"
             }
           }
         ]

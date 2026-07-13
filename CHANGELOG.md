@@ -20,9 +20,9 @@
 - Add bounded, abortable Git evidence collection for diff statistics, commits,
   upstream state, conflicts, and stale or unstable baselines as the foundation
   for verification-oriented review packets.
-- Add metadata-only Inbox and History views with unread navigation, safe
-  provider resume/fork, collision refusal, archive/unarchive, and bounded
-  retention.
+- Add a metadata-only event ledger and History view with unread navigation,
+  safe provider resume/fork, collision refusal, archive/unarchive, and bounded
+  retention. Attention remains on agent rows rather than a separate feed.
 - Extend History across projects on the same execution host, with atomic
   multi-window storage, deletion tombstones, expiring reopen/resume handoffs,
   and explicit trust/provider revalidation in the target window.

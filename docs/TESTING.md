@@ -32,7 +32,9 @@ disabled, and verifies:
 - closed-terminal state and session removal.
 
 The release command below packages the VSIX, installs that exact artifact into
-the isolated VS Code CLI profile, and verifies its installed ID and version:
+an isolated VS Code profile, verifies its allow-listed contents and installed
+ID/version, activates the installed extension, checks core command registration,
+and runs the privacy-safe Doctor command:
 
 ```bash
 npm run verify:vsix
@@ -40,6 +42,11 @@ npm run verify:vsix
 
 This catches packaging and installability failures, but it does not replace the
 visual installed-VSIX walkthrough in the manual checks below.
+
+Fast tests clean `out/` before compiling so removed test or source modules cannot
+survive as stale JavaScript. `npm run verify:vsix-contents` inspects the packaged
+archive itself—not the pre-package build directory—and refuses source maps,
+tests, path traversal, or files outside the public allow-list.
 
 CI runs the fast gate and packaging on Linux, Windows, and macOS. It runs the
 extension-host suite against Stable on all three platforms, against the minimum
@@ -59,7 +66,10 @@ lifecycle, resume, and fork behavior without accounts or a network. The second
 performs bounded, unauthenticated help/version/surface inspection against the
 installed CLIs and writes only redacted advisory output. A scheduled three-OS
 workflow uploads those reports but does not block normal CI when a provider
-changes or an installer is temporarily unavailable.
+changes or an installer is temporarily unavailable. The advisory run itself is
+marked failed on install or inspection drift so it cannot disappear into a
+green scheduled history; maintainers review the sanitized artifacts and decide
+whether code, fixtures, or only the approved compatibility baseline changed.
 
 The fast suite also creates real loopback coordinator servers and separate
 cross-process store instances. It verifies authenticated requests, one-owner

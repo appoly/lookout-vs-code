@@ -164,7 +164,10 @@ The decision-complete design is in [the opt-in Compound Engineering plan](plans/
   it does not claim federation between local, WSL, SSH, and container hosts.
 - [x] Accessible Activity Bar and 256×256 Marketplace icons, gallery banner,
   user-first README, privacy/support/security docs, and a release checklist.
-- Settings walkthrough, real Marketplace screenshots/GIF, and publishing automation.
+- [x] Passive settings walkthrough, current Marketplace screenshots, and gated
+  Marketplace/Open VSX publishing automation.
+- [ ] Add a native Review diff screenshot and, if it improves the listing, a
+  short launch → attention → review recording.
 - [x] Passive Getting Started walkthrough for profiles, launch, Inbox, Review, and continuity.
 - [x] Advisory three-OS provider compatibility lab with deterministic fake CLIs and sanitized installed-CLI surface reports.
 

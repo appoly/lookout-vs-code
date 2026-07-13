@@ -12,6 +12,10 @@ export default tseslint.config(
     }
   },
   {
-    ignores: ['out/**', 'node_modules/**']
+    ignores: [
+      'out/**',
+      'node_modules/**',
+      'test/fixtures/vsix-smoke-extension/**'
+    ]
   }
 );

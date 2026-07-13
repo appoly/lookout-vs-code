@@ -55,8 +55,9 @@ the release program:
 - provider identity, lineage, archive state, and a bounded fixed-kind event
   ledger persist through a versioned, migrating store; live command state,
   custom commands, prompts, output, and transcripts do not;
-- the Inbox and History views support unread navigation, explicit
-  resume/fork, collision refusal, archive/unarchive, and metadata-only deletion;
+- agent-row attention routing and the History view support unread navigation,
+  explicit resume/fork, collision refusal, archive/unarchive, and metadata-only
+  deletion;
 - the non-installing profile catalog and allow-listed session templates are
   wired to launch, worktree, task, browser, and review-layout flows;
 - Git execution is abortable, bounded, shell-free, and NUL-streaming. Git and
@@ -325,10 +326,12 @@ what happened, and explicitly resume supported provider work.
   archive/unarchive is separately named and explicit; do not imply that Claude
   exposes the same operation.
 
-#### P2.2 Inbox and integration health
+#### P2.2 Attention routing and integration health
 
-- Add a bounded Inbox group or view with attention-first ordering.
-- Provide next/previous unread, acknowledge, filter, and clear-history actions.
+- Keep the bounded event ledger behind attention-first Agent rows and History
+  tooltips rather than duplicating fixed labels in a feed (D15).
+- Provide next/previous unread navigation, focus-to-acknowledge behavior, and
+  explicit metadata-only history deletion.
 - Show per-session elapsed time, event count, attention count, delegated-agent
   count, current changes, and latest known verification result.
 - Derive health for bridge, hook trust, shell integration, provider identity,
@@ -367,7 +370,7 @@ state.
 - Supported sessions resume with the same provider ID and forks acquire a new
   ID.
 - Duplicate-resume safeguards work after reload.
-- The inbox explains all active sessions without opening terminal output.
+- Agent rows explain all active sessions without opening terminal output.
 - Every capability has a visible unavailable/degraded state.
 
 ## Phase 3 — verification-oriented review

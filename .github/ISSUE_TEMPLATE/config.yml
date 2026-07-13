@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/appoly/lookout-vs-code/security/advisories/new
+    about: Do not disclose vulnerabilities in a public issue.
+  - name: Support guidance
+    url: https://github.com/appoly/lookout-vs-code/blob/main/SUPPORT.md
+    about: Read the support and redaction guidance before filing an issue.

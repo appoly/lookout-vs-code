@@ -23,7 +23,11 @@ interface Manifest {
     readonly viewsWelcome?: Array<{ readonly when?: string }>;
     readonly walkthroughs?: Array<{
       readonly id?: string;
-      readonly steps?: Array<{ readonly id?: string }>;
+      readonly steps?: Array<{
+        readonly id?: string;
+        readonly completionEvents?: string[];
+        readonly media?: { readonly image?: string; readonly altText?: string };
+      }>;
     }>;
     readonly configuration?: {
       readonly properties?: Record<string, { readonly scope?: string; readonly default?: unknown }>;
@@ -139,6 +143,14 @@ test('ships a passive getting-started walkthrough', () => {
   );
   assert.ok(walkthrough);
   assert.ok((walkthrough.steps?.length ?? 0) >= 4);
+  for (const step of walkthrough.steps ?? []) {
+    assert.ok(
+      (step.completionEvents?.length ?? 0) > 0,
+      `${step.id} has no completion event`
+    );
+    assert.match(step.media?.image ?? '', /^assets\/screenshots\//);
+    assert.ok((step.media?.altText?.length ?? 0) > 10);
+  }
 });
 
 test('ships host-local history with experimental live coordination off by default', () => {

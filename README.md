@@ -196,6 +196,9 @@ hooks report them. Its bounded event ledger stores fixed operational event kinds
 and read state, never hook messages, prompts, command text, tool output, or
 transcript paths. Support export is an explicit command and passes through an
 allow-list plus defensive path, token, URL, and identifier redaction.
+Unexpected internal failures are written to a local Lookout output channel as
+fixed operation scopes and error types/codes only; free-form error messages are
+not logged or included in support exports.
 
 Cross-project history additionally stores the workspace/folder URI, working
 directory, user-visible label, coarse host kind, provider identity, fixed
@@ -246,13 +249,16 @@ npm run check
 npm run test:integration
 npm run compat:providers
 npm run vsix
+npm run verify:vsix
 ```
 
 The extension-host suite exercises activation, terminal launch and splitting,
 authenticated attention routing, Git review baselines, host-local history
 projection, and terminal closure. Domain tests additionally exercise concurrent
 history writers and real authenticated loopback coordinator clients.
-CI runs Stable on Linux, Windows, and macOS, plus VS Code 1.96.0 on Linux. See
+CI runs Stable on Linux, Windows, and macOS, plus VS Code 1.96.0 on Linux. The
+VSIX check also inspects an allow-listed package, installs it into an isolated
+profile, activates the installed extension, and runs Doctor. See
 [docs/TESTING.md](docs/TESTING.md) for test details and
 [docs/RELEASE.md](docs/RELEASE.md) for the release checklist.
 

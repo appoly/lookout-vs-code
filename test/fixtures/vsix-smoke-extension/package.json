@@ -1,0 +1,10 @@
+{
+  "name": "lookout-vsix-smoke",
+  "displayName": "Lookout VSIX Smoke Harness",
+  "version": "0.0.0",
+  "publisher": "lookout-tests",
+  "private": true,
+  "engines": {
+    "vscode": "^1.96.0"
+  }
+}

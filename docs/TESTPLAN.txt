@@ -31,7 +31,7 @@ SETUP (once)
     interactive installed-VSIX path is still a separate release gate.
 
 A. RENAME INTEGRITY (~5 min)
-  1. Activity bar shows a Lookout icon; Agents, Review, and Usage
+  1. Activity bar shows a Lookout icon; Agents, History, Review, and Usage
      Limits views all render.
   2. Command palette: typing "Lookout" lists every command under that
      category; nothing appears under "Paraterm" or "MultiTerm".
@@ -221,6 +221,19 @@ K. CROSS-PROJECT HISTORY AND LIVE WINDOWS (~20 min per host)
      never federate or claim that another execution host is reachable. Repeat
      with two VS Code profiles and confirm their coordinators/history are isolated.
 
+L. ACCESSIBILITY (~10 min)
+ 47. Complete launch, attention focus, Review navigation, and agent removal using
+     only the keyboard. Focus order remains visible and every action is reachable
+     without a pointer.
+ 48. With a screen reader, Agents/History/Review/Usage rows announce useful labels,
+     states, counts, and actions without relying on icon shape or color alone.
+ 49. In both built-in high-contrast themes and at 200% zoom, badges, warnings,
+     inline actions, status-bar text, and native diffs remain legible without
+     clipping important state.
+ 50. Disable sound and notifications, then trigger attention and completion.
+     Activity Bar, Agents rows, unread navigation, and status-bar state still
+     provide a complete visual workflow.
+
 EXIT CRITERIA (ROADMAP release gates)
   - launch -> monitor -> jump -> review loop passes interactively
   - no provider limit shown as zero when it is unknown
@@ -232,3 +245,4 @@ EXIT CRITERIA (ROADMAP release gates)
   - live coordination expires dead windows and never crosses execution hosts
   - shared-worktree changes are never misattributed to one agent
   - package, CI, and the documented manual matrix are green
+  - keyboard, screen-reader, high-contrast, zoom, and silent-mode checks pass

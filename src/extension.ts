@@ -59,6 +59,8 @@ import type {
 import { currentWorkspaceIdentity } from './workspaceIdentity';
 import { CoordinationService } from './coordinationService';
 
+let runtimeLog: vscode.LogOutputChannel | undefined;
+
 export interface LookoutExtensionTestApi {
   readonly sessions: SessionManager;
   readonly sessionTree: SessionTreeProvider;
@@ -78,7 +80,16 @@ export async function activate(
     treeDataProvider: sessionTree
   });
   const sessionStatus = new SessionStatusBar(sessions);
-  const reviewTree = new ReviewTreeProvider(sessions, context.workspaceState);
+  runtimeLog = vscode.window.createOutputChannel('Lookout', { log: true });
+  const reviewTree = new ReviewTreeProvider(
+    sessions,
+    context.workspaceState,
+    reportBackgroundError
+  );
+  const reviewTreeView = vscode.window.createTreeView('lookout.review', {
+    treeDataProvider: reviewTree
+  });
+  reviewTree.setVisible(reviewTreeView.visible);
   const usage = new UsageManager(context, sessions);
   const usageTree = new UsageTreeProvider(usage, sessions);
   const usageStatus = new UsageStatusBar(usage);
@@ -133,7 +144,11 @@ export async function activate(
     coordination,
     globalIntentSubscription,
     doctorOutput,
-    vscode.window.registerTreeDataProvider('lookout.review', reviewTree),
+    runtimeLog,
+    reviewTreeView,
+    reviewTreeView.onDidChangeVisibility((event) =>
+      reviewTree.setVisible(event.visible)
+    ),
     vscode.workspace.registerTextDocumentContentProvider(
       'lookout-baseline',
       reviewTree
@@ -421,7 +436,12 @@ export async function activate(
   updateSessionBadge();
   await updateSoundContext();
 
-  void reviewTree.initialize();
+  void reviewTree.initialize().catch((error: unknown) => {
+    reportBackgroundError('review-initialize', error);
+    void vscode.window.showWarningMessage(
+      'Lookout Review could not initialize. Run Lookout: Run Doctor for current health information.'
+    );
+  });
   usage.initialize();
 
   return process.env.LOOKOUT_TEST === '1'
@@ -446,7 +466,33 @@ function register<Args extends unknown[]>(
   command: string,
   callback: (...args: Args) => unknown
 ): vscode.Disposable {
-  return vscode.commands.registerCommand(command, callback);
+  return vscode.commands.registerCommand(command, async (...args: Args) => {
+    try {
+      return await callback(...args);
+    } catch (error) {
+      reportBackgroundError(`command:${command}`, error);
+      void vscode.window.showErrorMessage(
+        'Lookout could not complete that command. Run Lookout: Run Doctor for current health information.'
+      );
+      return undefined;
+    }
+  });
+}
+
+function reportBackgroundError(scope: string, error: unknown): void {
+  const name = error instanceof Error ? error.name : typeof error;
+  const code = errorCode(error);
+  runtimeLog?.error(`[${scope}] failed (${name}${code ? `:${code}` : ''})`);
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object' || !('code' in error)) {
+    return undefined;
+  }
+  const code = (error as { readonly code?: unknown }).code;
+  return typeof code === 'string' && /^[A-Z0-9_-]{1,40}$/i.test(code)
+    ? code
+    : undefined;
 }
 
 async function launchAgent(

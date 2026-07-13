@@ -35,7 +35,7 @@ npm run test:integration
 npm run compat:providers
 npm audit --omit=dev
 npm run verify:vsix
-npx vsce ls --tree --no-dependencies
+npm run verify:vsix-contents
 ```
 
 CI additionally runs the fast gate on Linux, Windows, and macOS, the
@@ -52,6 +52,8 @@ assessed separately; no development dependency is included in the VSIX.
 - Complete the installed-VSIX pass in `TESTPLAN.txt` on desktop, WSL, Remote
   SSH, and a dev container, plus the multi-root cases. Any unavailable host is
   an explicit release decision, not an implicit pass.
+- Complete the keyboard, screen-reader, high-contrast, 200% zoom, and silent-mode
+  accessibility section with the same installed artifact.
 - Complete the two-window global-history/coordinator section separately on
   local, WSL, Remote SSH, and dev-container execution hosts. Record coordinator
   owner replacement, lease expiry, profile isolation, duplicate-resume refusal,
@@ -69,14 +71,22 @@ assessed separately; no development dependency is included in the VSIX.
 
 ## 4. Finalize and publish
 
-1. Replace `Unreleased` in `CHANGELOG.md` with the release date.
-2. Confirm `package.json` and `package-lock.json` contain the intended version.
-3. Rerun `npm run check:release` and install that exact VSIX.
-4. Commit the release, upload the VSIX through the Marketplace publisher page,
-   and wait for Marketplace malware/dynamic scanning to clear.
-5. Verify installation from the public listing in a clean profile.
-6. Tag the published commit as `v<version>` and attach the same VSIX to the
-   GitHub release.
+1. Replace `Unreleased` in `CHANGELOG.md` with the release date and confirm
+   `package.json` and `package-lock.json` contain the intended version.
+2. Rerun `npm run check:release`, commit the release, and confirm the checkout
+   is clean. Generated `.vsix` files are ignored build outputs and must never be
+   committed.
+3. Create and push the protected `v<version>` tag. Its workflow run is a dry
+   candidate build only; it never publishes.
+4. When ready to publish, manually dispatch the workflow for that existing tag
+   and enable the intended registries. The build job creates one immutable
+   candidate; publisher jobs then wait for their protected-environment approval.
+5. Before approving either publisher job, download that run's candidate,
+   verify its recorded SHA-256, and complete the installed-VSIX checks against
+   those exact bytes. Reject the environments if any gate fails.
+6. Approve publication, wait for registry scanning, verify installation from
+   each public listing in a clean profile, and attach the same workflow artifact
+   to the GitHub release for the tag.
 
 The release workflow packages one tagged commit once, records its commit, tag,
 byte count, and SHA-256, uploads that candidate for 90 days, and makes each
@@ -99,4 +109,5 @@ dependency-free VSIX and a bundle has no measured startup or distribution
 benefit. Publishing automation must package once and promote the same verified,
 checksummed bytes to each registry. The workflow and registry identities are
 not proven until a protected candidate run and an approved real publish have
-succeeded; until then, the manual upload steps above remain authoritative.
+succeeded. Do not bypass the protected workflow with a separately repackaged or
+manually uploaded VSIX.
