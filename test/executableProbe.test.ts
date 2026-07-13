@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { shellProbeInvocation } from '../src/executableProbe';
+import {
+  resolvedPathFromProbeOutput,
+  shellProbeInvocation
+} from '../src/executableProbe';
 
 test('probes bash as a login interactive shell so rc PATH edits apply', () => {
   const probe = shellProbeInvocation('/bin/bash', 'claude', 'linux');
@@ -47,4 +50,24 @@ test('declines missing shell or executable', () => {
 test('single-quotes the executable for the POSIX probe', () => {
   const probe = shellProbeInvocation('/bin/bash', "odd'name", 'linux');
   assert.equal(probe?.args.at(-1), `command -v 'odd'\\''name'`);
+});
+
+test('reads the probe path from the final line, past rc-file noise', () => {
+  assert.equal(
+    resolvedPathFromProbeOutput(
+      'Now using node v24.18.0\n\n/home/user/.local/bin/codex\n'
+    ),
+    '/home/user/.local/bin/codex'
+  );
+  assert.equal(resolvedPathFromProbeOutput('/usr/bin/codex'), '/usr/bin/codex');
+});
+
+test('rejects probe output that is not an absolute path', () => {
+  assert.equal(
+    resolvedPathFromProbeOutput("alias codex='codex --profile work'"),
+    undefined
+  );
+  assert.equal(resolvedPathFromProbeOutput('codex'), undefined);
+  assert.equal(resolvedPathFromProbeOutput(''), undefined);
+  assert.equal(resolvedPathFromProbeOutput('\n  \n'), undefined);
 });

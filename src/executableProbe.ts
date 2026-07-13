@@ -50,3 +50,21 @@ export function shellProbeInvocation(
     args: [...flags, `command -v ${shellQuote(executable, 'posix')}`]
   };
 }
+
+/**
+ * Extract the executable path a `command -v` probe printed. Rc files may emit
+ * greeting or version-manager noise before the probe's own output, so only
+ * the final line counts, and aliases or shell functions — which print their
+ * definition or bare name instead of a path — yield undefined. Probes only
+ * run on POSIX platforms, so an absolute path always starts with `/`.
+ */
+export function resolvedPathFromProbeOutput(
+  stdout: string
+): string | undefined {
+  const line = stdout
+    .split('\n')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .at(-1);
+  return line?.startsWith('/') ? line : undefined;
+}

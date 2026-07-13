@@ -1,10 +1,12 @@
 import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
-import { access } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { isDirectAgentCommand } from './agentCommand';
-import { shellProbeInvocation } from './executableProbe';
+import {
+  executableAvailable,
+  hostPathHasExecutable
+} from './executableResolver';
 import { ReviewTreeItem, ReviewTreeProvider } from './reviewTree';
 import { SessionManager } from './sessionManager';
 import {
@@ -1765,81 +1767,6 @@ async function openReviewLayout(sessions: SessionManager): Promise<void> {
     await sessions.focus(selected.id);
   }
   await vscode.commands.executeCommand('workbench.view.extension.lookout');
-}
-
-async function executableAvailable(command: string): Promise<boolean> {
-  const token = command.trim().match(/^(?:"([^"]+)"|'([^']+)'|(\S+))/);
-  const executable = token?.[1] ?? token?.[2] ?? token?.[3];
-  if (!executable) {
-    return false;
-  }
-  if (path.isAbsolute(executable) || executable.includes('/') || executable.includes('\\')) {
-    try {
-      await access(executable);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  if (await hostPathHasExecutable(executable)) {
-    return true;
-  }
-  return defaultShellResolvesExecutable(executable);
-}
-
-function hostPathHasExecutable(executable: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    execFile(
-      process.platform === 'win32' ? 'where.exe' : 'which',
-      [executable],
-      { windowsHide: true },
-      (error) => resolve(!error)
-    );
-  });
-}
-
-const shellProbeResults = new Map<
-  string,
-  { available: boolean; expires: number }
->();
-const SHELL_PROBE_NEGATIVE_TTL_MS = 30_000;
-
-/**
- * Sessions run their command inside the integrated terminal's default shell,
- * whose rc files can extend PATH beyond what the extension host inherited
- * (GUI-launched VS Code misses ~/.local/bin and version-manager bin dirs).
- * Ask that shell before declaring a provider missing. Hits are cached for the
- * session; misses only briefly, so installing a provider mid-session is
- * picked up without a reload.
- */
-async function defaultShellResolvesExecutable(
-  executable: string
-): Promise<boolean> {
-  const probe = shellProbeInvocation(
-    vscode.env.shell || process.env.SHELL,
-    executable
-  );
-  if (!probe) {
-    return false;
-  }
-  const key = `${probe.command} ${executable}`;
-  const cached = shellProbeResults.get(key);
-  if (cached && (cached.available || Date.now() < cached.expires)) {
-    return cached.available;
-  }
-  const available = await new Promise<boolean>((resolve) => {
-    execFile(
-      probe.command,
-      [...probe.args],
-      { timeout: 5000, windowsHide: true },
-      (error) => resolve(!error)
-    );
-  });
-  shellProbeResults.set(key, {
-    available,
-    expires: Date.now() + SHELL_PROBE_NEGATIVE_TTL_MS
-  });
-  return available;
 }
 
 function runCommand(command: string, args: readonly string[]): Promise<string> {

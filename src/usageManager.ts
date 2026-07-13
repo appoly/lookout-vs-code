@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { CodexUsageProvider } from './codexUsageProvider';
+import { hostSpawnPathOverride } from './executableResolver';
 import type { SessionManager } from './sessionManager';
 import type { UsageSnapshot } from './usageTypes';
 
@@ -27,7 +28,8 @@ export class UsageManager implements vscode.Disposable {
     this.codex = new CodexUsageProvider(
       executable,
       (snapshot) => this.setSnapshot(snapshot),
-      includeSparkLimits
+      includeSparkLimits,
+      hostSpawnPathOverride
     );
     const cachedClaude = context.globalState.get<UsageSnapshot>(CLAUDE_STORAGE_KEY);
     this.snapshots.set(

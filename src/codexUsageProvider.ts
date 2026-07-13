@@ -64,7 +64,15 @@ export class CodexUsageProvider {
   public constructor(
     private readonly executable: string,
     private readonly onSnapshot: (snapshot: UsageSnapshot) => void,
-    private includeSparkLimits = false
+    private includeSparkLimits = false,
+    /**
+     * Supplies a spawnable path when the extension host PATH cannot resolve
+     * the bare executable (e.g. the default terminal shell's rc files added
+     * its directory). Undefined means spawn the configured value as-is.
+     */
+    private readonly resolveExecutableOverride?: (
+      executable: string
+    ) => Promise<string | undefined>
   ) {}
 
   /**
@@ -79,7 +87,8 @@ export class CodexUsageProvider {
   }> {
     const args = ['app-server', '--stdio'];
     if (process.platform !== 'win32') {
-      return { command: this.executable, args, viaCmdWrapper: false };
+      const override = await this.resolveExecutableOverride?.(this.executable);
+      return { command: override ?? this.executable, args, viaCmdWrapper: false };
     }
     let target = this.executable;
     if (!/[\\/]/.test(target) && !/\.(exe|cmd|bat|com)$/i.test(target)) {
