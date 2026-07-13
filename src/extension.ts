@@ -4,6 +4,7 @@ import { access } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { isDirectAgentCommand } from './agentCommand';
+import { shellProbeInvocation } from './executableProbe';
 import { ReviewTreeItem, ReviewTreeProvider } from './reviewTree';
 import { SessionManager } from './sessionManager';
 import {
@@ -483,16 +484,19 @@ async function launchAgent(
     !(await executableAvailable(command))
   ) {
     const choice = await vscode.window.showErrorMessage(
-      `${displayKind(kind)} could not be found. Install it or configure lookout.${kind}.command.`,
+      `${displayKind(kind)} could not be found. Install it, configure lookout.${kind}.command, or launch anyway if your terminal can run it.`,
+      'Launch Anyway',
       'Open Settings'
     );
-    if (choice) {
+    if (choice === 'Open Settings') {
       await vscode.commands.executeCommand(
         'workbench.action.openSettings',
         `lookout.${kind}.command`
       );
     }
-    return;
+    if (choice !== 'Launch Anyway') {
+      return;
+    }
   }
   const ordinal = sessions.list().filter((session) => session.kind === kind).length + 1;
   const label = `${displayKind(kind)} ${ordinal}`;
@@ -539,8 +543,9 @@ async function chooseAndLaunchAgent(
     }
   );
   if (selected) {
+    // 'missing' falls through to launchAgent, whose not-found dialog offers
+    // Launch Anyway — detection cannot perfectly mirror the terminal shell.
     if (
-      selected.profile.availability.state === 'missing' ||
       selected.profile.availability.state === 'unconfigured' ||
       selected.profile.availability.state === 'resolver-error'
     ) {
@@ -845,7 +850,7 @@ async function currentProfiles(): Promise<readonly AgentProfile[]> {
     },
     resolveExecutable: async (executable) => ({
       available: await executableAvailable(executable),
-      detail: `Checked ${executable} in the current extension host.`
+      detail: `Checked ${executable} on the extension host PATH and in the default terminal shell.`
     })
   });
 }
@@ -1576,7 +1581,10 @@ async function collectHealth(
 ): Promise<HealthReport> {
   const [profiles, git, node] = await Promise.all([
     currentProfiles(),
-    executableAvailable('git'),
+    // Baselines spawn git from the extension host, so the default terminal
+    // shell's PATH cannot vouch for it; node only has to work for hooks,
+    // which run inside the terminal's environment.
+    hostPathHasExecutable('git'),
     executableAvailable('node')
   ]);
   const snapshots = usage.list();
@@ -1773,6 +1781,13 @@ async function executableAvailable(command: string): Promise<boolean> {
       return false;
     }
   }
+  if (await hostPathHasExecutable(executable)) {
+    return true;
+  }
+  return defaultShellResolvesExecutable(executable);
+}
+
+function hostPathHasExecutable(executable: string): Promise<boolean> {
   return new Promise((resolve) => {
     execFile(
       process.platform === 'win32' ? 'where.exe' : 'which',
@@ -1781,6 +1796,50 @@ async function executableAvailable(command: string): Promise<boolean> {
       (error) => resolve(!error)
     );
   });
+}
+
+const shellProbeResults = new Map<
+  string,
+  { available: boolean; expires: number }
+>();
+const SHELL_PROBE_NEGATIVE_TTL_MS = 30_000;
+
+/**
+ * Sessions run their command inside the integrated terminal's default shell,
+ * whose rc files can extend PATH beyond what the extension host inherited
+ * (GUI-launched VS Code misses ~/.local/bin and version-manager bin dirs).
+ * Ask that shell before declaring a provider missing. Hits are cached for the
+ * session; misses only briefly, so installing a provider mid-session is
+ * picked up without a reload.
+ */
+async function defaultShellResolvesExecutable(
+  executable: string
+): Promise<boolean> {
+  const probe = shellProbeInvocation(
+    vscode.env.shell || process.env.SHELL,
+    executable
+  );
+  if (!probe) {
+    return false;
+  }
+  const key = `${probe.command} ${executable}`;
+  const cached = shellProbeResults.get(key);
+  if (cached && (cached.available || Date.now() < cached.expires)) {
+    return cached.available;
+  }
+  const available = await new Promise<boolean>((resolve) => {
+    execFile(
+      probe.command,
+      [...probe.args],
+      { timeout: 5000, windowsHide: true },
+      (error) => resolve(!error)
+    );
+  });
+  shellProbeResults.set(key, {
+    available,
+    expires: Date.now() + SHELL_PROBE_NEGATIVE_TTL_MS
+  });
+  return available;
 }
 
 function runCommand(command: string, args: readonly string[]): Promise<string> {
