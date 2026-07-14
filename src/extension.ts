@@ -14,7 +14,7 @@ import {
   SessionTreeItem,
   SessionTreeProvider
 } from './sessionTree';
-import type { AgentKind, LaunchRequest } from './types';
+import type { AgentKind, LaunchRequest, SessionStatus } from './types';
 import { UsageManager } from './usageManager';
 import { UsageStatusBar, UsageTreeProvider } from './usageTree';
 import {
@@ -1179,32 +1179,36 @@ function nonEmpty(value: string): string | undefined {
   return value.trim() ? undefined : 'Enter a value';
 }
 
-async function focusNextAttentionAcrossWindows(
+export async function focusNextAttentionAcrossWindows(
   sessions: SessionManager,
   coordination: CoordinationService
 ): Promise<void> {
   const local = sessions
     .list()
     .filter((session) => sessions.isOpen(session.id))
-    .find((session) => session.status === 'attention' || session.unread);
-  if (local) {
-    await sessions.focus(local.id);
-    return;
-  }
+    .map((session) => ({ kind: 'local' as const, session }));
   const remote = coordination
     .windows()
     .flatMap((window) =>
-      window.sessions.map((session) => ({ window, session }))
-    )
-    .find(({ session }) => session.status === 'attention' || session.unread);
-  if (remote) {
+      window.sessions.map((session) => ({
+        kind: 'remote' as const,
+        window,
+        session
+      }))
+    );
+  const candidate = nextUnreadAttention([...local, ...remote]);
+  if (candidate?.kind === 'local') {
+    await sessions.focus(candidate.session.id);
+    return;
+  }
+  if (candidate?.kind === 'remote') {
     const accepted = await coordination.focusRemote(
-      remote.window.windowId,
-      remote.session.sessionId
+      candidate.window.windowId,
+      candidate.session.sessionId
     );
     if (accepted) {
       void vscode.window.showInformationMessage(
-        `Asked ${remote.window.workspaceLabel} to reveal ${remote.session.label}.`
+        `Asked ${candidate.window.workspaceLabel} to reveal ${candidate.session.label}.`
       );
       return;
     }
@@ -1212,6 +1216,19 @@ async function focusNextAttentionAcrossWindows(
   void vscode.window.showInformationMessage(
     'No agents need attention in this or another coordinated window.'
   );
+}
+
+function nextUnreadAttention<
+  T extends {
+    readonly session: {
+      readonly status: SessionStatus;
+      readonly unread: boolean;
+    };
+  }
+>(candidates: readonly T[]): T | undefined {
+  return candidates.find(
+    ({ session }) => session.status === 'attention' && session.unread
+  ) ?? candidates.find(({ session }) => session.unread);
 }
 
 async function openGlobalHistoryRecord(

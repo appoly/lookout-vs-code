@@ -707,7 +707,9 @@ export class SessionManager implements vscode.Disposable {
     // must not become a dead end that hides the next real candidate.
     const sessions = this.list().filter((candidate) => this.isOpen(candidate.id));
     const session =
-      sessions.find((candidate) => candidate.status === 'attention') ??
+      sessions.find(
+        (candidate) => candidate.status === 'attention' && candidate.unread
+      ) ??
       sessions.find((candidate) => candidate.unread);
     if (!session) {
       void vscode.window.showInformationMessage('No agents need attention.');
