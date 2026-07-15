@@ -2,6 +2,9 @@
 
 ## 1.0.0 — Unreleased
 
+- Add a configurable permission mode for Claude sessions launched by Lookout,
+  defaulting to automatic permission classification while preserving explicit
+  launch-command overrides and an option to inherit Claude's resolved default.
 - Clear stale attention indicators as soon as updates are read, prefer unread
   activity during navigation, synchronize the newest Claude usage observation
   across windows, and discard quota windows after their reset time.

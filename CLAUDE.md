@@ -63,3 +63,9 @@ Authoritative sources only, never estimated: Codex via `codex app-server` JSON-R
 - `docs/ROADMAP.md`, `docs/RESEARCH.md` — roadmap and research record
 - `docs/plans/`, `docs/research/` — Workshop-convention artifacts
 - `docs/sessions/` — dated session checkpoints; the interactive smoke matrix (`docs/sessions/2026-07-10-smoke.md`) is the gating milestone before Marketplace release
+
+Keep documentation in the same change as the behavior it describes. Add
+user-visible changes to the Unreleased section of `CHANGELOG.md`; update
+`README.md` for changed commands, settings, requirements, or workflows; extend
+`docs/TESTPLAN.txt` when interactive release verification is needed; and update
+`docs/DECISIONS.md` whenever a durable design decision changes.
