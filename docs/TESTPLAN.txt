@@ -1,4 +1,4 @@
-LOOKOUT 0.1.0 — INTERACTIVE RELEASE-CANDIDATE TEST PLAN
+LOOKOUT 1.0.0 — INTERACTIVE RELEASE-CANDIDATE TEST PLAN
 Run this plan against the exact commit and VSIX proposed for release. Create a
 new dated record under docs/sessions/ and record the commit, VSIX SHA-256,
 platform versions, provider CLI versions, and one result per numbered item.

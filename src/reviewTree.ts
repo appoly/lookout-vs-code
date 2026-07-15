@@ -76,6 +76,7 @@ interface ReviewTreeItemOptions {
   readonly tooltip?: string;
   readonly warning?: boolean;
   readonly command?: vscode.Command;
+  readonly activityKind?: 'mcp';
 }
 
 interface WorktreeChanges {
@@ -145,7 +146,9 @@ export class ReviewTreeItem extends vscode.TreeItem {
       this.description = options.description;
       this.tooltip = options.tooltip;
       this.iconPath = new vscode.ThemeIcon(
-        options.command?.command === 'workbench.view.debug'
+        options.activityKind === 'mcp'
+          ? 'extensions'
+          : options.command?.command === 'workbench.view.debug'
           ? 'debug-alt'
           : 'pulse'
       );
@@ -531,6 +534,7 @@ export class ReviewTreeProvider
             sessionId: session.id,
             description: session.label,
             tooltip: `${running.command}\n\n${session.label}`,
+            ...(running.activityKind ? { activityKind: running.activityKind } : {}),
             command: {
               command: 'lookout.focusSession',
               title: 'Focus Agent',

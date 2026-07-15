@@ -1,6 +1,9 @@
 import * as path from 'node:path';
 import { directCommandExecutable } from './directCommand';
 
+export const PROVIDER_ACTIVITY_TOOL_MATCHER =
+  '^(?:Bash|codex_apps\\..+|mcp__.+)$';
+
 /**
  * The shell that will parse a launch command typed into a terminal. Quoting
  * differs enough between them that a single style cannot be correct
@@ -105,17 +108,17 @@ export function withCodexLifecycleIntegration(
         'SubagentStop',
         hookCommand(helperPath, 'background-stop', undefined, hookShell)
       ),
-      // Surface long-running shell commands (builds, tests, dev servers). The
-      // matcher limits firing to the shell tool, whose canonical name is Bash.
+      // Surface shell commands and MCP calls while they execute. The bridge
+      // allow-lists the safe label and drops arguments for non-shell tools.
       codexHookOverride(
         'PreToolUse',
         hookCommand(helperPath, 'command-start', undefined, hookShell),
-        '^Bash$'
+        PROVIDER_ACTIVITY_TOOL_MATCHER
       ),
       codexHookOverride(
         'PostToolUse',
         hookCommand(helperPath, 'command-stop', undefined, hookShell),
-        '^Bash$'
+        PROVIDER_ACTIVITY_TOOL_MATCHER
       ),
       codexHookOverride(
         'Stop',

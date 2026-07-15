@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.1.0 — Unreleased
+## 1.0.0 — Unreleased
+
+- Clear stale attention indicators as soon as updates are read, prefer unread
+  activity during navigation, synchronize the newest Claude usage observation
+  across windows, and discard quota windows after their reset time.
+- Track active Codex Apps and MCP calls without retaining their arguments, and
+  distinguish them from shell execution with a dedicated Agents icon.
 
 - Add per-agent Claude context, cost, and delegated-agent token tracking, plus
   visible warning thresholds and provider-managed Codex rollout token budgets.

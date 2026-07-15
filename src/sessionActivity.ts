@@ -30,7 +30,13 @@ export function applyAgentEvent(
     case 'background-stop':
       return applyBackgroundStop(session, event.agentId, now);
     case 'command-start':
-      return applyCommandStart(session, event.commandId, event.command, now);
+      return applyCommandStart(
+        session,
+        event.commandId,
+        event.command,
+        event.activityKind,
+        now
+      );
     case 'command-stop':
       return applyCommandStop(session, event.commandId, event.command, now);
   }
@@ -202,6 +208,7 @@ function applyCommandStart(
   session: AgentSession,
   commandId: string,
   command: string,
+  activityKind: RunningCommand['activityKind'],
   now: number
 ): AgentSession {
   const remaining = session.runningCommands.filter(
@@ -209,9 +216,10 @@ function applyCommandStart(
   );
   // Newest last; cap the list so a hook that never fires its stop can't grow it
   // without bound (a fresh prompt or turn end still clears it entirely).
-  const runningCommands = [...remaining, { id: commandId, command }].slice(
-    -MAX_RUNNING_COMMANDS
-  );
+  const runningCommands = [
+    ...remaining,
+    { id: commandId, command, ...(activityKind ? { activityKind } : {}) }
+  ].slice(-MAX_RUNNING_COMMANDS);
   // A tool call can only run after any pending permission prompt was answered,
   // so a mid-turn attention state is over once a command starts.
   if (session.status === 'attention' && session.foregroundState === 'working') {
@@ -309,7 +317,11 @@ function isRunningCommand(value: unknown): value is RunningCommand {
     return false;
   }
   const record = value as Record<string, unknown>;
-  return typeof record.id === 'string' && typeof record.command === 'string';
+  return (
+    typeof record.id === 'string' &&
+    typeof record.command === 'string' &&
+    (record.activityKind === undefined || record.activityKind === 'mcp')
+  );
 }
 
 function isForegroundState(value: unknown): value is ForegroundState {

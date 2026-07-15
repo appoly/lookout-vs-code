@@ -96,7 +96,10 @@ export function normalizeProviderEvent(
     };
   }
   if (action === 'command-start' || action === 'command-stop') {
-    const command = commandFromPayload(providerPayload) || explicitMessage;
+    const shellCommand = commandFromPayload(providerPayload);
+    const toolName = providerString(providerPayload, ['tool_name', 'toolName']);
+    const mcpTool = isMcpToolName(toolName) ? toolName : '';
+    const command = shellCommand || mcpTool || explicitMessage;
     return {
       kind: action,
       sessionId,
@@ -108,7 +111,8 @@ export function normalizeProviderEvent(
           'callId'
         ]) || command,
       command,
-      ...(action === 'command-stop' && captureCommandOutput
+      ...(mcpTool && !shellCommand ? { activityKind: 'mcp' } : {}),
+      ...(action === 'command-stop' && captureCommandOutput && shellCommand
         ? { result: commandResultFromPayload(providerPayload) }
         : {}),
       ...identity
@@ -288,6 +292,10 @@ function commandFromPayload(
     }
   }
   return providerString(payload, ['command']);
+}
+
+function isMcpToolName(value: string): boolean {
+  return value.startsWith('codex_apps.') || value.startsWith('mcp__');
 }
 
 function providerString(

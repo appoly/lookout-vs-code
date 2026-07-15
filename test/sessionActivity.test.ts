@@ -182,6 +182,28 @@ test('tracks a running command until it stops', () => {
   assert.deepEqual(stopped.runningCommands, []);
 });
 
+test('tracks MCP activity separately from shell commands', () => {
+  const starting = createSession('codex', 'Apps', 'codex', '/repo', 1, 'mcp-1');
+  const started = applyAgentEvent(
+    starting,
+    {
+      kind: 'command-start',
+      sessionId: 'mcp-1',
+      commandId: 'call-1',
+      command: 'codex_apps.github.fetch_pr',
+      activityKind: 'mcp'
+    },
+    2
+  );
+  assert.deepEqual(started.runningCommands, [
+    {
+      id: 'call-1',
+      command: 'codex_apps.github.fetch_pr',
+      activityKind: 'mcp'
+    }
+  ]);
+});
+
 test('keeps concurrent commands distinct and removes only the one that stops', () => {
   const base = createSession('claude', 'Builds', 'claude', '/repo', 1, 'c2');
   const withBuild = applyAgentEvent(

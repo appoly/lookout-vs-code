@@ -101,13 +101,13 @@ export interface BackgroundAgent {
   readonly label: string;
 }
 
-// A shell command an agent is running right now (a build, a test run, a dev
-// server). Started/stopped by provider tool-use hooks, never inferred from
-// terminal output (D3). Quick commands come and go before a human notices;
-// only genuinely long-running ones linger in the list.
+// A shell command or MCP call an agent is running right now. Started/stopped
+// by provider tool-use hooks, never inferred from terminal output (D3). MCP
+// arguments are never retained; only the provider's bounded tool identifier.
 export interface RunningCommand {
   readonly id: string;
   readonly command: string;
+  readonly activityKind?: 'mcp';
 }
 
 // An explicitly opted-in, bounded result from a provider shell-tool hook. This
@@ -184,6 +184,7 @@ export interface AgentCommandEvent extends ProviderEventMetadata {
   readonly sessionId: string;
   readonly commandId: string;
   readonly command: string;
+  readonly activityKind?: 'mcp';
   readonly result?: Omit<CommandResult, 'id' | 'command' | 'completedAt'>;
 }
 

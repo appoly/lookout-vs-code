@@ -9,6 +9,7 @@ import {
   classifyShell,
   hookRunnerShell,
   isDirectAgentCommand,
+  PROVIDER_ACTIVITY_TOOL_MATCHER,
   shellQuote,
   withCodexLifecycleIntegration,
   withCodexTokenBudget,
@@ -1431,16 +1432,25 @@ export class SessionManager implements vscode.Disposable {
       SubagentStart: [hookGroup(notifyHelperPath, 'background-start')],
       SubagentStop: [hookGroup(notifyHelperPath, 'background-stop')],
       StopFailure: [hookGroup(notifyHelperPath, 'failed', 'Claude turn failed')],
-      // Surface long-running shell commands (builds, tests, dev servers) while
-      // they execute. Quick commands finish before their start is ever seen.
+      // Surface shell commands and MCP calls while they execute. Quick calls
+      // finish before their start is ever seen.
       PreToolUse: [
-        { matcher: 'Bash', ...hookGroup(notifyHelperPath, 'command-start') }
+        {
+          matcher: PROVIDER_ACTIVITY_TOOL_MATCHER,
+          ...hookGroup(notifyHelperPath, 'command-start')
+        }
       ],
       PostToolUse: [
-        { matcher: 'Bash', ...hookGroup(notifyHelperPath, 'command-stop') }
+        {
+          matcher: PROVIDER_ACTIVITY_TOOL_MATCHER,
+          ...hookGroup(notifyHelperPath, 'command-stop')
+        }
       ],
       PostToolUseFailure: [
-        { matcher: 'Bash', ...hookGroup(notifyHelperPath, 'command-stop') }
+        {
+          matcher: PROVIDER_ACTIVITY_TOOL_MATCHER,
+          ...hookGroup(notifyHelperPath, 'command-stop')
+        }
       ]
     };
     const settings = {

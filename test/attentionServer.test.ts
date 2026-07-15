@@ -127,6 +127,25 @@ test('accepts authenticated agent and usage events on loopback', async (context)
       command: 'npm test'
     });
 
+    const mcpHookResult = await runNotify(
+      endpoint,
+      ['--hook', 'codex', 'command-start'],
+      {
+        tool_name: 'codex_apps.github.fetch_pr',
+        call_id: 'mcp-1',
+        tool_input: { repository: 'private/repository', pull_number: 4 }
+      }
+    );
+    assert.equal(mcpHookResult.code, 0);
+    assert.equal(mcpHookResult.stdout.trim(), '{}');
+    assert.deepEqual(agentEvents[7], {
+      kind: 'command-start',
+      sessionId: 'session-from-hook',
+      commandId: 'mcp-1',
+      command: 'codex_apps.github.fetch_pr',
+      activityKind: 'mcp'
+    });
+
     const resultHook = await runNotify(
       endpoint,
       ['--hook', 'claude', 'command-stop'],
@@ -140,7 +159,7 @@ test('accepts authenticated agent and usage events on loopback', async (context)
       { LOOKOUT_CAPTURE_COMMAND_OUTPUT: '1' }
     );
     assert.equal(resultHook.code, 0);
-    assert.deepEqual(agentEvents[7], {
+    assert.deepEqual(agentEvents[8], {
       kind: 'command-stop',
       sessionId: 'session-from-hook',
       commandId: 'result-1',

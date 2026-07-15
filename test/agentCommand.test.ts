@@ -35,12 +35,14 @@ test('adds session-only Codex turn and delegated-agent lifecycle events', () => 
   assert.match(command, /--hook codex background-start/);
   assert.match(
     command,
-    /hooks\.PreToolUse=\[\{ matcher = "\^Bash\$", .*--hook codex command-start/
+    /hooks\.PreToolUse=.*--hook codex command-start/
   );
   assert.match(
     command,
-    /hooks\.PostToolUse=\[\{ matcher = "\^Bash\$", .*--hook codex command-stop/
+    /hooks\.PostToolUse=.*--hook codex command-stop/
   );
+  assert.match(command, /codex_apps/);
+  assert.match(command, /mcp__/);
 });
 
 test('adds a native Codex rollout token budget without replacing user overrides', () => {

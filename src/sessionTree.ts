@@ -59,6 +59,15 @@ export class SessionGroupItem extends vscode.TreeItem {
   }
 }
 
+const READ_WAITING_ICONS: Partial<Record<SessionStatus, vscode.ThemeIcon>> = {
+  attention: new vscode.ThemeIcon('question'),
+  idle: new vscode.ThemeIcon('debug-pause')
+};
+const MCP_ACTIVITY_ICON = new vscode.ThemeIcon(
+  'extensions',
+  new vscode.ThemeColor('charts.blue')
+);
+
 export class SessionTreeItem extends vscode.TreeItem {
   public constructor(
     public readonly session: AgentSession,
@@ -327,7 +336,7 @@ export class SessionStatusBar implements vscode.Disposable {
     const sessions = this.manager.list();
     const unread = sessions.filter((session) => session.unread).length;
     const attention = sessions.filter(
-      (session) => session.status === 'attention'
+      (session) => session.status === 'attention' && session.unread
     ).length;
     if (attention > 0) {
       this.item.text = `$(bell-dot) ${attention} agent${attention === 1 ? '' : 's'}`;
@@ -366,7 +375,15 @@ function sessionDescription(session: AgentSession): string {
 }
 
 function sessionIcon(session: AgentSession): vscode.ThemeIcon {
-  const base = STATUS_ICONS[session.status];
+  if (
+    session.status === 'running' &&
+    session.runningCommands.some((activity) => activity.activityKind === 'mcp')
+  ) {
+    return MCP_ACTIVITY_ICON;
+  }
+  const base = session.unread
+    ? STATUS_ICONS[session.status]
+    : (READ_WAITING_ICONS[session.status] ?? STATUS_ICONS[session.status]);
   if (session.status === 'attention' || session.status === 'failed') {
     return base;
   }

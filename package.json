@@ -2,7 +2,7 @@
   "name": "lookout",
   "displayName": "Lookout",
   "description": "Run, monitor, and review Codex, Claude Code, and custom terminal agents in parallel without leaving VS Code.",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publisher": "appoly",
   "license": "MIT",
   "preview": true,

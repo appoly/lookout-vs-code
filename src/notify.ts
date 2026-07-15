@@ -61,9 +61,9 @@ async function main(): Promise<void> {
       process.env.LOOKOUT_CAPTURE_COMMAND_OUTPUT === '1'
   });
 
-  // PreToolUse/PostToolUse can fire for tools other than the shell (apply_patch,
-  // Edit, MCP calls) when a matcher lets them through. Those carry no command,
-  // so there is nothing to surface — acknowledge the hook and exit quietly.
+  // PreToolUse/PostToolUse can fire for unrelated tools when a matcher lets
+  // them through. Shell commands and allow-listed MCP identifiers normalize to
+  // a safe label; everything else is acknowledged and dropped quietly.
   if (
     (event.kind === 'command-start' || event.kind === 'command-stop') &&
     !event.command

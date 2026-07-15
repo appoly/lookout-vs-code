@@ -109,6 +109,45 @@ suite('Lookout extension-host integration', () => {
     assert.equal(options.location, vscode.TerminalLocation.Panel);
   });
 
+  test('shows MCP calls with a distinct Agents icon', async () => {
+    await postAgentEvent(terminal, {
+      kind: 'status',
+      sessionId: session.id,
+      status: 'running',
+      message: 'Agent is working'
+    });
+    await postAgentEvent(terminal, {
+      kind: 'command-start',
+      sessionId: session.id,
+      commandId: 'mcp-integration-1',
+      command: 'codex_apps.github.fetch_pr',
+      activityKind: 'mcp'
+    });
+    await waitFor(
+      () => api.sessions.get(session.id)?.runningCommands.length === 1,
+      'The MCP call was not tracked as active'
+    );
+    const row = api.sessionTree
+      .getChildren(new SessionGroupItem('current', 'Current Workspace', 1))
+      .find(
+        (item): item is SessionTreeItem =>
+          item instanceof SessionTreeItem && item.session.id === session.id
+      );
+    assert.equal((row?.iconPath as vscode.ThemeIcon | undefined)?.id, 'extensions');
+
+    await postAgentEvent(terminal, {
+      kind: 'command-stop',
+      sessionId: session.id,
+      commandId: 'mcp-integration-1',
+      command: 'codex_apps.github.fetch_pr',
+      activityKind: 'mcp'
+    });
+    await waitFor(
+      () => api.sessions.get(session.id)?.runningCommands.length === 0,
+      'The completed MCP call remained active'
+    );
+  });
+
   test('projects current metadata into host-local global history', async () => {
     const record = await waitForValue(
       () => api.globalHistory
@@ -284,6 +323,17 @@ suite('Lookout extension-host integration', () => {
       'Attention navigation did not focus the agent terminal'
     );
     assert.equal(api.sessions.get(session.id)?.unread, false);
+    const focusedRow = api.sessionTree
+      .getChildren(new SessionGroupItem('current', 'Current Workspace', 1))
+      .find(
+        (item): item is SessionTreeItem =>
+          item instanceof SessionTreeItem && item.session.id === session.id
+      );
+    assert.equal(
+      (focusedRow?.iconPath as vscode.ThemeIcon | undefined)?.id,
+      'question',
+      'Reading an attention notification should clear its bell icon'
+    );
 
     const unreadSession = await api.sessions.launch({
       kind: 'custom',

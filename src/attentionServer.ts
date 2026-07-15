@@ -209,6 +209,7 @@ function parseAgentEvent(value: unknown): AgentEvent {
       ...provider,
       commandId,
       command,
+      ...(value.activityKind === 'mcp' ? { activityKind: 'mcp' as const } : {}),
       ...(result ? { result } : {})
     };
   }

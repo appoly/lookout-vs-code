@@ -101,6 +101,49 @@ test('preserves allow-listed command metadata and opt-in bounded results', () =>
   });
 });
 
+test('captures only the bounded identifier for MCP activity', () => {
+  const payload = {
+    tool_name: 'codex_apps.github.fetch_pr',
+    call_id: 'mcp-call-1',
+    tool_input: {
+      repository: 'private/repository',
+      pull_number: 42
+    },
+    prompt: 'private prompt'
+  };
+  const event = normalizeProviderEvent({
+    lookoutSessionId: 'lookout-1',
+    provider: 'codex',
+    action: 'command-start',
+    explicitMessage: '',
+    providerPayload: payload,
+    captureCommandOutput: false
+  });
+
+  assert.deepEqual(event, {
+    kind: 'command-start',
+    sessionId: 'lookout-1',
+    commandId: 'mcp-call-1',
+    command: 'codex_apps.github.fetch_pr',
+    activityKind: 'mcp'
+  });
+  assert.equal(JSON.stringify(event).includes('private/repository'), false);
+
+  const completed = normalizeProviderEvent({
+    lookoutSessionId: 'lookout-1',
+    provider: 'codex',
+    action: 'command-stop',
+    explicitMessage: '',
+    providerPayload: {
+      ...payload,
+      tool_response: { output: 'private MCP result' }
+    },
+    captureCommandOutput: true
+  });
+  assert.equal('result' in completed, false);
+  assert.equal(JSON.stringify(completed).includes('private MCP result'), false);
+});
+
 function fixture(name: string): Record<string, unknown> {
   return JSON.parse(
     readFileSync(

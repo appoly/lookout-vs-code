@@ -250,7 +250,7 @@ export class CodexUsageProvider {
         clientInfo: {
           name: 'lookout-vscode',
           title: 'Lookout for VS Code',
-          version: '0.1.0'
+          version: '1.0.0'
         },
         capabilities: { experimentalApi: false }
       });

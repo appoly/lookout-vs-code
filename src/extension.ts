@@ -412,7 +412,7 @@ export async function activate(
     const remoteUnread = coordination
       .windows()
       .flatMap((window) => window.sessions)
-      .filter((session) => session.unread || session.status === 'attention')
+      .filter((session) => session.unread)
       .length;
     const unread = localUnread + remoteUnread;
     sessionTreeView.badge = unread > 0

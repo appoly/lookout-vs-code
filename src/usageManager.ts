@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { CodexUsageProvider } from './codexUsageProvider';
 import { hostSpawnPathOverride } from './executableResolver';
 import type { SessionManager } from './sessionManager';
+import { discardResetWindows, newestUsageSnapshot } from './usageFreshness';
 import type { UsageSnapshot } from './usageTypes';
 
 const CLAUDE_STORAGE_KEY = 'lookout.usage.claude.v1';
@@ -60,9 +61,7 @@ export class UsageManager implements vscode.Disposable {
             ? { detail: 'Claude did not report subscription quota windows' }
             : {})
         };
-        if (this.setSnapshot(snapshot)) {
-          void this.context.globalState.update(CLAUDE_STORAGE_KEY, snapshot);
-        }
+        void this.acceptClaudeSnapshot(snapshot);
       }),
       vscode.window.onDidChangeWindowState((state) => {
         if (state.focused) {
@@ -108,7 +107,13 @@ export class UsageManager implements vscode.Disposable {
     if (providerEnabled('codex')) {
       await this.codex.refresh();
     }
-    const claude = this.snapshots.get('claude');
+    const sharedClaude = this.context.globalState.get<UsageSnapshot>(
+      CLAUDE_STORAGE_KEY
+    );
+    const claude = newestUsageSnapshot(
+      this.snapshots.get('claude'),
+      sharedClaude
+    );
     if (claude) {
       this.snapshots.set('claude', withStaleness(claude));
       this.changedEmitter.fire();
@@ -135,6 +140,21 @@ export class UsageManager implements vscode.Disposable {
     this.changedEmitter.fire();
     return true;
   }
+
+  private async acceptClaudeSnapshot(snapshot: UsageSnapshot): Promise<void> {
+    const shared = this.context.globalState.get<UsageSnapshot>(CLAUDE_STORAGE_KEY);
+    const newest = newestUsageSnapshot(
+      newestUsageSnapshot(this.snapshots.get('claude'), shared),
+      snapshot
+    );
+    if (!newest) {
+      return;
+    }
+    this.setSnapshot(newest);
+    if (newest === snapshot) {
+      await this.context.globalState.update(CLAUDE_STORAGE_KEY, snapshot);
+    }
+  }
 }
 
 function providerEnabled(provider: UsageSnapshot['provider']): boolean {
@@ -144,13 +164,15 @@ function providerEnabled(provider: UsageSnapshot['provider']): boolean {
 }
 
 function withStaleness(snapshot: UsageSnapshot): UsageSnapshot {
+  const current =
+    snapshot.provider === 'claude' ? discardResetWindows(snapshot) : snapshot;
   if (
-    snapshot.status === 'available' &&
-    Date.now() - snapshot.observedAt > STALE_AFTER_MS
+    current.status === 'available' &&
+    Date.now() - current.observedAt > STALE_AFTER_MS
   ) {
-    return { ...snapshot, status: 'stale', detail: 'Last update is stale' };
+    return { ...current, status: 'stale', detail: 'Last update is stale' };
   }
-  return snapshot;
+  return current;
 }
 
 function fallbackSnapshot(provider: UsageSnapshot['provider']): UsageSnapshot {
