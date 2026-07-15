@@ -76,7 +76,6 @@ test('subagent status lines cap oversized input and fail open silently', async (
   assert.equal(result.stdout, '');
   assert.equal(result.stderr, '');
 });
-
 function listen(server: ReturnType<typeof createServer>): Promise<void> {
   return new Promise((resolve, reject) => {
     server.once('error', reject);

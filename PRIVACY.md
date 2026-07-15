@@ -34,7 +34,11 @@ its UI:
   or Claude budget/alert limits. Live delegated-agent IDs, labels, status, and
   token counts are processed in memory so the UI can attribute current work,
   but delegated identities and labels are removed from persisted snapshots;
-- whether the one-time Codex hook notice has been acknowledged.
+- whether the one-time Codex hook notice has been acknowledged;
+- a local Lookout log output channel for unexpected background or command
+  failures. It records only fixed operation scopes, error type names, and short
+  validated error codes—not error messages, paths, commands, prompts, IDs,
+  tokens, or output. VS Code owns the local output-channel lifecycle.
 
 When `lookout.history.globalEnabled` is enabled (the default), Lookout also
 keeps a bounded cross-project history file in its extension-global storage on
@@ -66,8 +70,10 @@ workspace paths, provider and Lookout IDs, commands, URLs and endpoint details,
 auth material, prompts, transcripts, events, and output. No support bundle is
 created or uploaded automatically.
 
-The extension's global storage can also contain a generated Claude settings
-file for session-local hooks and generated WAV files for the attention bell.
+The extension's global storage can also contain generated per-session Claude
+settings files for session-local hooks and generated WAV files for the
+attention bell. Lookout deletes a session's generated settings file when its
+terminal closes or the session is removed.
 Lookout does not read provider authentication files.
 
 ## Local processes and network access

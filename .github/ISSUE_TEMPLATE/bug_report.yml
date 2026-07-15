@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a reproducible Lookout problem without sharing transcripts or secrets.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include terminal transcripts, prompts, credentials, provider or Lookout session IDs, custom command arguments, or `LOOKOUT_NOTIFY_TOKEN`. Run **Lookout: Run Doctor** or attach the explicitly exported sanitized support bundle when useful.
+  - type: input
+    id: lookout-version
+    attributes:
+      label: Lookout version
+    validations:
+      required: true
+  - type: input
+    id: vscode-version
+    attributes:
+      label: VS Code version
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: Execution host
+      options:
+        - Local desktop
+        - WSL
+        - Remote SSH
+        - Dev container
+        - Other remote host
+    validations:
+      required: true
+  - type: input
+    id: provider-version
+    attributes:
+      label: Provider CLI and version
+      description: For example, Codex or Claude Code. Write “Custom” or “Not applicable” when appropriate.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Use a scratch repository and redact private folder/repository names.
+      placeholder: |
+        1. Open…
+        2. Run…
+        3. Observe…
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: context
+    attributes:
+      label: Context
+      options:
+        - label: The workspace trust state and terminal location are included above.
+          required: true
+        - label: I removed transcripts, prompts, commands, paths, IDs, tokens, and credentials.
+          required: true
+        - label: I checked the README requirements and known limitations.
+          required: true

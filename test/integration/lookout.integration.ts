@@ -3,7 +3,23 @@
 import assert from 'node:assert/strict';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { LookoutExtensionTestApi } from '../../src/extension';
+import {
+  focusNextAttentionAcrossWindows,
+  type LookoutExtensionTestApi
+} from '../../src/extension';
+import type { CoordinationService } from '../../src/coordinationService';
+import {
+  COORDINATION_PROTOCOL_VERSION,
+  type CoordinatedSession,
+  type CoordinatedWindow
+} from '../../src/coordinationModel';
+import {
+  LiveSessionTreeItem,
+  SessionGroupItem,
+  SessionTreeItem,
+  SessionTreeProvider
+} from '../../src/sessionTree';
+import type { SessionManager } from '../../src/sessionManager';
 import type { AgentEvent, AgentSession } from '../../src/types';
 
 const EXTENSION_ID = 'appoly.lookout';
@@ -130,7 +146,108 @@ suite('Lookout extension-host integration', () => {
     );
   });
 
-  test('routes explicit lifecycle attention and focuses the exact unread agent', async () => {
+  test('shows and sorts remote Agents attention only while it is unread', () => {
+    const remoteWindow = coordinatedWindow([
+      coordinatedSession('read-attention', 'attention', false, 400),
+      coordinatedSession('unread-update', 'idle', true, 100),
+      coordinatedSession('unread-attention', 'attention', true, 50),
+      coordinatedSession('read-running', 'running', false, 500)
+    ]);
+    const readAttention = new LiveSessionTreeItem(
+      remoteWindow,
+      remoteWindow.sessions[0]
+    );
+    const unreadAttention = new LiveSessionTreeItem(
+      remoteWindow,
+      remoteWindow.sessions[2]
+    );
+    assert.equal((readAttention.iconPath as vscode.ThemeIcon).id, 'broadcast');
+    assert.equal((unreadAttention.iconPath as vscode.ThemeIcon).id, 'bell-dot');
+
+    const noopEvent = (
+      () => new vscode.Disposable(() => undefined)
+    ) as vscode.Event<void>;
+    const provider = new SessionTreeProvider(
+      {
+        onDidChange: noopEvent,
+        list: () => [],
+        eventsFor: () => []
+      } as unknown as SessionManager,
+      {
+        onDidChange: noopEvent,
+        windows: () => [remoteWindow],
+        health: () => ({ state: 'healthy-client', detail: 'test' }),
+        workspace: undefined
+      } as unknown as CoordinationService,
+      {
+        get: () => undefined,
+        update: () => Promise.resolve(),
+        keys: () => []
+      } as vscode.Memento
+    );
+    try {
+      const groups = provider
+        .getChildren()
+        .filter((item): item is SessionGroupItem => item instanceof SessionGroupItem);
+      assert.deepEqual(groups.map((item) => item.group), ['current', 'live']);
+      const live = provider
+        .getChildren(new SessionGroupItem('live', 'Live in Other Windows', 4))
+        .filter((item): item is LiveSessionTreeItem =>
+          item instanceof LiveSessionTreeItem
+        );
+      assert.deepEqual(
+        live.map((item) => item.coordinatedSession.sessionId),
+        [
+          'unread-attention',
+          'unread-update',
+          'read-running',
+          'read-attention'
+        ]
+      );
+    } finally {
+      provider.dispose();
+    }
+  });
+
+  test('prioritizes unread attention across windows, then local unread updates', async () => {
+    const localSessions = [
+      { id: 'read-local-attention', status: 'attention', unread: false },
+      { id: 'unread-local-update', status: 'completed', unread: true }
+    ] as unknown as readonly AgentSession[];
+    let focusedLocal: string | undefined;
+    let focusedRemote: string | undefined;
+    const sessions = {
+      list: () => localSessions,
+      isOpen: () => true,
+      focus: async (id: string) => {
+        focusedLocal = id;
+      }
+    } as unknown as SessionManager;
+    let remoteWindow = coordinatedWindow([
+      coordinatedSession('unread-remote-attention', 'attention', true, 100)
+    ]);
+    const coordination = {
+      windows: () => [remoteWindow],
+      focusRemote: async (_windowId: string, sessionId: string) => {
+        focusedRemote = sessionId;
+        return true;
+      }
+    } as unknown as CoordinationService;
+
+    await focusNextAttentionAcrossWindows(sessions, coordination);
+    assert.equal(focusedRemote, 'unread-remote-attention');
+    assert.equal(focusedLocal, undefined);
+
+    focusedRemote = undefined;
+    remoteWindow = coordinatedWindow([
+      coordinatedSession('unread-remote-update', 'completed', true, 200)
+    ]);
+    await focusNextAttentionAcrossWindows(sessions, coordination);
+    assert.equal(focusedLocal, 'unread-local-update');
+    assert.equal(focusedRemote, undefined);
+  });
+
+  test('routes attention and skips a read attention state during navigation', async () => {
     const observer = vscode.window.createTerminal({
       name: 'Lookout Integration Observer',
       location: vscode.TerminalLocation.Panel
@@ -154,8 +271,11 @@ suite('Lookout extension-host integration', () => {
     assert.equal(api.sessions.get(session.id)?.unread, true);
 
     const row = api.sessionTree
-      .getChildren()
-      .find((item) => item.session.id === session.id);
+      .getChildren(new SessionGroupItem('current', 'Current Workspace', 1))
+      .find(
+        (item): item is SessionTreeItem =>
+          item instanceof SessionTreeItem && item.session.id === session.id
+      );
     assert.equal(row?.session.latestEvent, 'Integration agent needs attention');
 
     await vscode.commands.executeCommand('lookout.focusNextAttention');
@@ -164,6 +284,67 @@ suite('Lookout extension-host integration', () => {
       'Attention navigation did not focus the agent terminal'
     );
     assert.equal(api.sessions.get(session.id)?.unread, false);
+
+    const unreadSession = await api.sessions.launch({
+      kind: 'custom',
+      label: 'Unread Integration Agent',
+      command: 'echo lookout-unread-integration',
+      cwd: workspaceRoot
+    });
+    const unreadTerminal = await waitForValue(
+      () => vscode.window.terminals.find(
+        (candidate) =>
+          terminalEnvironment(candidate).LOOKOUT_SESSION_ID === unreadSession.id
+      ),
+      'Lookout did not create the unread integration terminal'
+    );
+    observer.show(false);
+    await waitFor(
+      () => vscode.window.activeTerminal === observer,
+      'The observer terminal did not become active before unread navigation'
+    );
+    await postAgentEvent(unreadTerminal, {
+      kind: 'status',
+      sessionId: unreadSession.id,
+      status: 'completed',
+      message: 'Unread integration update'
+    });
+    await waitFor(
+      () => api.sessions.get(unreadSession.id)?.unread === true,
+      'The fallback agent update did not become unread'
+    );
+    await vscode.commands.executeCommand('lookout.focusNextAttention');
+    await waitFor(
+      () => vscode.window.activeTerminal === unreadTerminal,
+      'Cross-window attention navigation preferred a read attention state'
+    );
+
+    observer.show(false);
+    await waitFor(
+      () => vscode.window.activeTerminal === observer,
+      'The observer terminal did not become active before session navigation'
+    );
+    await postAgentEvent(unreadTerminal, {
+      kind: 'status',
+      sessionId: unreadSession.id,
+      status: 'completed',
+      message: 'Another unread integration update'
+    });
+    await waitFor(
+      () => api.sessions.get(unreadSession.id)?.unread === true,
+      'The second fallback agent update did not become unread'
+    );
+    await api.sessions.focusNextAttention();
+    await waitFor(
+      () => vscode.window.activeTerminal === unreadTerminal,
+      'Session navigation preferred a read attention state'
+    );
+    unreadTerminal.dispose();
+    await waitFor(
+      () => api.sessions.get(unreadSession.id)?.status === 'closed',
+      'The unread integration terminal did not close'
+    );
+    await api.sessions.close(unreadSession.id);
     observer.dispose();
   });
 
@@ -265,11 +446,18 @@ suite('Lookout extension-host integration', () => {
       const worktree = api.reviewTree
         .getChildren(changesGroup)
         .find((item) => item.kind === 'worktree');
-      return worktree
-        ? api.reviewTree
-            .getChildren(worktree)
-            .find((item) => item.change?.path === 'src/review-target.ts')
-        : undefined;
+      if (!worktree) {
+        return undefined;
+      }
+      const children = api.reviewTree.getChildren(worktree);
+      const evidence = children.filter((item) => item.kind === 'evidence');
+      if (!evidence.some((item) => item.label === 'Diff evidence')) {
+        return undefined;
+      }
+      assert.deepEqual(evidence.map((item) => item.label), ['Diff evidence']);
+      return children.find(
+        (item) => item.change?.path === 'src/review-target.ts'
+      );
     }, 'The changed fixture file was not listed');
 
     const baseline = await api.reviewTree.provideTextDocumentContent(
@@ -321,6 +509,37 @@ function terminalEnvironment(
 function normalizeFsPath(filePath: string): string {
   const normalized = path.normalize(filePath);
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function coordinatedWindow(
+  sessions: readonly CoordinatedSession[]
+): CoordinatedWindow {
+  return {
+    protocolVersion: COORDINATION_PROTOCOL_VERSION,
+    windowId: 'remote-window',
+    workspaceKey: 'remote-workspace',
+    workspaceLabel: 'Remote Workspace',
+    hostKind: 'local',
+    observedAt: 1_000,
+    sessions,
+    leaseExpiresAt: 10_000
+  };
+}
+
+function coordinatedSession(
+  sessionId: string,
+  status: CoordinatedSession['status'],
+  unread: boolean,
+  updatedAt: number
+): CoordinatedSession {
+  return {
+    sessionId,
+    label: sessionId,
+    kind: 'custom',
+    status,
+    unread,
+    updatedAt
+  };
 }
 
 async function waitFor(

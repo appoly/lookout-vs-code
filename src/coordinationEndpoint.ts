@@ -38,12 +38,19 @@ export type CoordinationConnection =
 export class CoordinationEndpointBroker {
   private readonly endpointPath: string;
   private readonly lockPath: string;
-  private server: CoordinationServer | undefined;
+  private server: Pick<CoordinationServer, 'start' | 'stop'> | undefined;
   private lock: FileHandle | undefined;
   private lockHeartbeatTimer: NodeJS.Timeout | undefined;
   private ownedEndpoint: CoordinationEndpoint | undefined;
 
-  public constructor(private readonly directory: string) {
+  public constructor(
+    private readonly directory: string,
+    private readonly createServer: (
+      token: string,
+      ownerId: string
+    ) => Pick<CoordinationServer, 'start' | 'stop'> = (token, ownerId) =>
+      new CoordinationServer(token, ownerId)
+  ) {
     this.endpointPath = path.join(directory, ENDPOINT_FILE);
     this.lockPath = path.join(directory, LOCK_FILE);
   }
@@ -81,9 +88,17 @@ export class CoordinationEndpointBroker {
       const lock = await this.tryAcquireLock();
       if (lock) {
         try {
-          const server = new CoordinationServer(token, ownerId);
+          const server = this.createServer(token, ownerId);
           const endpoint = await server.start();
-          await this.writeEndpoint(endpoint);
+          try {
+            await this.writeEndpoint(endpoint);
+          } catch (error) {
+            // The listener exists before its descriptor can be published. If
+            // publication fails, stop it here so an unreachable coordinator
+            // cannot survive outside broker ownership.
+            await server.stop().catch(() => undefined);
+            throw error;
+          }
           this.server = server;
           this.lock = lock;
           this.lockHeartbeatTimer = setInterval(() => {

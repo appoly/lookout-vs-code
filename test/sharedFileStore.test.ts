@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import test from 'node:test';
@@ -33,7 +33,35 @@ test('recovers from malformed metadata without executing or preserving it', asyn
   assert.deepEqual(await store(directory).read(), { count: 0 });
 });
 
-function store(directory: string): SharedFileStore<CounterStore> {
+test('default lock deadline allows a newly orphaned lock to become stale', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'lookout-shared-store-'));
+  const lockPath = path.join(directory, 'counter.json.lock');
+  const lockCreatedAt = Date.now();
+  await writeFile(lockPath, '{}\n', 'utf8');
+  await utimes(lockPath, lockCreatedAt / 1_000, lockCreatedAt / 1_000);
+
+  let currentTime = lockCreatedAt;
+  const shared = store(directory, {
+    now: () => {
+      currentTime += 1_000;
+      return currentTime;
+    }
+  });
+
+  const updated = await shared.update((current) => ({
+    count: current.count + 1
+  }));
+  assert.equal(updated.count, 1);
+});
+
+function store(
+  directory: string,
+  timing: {
+    readonly lockTimeoutMs?: number;
+    readonly staleLockMs?: number;
+    readonly now?: () => number;
+  } = {}
+): SharedFileStore<CounterStore> {
   return new SharedFileStore({
     directory,
     filename: 'counter.json',
@@ -46,6 +74,7 @@ function store(directory: string): SharedFileStore<CounterStore> {
         typeof value.count === 'number'
           ? value.count
           : 0
-    })
+    }),
+    ...timing
   });
 }

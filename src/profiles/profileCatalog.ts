@@ -1,4 +1,5 @@
 import type { AgentKind } from '../types';
+import { directCommandExecutable } from '../directCommand';
 import { listProviders } from '../providers/providerRegistry';
 import type {
   ProviderAdapter,
@@ -97,11 +98,7 @@ export function directProviderExecutable(
   configuredCommand: string,
   kind: DetectableProviderKind
 ): string | undefined {
-  const command = configuredCommand.trim();
-  if (!command || /[\n;&|<>`$]/.test(command)) {
-    return undefined;
-  }
-  const first = firstCommandToken(command);
+  const first = directCommandExecutable(configuredCommand);
   if (!first) {
     return undefined;
   }
@@ -233,15 +230,6 @@ function effectiveCapabilities(
       detail: availability.detail
     }
   };
-}
-
-function firstCommandToken(command: string): string | undefined {
-  const quote = command[0];
-  if (quote === '"' || quote === "'") {
-    const end = command.indexOf(quote, 1);
-    return end > 1 ? command.slice(1, end) : undefined;
-  }
-  return /^(\S+)/.exec(command)?.[1];
 }
 
 function errorMessage(error: unknown): string {

@@ -30,6 +30,9 @@ concurrency:
 
 env:
   NODE_VERSION: '24'
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  EXTENSION_ID: appoly.lookout
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
 
 jobs:
   build-artifact:
@@ -42,23 +45,30 @@ jobs:
       sha256: ${{ steps.prepare.outputs.sha256 }}
       version: ${{ steps.prepare.outputs.version }}
       vsix-file: ${{ steps.prepare.outputs.vsix_file }}
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
+      - name: Confirm manual dispatch uses the default branch workflow
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
+
       - name: Check out the tagged source
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
 
-      - name: Confirm the checkout is the requested tag
+      - name: Confirm the requested tag is on the default branch
         shell: bash
         run: |
           set -euo pipefail
           test "$(git describe --tags --exact-match)" = "$RELEASE_TAG"
+          git fetch --no-tags origin \
+            "$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+          git merge-base --is-ancestor \
+            HEAD "refs/remotes/origin/$DEFAULT_BRANCH"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -78,13 +88,16 @@ jobs:
       - name: Audit shipped dependencies
         run: npm run audit:runtime
 
-      - name: Inspect the proposed package contents
-        run: node node_modules/@vscode/vsce/vsce ls --tree --no-dependencies
-
       # This is the only packaging command in the workflow. Publisher jobs only
       # download and verify its bytes; they never run package or prepublish.
       - name: Package VSIX exactly once
         run: npm run vsix
+
+      - name: Verify the packaged contents
+        run: npm run verify:vsix-contents
+
+      - name: Install and activate the exact packaged candidate
+        run: xvfb-run -a npm run verify:installed-vsix
 
       - name: Record candidate identity and SHA-256
         id: prepare
@@ -92,14 +105,16 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/release-artifact.mjs prepare \
+            --manifest package.json \
             --tag "$RELEASE_TAG" \
             --commit "$(git rev-parse HEAD)" \
+            --extension-id "$EXTENSION_ID" \
             --output release-artifact \
             --github-output "$GITHUB_OUTPUT"
 
       - name: Upload immutable release candidate
         id: upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.prepare.outputs.artifact_name }}
           path: release-artifact/
@@ -136,12 +151,12 @@ jobs:
       id-token: write
     steps:
       - name: Check out the release tooling
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ inputs.release_tag }}
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -150,7 +165,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Download the build job artifact by ID
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           artifact-ids: ${{ needs.build-artifact.outputs.artifact-id }}
           path: release-artifact
@@ -160,11 +175,20 @@ jobs:
         id: verify
         run: >-
           node scripts/release-artifact.mjs verify
+          --manifest package.json
           --directory release-artifact
+          --tag "$RELEASE_TAG"
+          --commit "$(git rev-parse HEAD)"
+          --extension-id "$EXTENSION_ID"
           --github-output "$GITHUB_OUTPUT"
 
+      - name: Reinspect the downloaded VSIX contents
+        run: >-
+          node scripts/verify-vsix-contents.mjs
+          "${{ steps.verify.outputs.vsix_path }}"
+
       - name: Sign in to Microsoft Entra with GitHub OIDC
-        uses: azure/login@v2
+        uses: azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8 # v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -189,17 +213,21 @@ jobs:
       contents: read
     steps:
       - name: Check out the release tooling
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ inputs.release_tag }}
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install the locked Open VSX client
+        run: npm ci --ignore-scripts
 
       - name: Download the build job artifact by ID
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           artifact-ids: ${{ needs.build-artifact.outputs.artifact-id }}
           path: release-artifact
@@ -209,10 +237,21 @@ jobs:
         id: verify
         run: >-
           node scripts/release-artifact.mjs verify
+          --manifest package.json
           --directory release-artifact
+          --tag "$RELEASE_TAG"
+          --commit "$(git rev-parse HEAD)"
+          --extension-id "$EXTENSION_ID"
           --github-output "$GITHUB_OUTPUT"
+
+      - name: Reinspect the downloaded VSIX contents
+        run: >-
+          node scripts/verify-vsix-contents.mjs
+          "${{ steps.verify.outputs.vsix_path }}"
 
       - name: Publish the verified VSIX without repackaging
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: npx --yes ovsx@1.0.2 publish "${{ steps.verify.outputs.vsix_path }}"
+        run: >-
+          node node_modules/ovsx/bin/ovsx publish
+          --packagePath "${{ steps.verify.outputs.vsix_path }}"

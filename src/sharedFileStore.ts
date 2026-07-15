@@ -21,6 +21,9 @@ export interface SharedFileStoreOptions<T> {
   readonly now?: () => number;
 }
 
+const DEFAULT_STALE_LOCK_MS = 15_000;
+const LOCK_RECOVERY_GRACE_MS = 5_000;
+
 /**
  * Small cross-process JSON store with an atomic lock file and rename. It is
  * intended for extension-global metadata shared by windows on one execution
@@ -36,8 +39,9 @@ export class SharedFileStore<T> {
   public constructor(private readonly options: SharedFileStoreOptions<T>) {
     this.filePath = path.join(options.directory, options.filename);
     this.lockPath = `${this.filePath}.lock`;
-    this.lockTimeoutMs = options.lockTimeoutMs ?? 3_000;
-    this.staleLockMs = options.staleLockMs ?? 15_000;
+    this.staleLockMs = options.staleLockMs ?? DEFAULT_STALE_LOCK_MS;
+    this.lockTimeoutMs =
+      options.lockTimeoutMs ?? this.staleLockMs + LOCK_RECOVERY_GRACE_MS;
     this.now = options.now ?? Date.now;
   }
 

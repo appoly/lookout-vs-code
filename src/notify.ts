@@ -25,6 +25,7 @@ const actions = new Set<EventAction>([
   'command-stop',
   'session-start'
 ]);
+const MAX_STDIN_BYTES = 64 * 1024;
 
 async function main(): Promise<void> {
   const parsedArguments = parseArguments(process.argv.slice(2));
@@ -41,6 +42,10 @@ async function main(): Promise<void> {
     return;
   }
   const stdinMessage = parsedArguments.hookProvider ? await readStdin() : '';
+  if (stdinMessage === undefined) {
+    acknowledge(parsedArguments.hookProvider);
+    return;
+  }
   const providerPayload = parseRecord(
     parsedArguments.payloadArgument || stdinMessage
   );
@@ -71,55 +76,41 @@ async function main(): Promise<void> {
 
   const body = JSON.stringify(event);
 
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const req = request(
-        url,
-        {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${token}`,
-            'content-type': 'application/json',
-            'content-length': Buffer.byteLength(body)
-          }
-        },
-        (response) => {
-          response.resume();
-          response.on('end', () => {
-            if ((response.statusCode ?? 500) >= 300) {
-              reject(
-                new Error(`Lookout notification failed: ${response.statusCode}`)
-              );
-            } else {
-              resolve();
-            }
-          });
+  await new Promise<void>((resolve, reject) => {
+    const req = request(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(body)
         }
-      );
-      req.once('error', reject);
-      // A stale endpoint that accepts but never answers must not stall the
-      // agent's hook budget (Claude allows ~60s per hook; Codex 10s).
-      req.setTimeout(3_000, () => {
-        req.destroy(new Error('Lookout notification timed out'));
-      });
-      req.end(body);
+      },
+      (response) => {
+        response.resume();
+        response.on('end', () => {
+          if ((response.statusCode ?? 500) >= 300) {
+            reject(new Error(`Lookout notification failed: ${response.statusCode}`));
+          } else {
+            resolve();
+          }
+        });
+      }
+    );
+    req.once('error', reject);
+    // A stale endpoint that accepts but never answers must not stall the
+    // agent's hook budget (Claude allows ~60s per hook; Codex 10s).
+    req.setTimeout(3_000, () => {
+      req.destroy(new Error('Lookout notification timed out'));
     });
-  } catch (error) {
-    // The bridge is extension-owned and can disappear while an agent terminal
-    // remains alive (window reload, extension update, or shutdown). Provider
-    // lifecycle hooks are best-effort telemetry, so a stale endpoint must not
-    // turn an otherwise successful provider event into visible hook noise.
+    req.end(body);
+  }).catch((error: unknown) => {
     if (!parsedArguments.hookProvider) {
       throw error;
     }
-    if (parsedArguments.hookProvider === 'codex') {
-      process.stdout.write('{}\n');
-    }
-    return;
-  }
-  if (parsedArguments.hookProvider === 'codex') {
-    process.stdout.write('{}\n');
-  }
+  });
+  acknowledge(parsedArguments.hookProvider);
 }
 
 interface ParsedArguments {
@@ -182,18 +173,41 @@ function parseRecord(input: string): Record<string, unknown> | undefined {
   }
 }
 
-async function readStdin(): Promise<string> {
+async function readStdin(): Promise<string | undefined> {
   if (process.stdin.isTTY) {
     return '';
   }
   const chunks: Buffer[] = [];
+  let total = 0;
   for await (const chunk of process.stdin) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.length;
+    if (total > MAX_STDIN_BYTES) {
+      return undefined;
+    }
+    chunks.push(buffer);
   }
   return Buffer.concat(chunks).toString('utf8').trim();
 }
 
-void main().catch((error: unknown) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+function acknowledge(provider: HookProvider | undefined): void {
+  if (provider === 'codex') {
+    process.stdout.write('{}\n');
+  }
+}
+
+void main().catch(() => {
+  const values = process.argv.slice(2);
+  const hookIndex = values.indexOf('--hook');
+  const candidate = hookIndex >= 0 ? values[hookIndex + 1] : undefined;
+  const provider =
+    candidate === 'codex' || candidate === 'claude'
+      ? candidate
+      : undefined;
+  if (provider) {
+    acknowledge(provider);
+    return;
+  }
+  process.stderr.write('Lookout notification failed\n');
   process.exitCode = 1;
 });

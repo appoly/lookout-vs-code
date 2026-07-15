@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import test from 'node:test';
 import { CoordinationEndpointBroker } from '../src/coordinationEndpoint';
+import { COORDINATION_PROTOCOL_VERSION } from '../src/coordinationModel';
+import type { CoordinationEndpoint } from '../src/coordinationServer';
 
 test('elects one owner and connects subsequent windows as clients', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'lookout-coordinator-'));
@@ -65,4 +67,29 @@ test('elects a replacement after the owner exits cleanly', async () => {
   } finally {
     await replacement.dispose();
   }
+});
+
+test('stops a newly started server when endpoint publication fails', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'lookout-coordinator-'));
+  const endpointPath = path.join(directory, 'coordination-v1.endpoint.json');
+  let stopped = false;
+  const broker = new CoordinationEndpointBroker(directory, () => ({
+    start: async (): Promise<CoordinationEndpoint> => {
+      // Simulate a publication race after the broker's initial descriptor read.
+      await mkdir(endpointPath);
+      return {
+        protocolVersion: COORDINATION_PROTOCOL_VERSION,
+        port: 43_210,
+        ownerId: 'window-a',
+        startedAt: Date.now()
+      };
+    },
+    stop: async (): Promise<void> => {
+      stopped = true;
+    }
+  }));
+
+  await assert.rejects(() => broker.connectOrOwn('token', 'window-a'));
+  assert.equal(stopped, true);
+  await broker.dispose();
 });

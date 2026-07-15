@@ -157,7 +157,8 @@ export class LiveHistoryTreeItem extends vscode.TreeItem {
     this.id = `live-${coordinatedWindow.windowId}-${coordinatedSession.sessionId}`;
     this.contextValue = 'lookout.liveSession';
     this.description = `${coordinatedWindow.workspaceLabel} · ${coordinatedSession.status}${coordinatedSession.unread ? ' · unread' : ''}`;
-    this.iconPath = coordinatedSession.status === 'attention'
+    this.iconPath = coordinatedSession.status === 'attention' &&
+      coordinatedSession.unread
       ? new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('list.warningForeground'))
       : new vscode.ThemeIcon('broadcast');
     this.tooltip = [
@@ -231,11 +232,9 @@ export class HistoryTreeProvider
         ({ window, session }) => new LiveHistoryTreeItem(window, session)
       )
       .sort((left, right) => {
-        const leftAttention = left.coordinatedSession.status === 'attention' ||
-          left.coordinatedSession.unread;
-        const rightAttention = right.coordinatedSession.status === 'attention' ||
-          right.coordinatedSession.unread;
-        return Number(rightAttention) - Number(leftAttention) ||
+        const leftPriority = liveSessionPriority(left.coordinatedSession);
+        const rightPriority = liveSessionPriority(right.coordinatedSession);
+        return rightPriority - leftPriority ||
           right.coordinatedSession.updatedAt - left.coordinatedSession.updatedAt;
       });
     if (!element) {
@@ -300,6 +299,13 @@ export class HistoryTreeProvider
           )
       );
   }
+}
+
+function liveSessionPriority(session: CoordinatedSession): number {
+  if (session.status === 'attention' && session.unread) {
+    return 2;
+  }
+  return session.unread ? 1 : 0;
 }
 
 function hostLabel(kind: GlobalHistoryRecord['workspace']['hostKind']): string {

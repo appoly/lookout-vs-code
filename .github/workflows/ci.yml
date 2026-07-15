@@ -8,31 +8,38 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run check
       - run: npm run vsix
+      - run: npm run verify:vsix-contents
       - run: npm run audit:runtime
         if: runner.os == 'Linux'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: runner.os == 'Linux'
         with:
           name: lookout-vsix
           path: "*.vsix"
 
   extension-host:
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -47,8 +54,8 @@ jobs:
             vscode: stable
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
@@ -61,7 +68,7 @@ jobs:
         if: runner.os != 'Linux'
         env:
           LOOKOUT_VSCODE_VERSION: ${{ matrix.vscode }}
-      - run: npm run verify:vsix
+      - run: xvfb-run -a npm run verify:vsix
         if: runner.os == 'Linux' && matrix.vscode == 'stable'
         env:
           LOOKOUT_VSCODE_VERSION: ${{ matrix.vscode }}

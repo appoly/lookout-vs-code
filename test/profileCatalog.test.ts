@@ -52,4 +52,8 @@ test('extracts only conservative direct provider executable tokens', () => {
   );
   assert.equal(directProviderExecutable('wrapper codex', 'codex'), undefined);
   assert.equal(directProviderExecutable('codex | tee log', 'codex'), undefined);
+  assert.equal(
+    directProviderExecutable('"codex.exe"suffix --flag', 'codex'),
+    undefined
+  );
 });

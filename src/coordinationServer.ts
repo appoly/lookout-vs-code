@@ -51,6 +51,13 @@ export class CoordinationServer {
       );
     });
     server.maxHeadersCount = 32;
+    server.requestTimeout = 5_000;
+    server.headersTimeout = 5_000;
+    server.keepAliveTimeout = 1_000;
+    // The one-shot listener below rejects startup; this persistent listener
+    // also prevents later socket-level errors from becoming uncaught extension
+    // host exceptions.
+    server.on('error', () => undefined);
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
       server.listen(0, '127.0.0.1', () => {

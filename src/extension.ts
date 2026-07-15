@@ -10,18 +10,15 @@ import {
 import { ReviewTreeItem, ReviewTreeProvider } from './reviewTree';
 import { SessionManager } from './sessionManager';
 import {
+  LiveSessionTreeItem,
   SessionStatusBar,
   SessionTreeItem,
   SessionTreeProvider
 } from './sessionTree';
-import type { AgentKind, LaunchRequest } from './types';
+import type { AgentKind, LaunchRequest, SessionStatus } from './types';
 import { UsageManager } from './usageManager';
 import { UsageStatusBar, UsageTreeProvider } from './usageTree';
-import {
-  GlobalHistoryTreeItem,
-  HistoryTreeProvider,
-  LiveHistoryTreeItem
-} from './historyTree';
+import { GlobalHistoryTreeItem } from './historyTree';
 import {
   buildProfileCatalog,
   type AgentProfile
@@ -58,6 +55,9 @@ import type {
 } from './globalHistoryModel';
 import { currentWorkspaceIdentity } from './workspaceIdentity';
 import { CoordinationService } from './coordinationService';
+import { runtimeErrorIdentity } from './runtimeError';
+
+let runtimeLog: vscode.LogOutputChannel | undefined;
 
 export interface LookoutExtensionTestApi {
   readonly sessions: SessionManager;
@@ -73,12 +73,17 @@ export async function activate(
   const sessions = new SessionManager(context);
   context.subscriptions.push(sessions);
   await sessions.initialize();
-  const sessionTree = new SessionTreeProvider(sessions);
-  const sessionTreeView = vscode.window.createTreeView('lookout.sessions', {
-    treeDataProvider: sessionTree
-  });
   const sessionStatus = new SessionStatusBar(sessions);
-  const reviewTree = new ReviewTreeProvider(sessions, context.workspaceState);
+  runtimeLog = vscode.window.createOutputChannel('Lookout', { log: true });
+  const reviewTree = new ReviewTreeProvider(
+    sessions,
+    context.workspaceState,
+    reportBackgroundError
+  );
+  const reviewTreeView = vscode.window.createTreeView('lookout.review', {
+    treeDataProvider: reviewTree
+  });
+  reviewTree.setVisible(reviewTreeView.visible);
   const usage = new UsageManager(context, sessions);
   const usageTree = new UsageTreeProvider(usage, sessions);
   const usageStatus = new UsageStatusBar(usage);
@@ -98,6 +103,15 @@ export async function activate(
     workspaceIdentity
   );
   await coordination.initialize();
+  const sessionTree = new SessionTreeProvider(
+    sessions,
+    coordination,
+    context.workspaceState
+  );
+  const sessionTreeView = vscode.window.createTreeView('lookout.sessions', {
+    treeDataProvider: sessionTree,
+    dragAndDropController: sessionTree
+  });
   const globalIntentSubscription = globalHistory.onDidReceiveIntent(
     ({ intent, record }) => {
       void processPendingGlobalHistoryIntent(
@@ -109,16 +123,12 @@ export async function activate(
     }
   );
   await globalHistory.initialize();
-  const historyTree = new HistoryTreeProvider(
-    sessions,
-    globalHistory,
-    coordination
-  );
   const templates = new TemplateManager(context.globalState);
   const doctorOutput = vscode.window.createOutputChannel('Lookout Doctor', {
     log: true
   });
   await templates.initialize();
+  await updateTemplateContext(templates);
 
   context.subscriptions.push(
     sessionTree,
@@ -128,12 +138,15 @@ export async function activate(
     usage,
     usageTree,
     usageStatus,
-    historyTree,
     globalHistory,
     coordination,
     globalIntentSubscription,
     doctorOutput,
-    vscode.window.registerTreeDataProvider('lookout.review', reviewTree),
+    runtimeLog,
+    reviewTreeView,
+    reviewTreeView.onDidChangeVisibility((event) =>
+      reviewTree.setVisible(event.visible)
+    ),
     vscode.workspace.registerTextDocumentContentProvider(
       'lookout-baseline',
       reviewTree
@@ -143,9 +156,14 @@ export async function activate(
       reviewTree
     ),
     vscode.window.registerTreeDataProvider('lookout.usage', usageTree),
-    vscode.window.registerTreeDataProvider('lookout.history', historyTree),
     register('lookout.launchAgent', () => chooseAndLaunchAgent(sessions)),
     register('lookout.configureProfiles', () => configureProfiles()),
+    register('lookout.openSettings', () =>
+      vscode.commands.executeCommand(
+        'workbench.action.openSettings',
+        '@ext:appoly.lookout'
+      )
+    ),
     register('lookout.runDoctor', () =>
       runDoctor(context, sessions, usage, coordination, globalHistory, doctorOutput)
     ),
@@ -273,7 +291,7 @@ export async function activate(
         await globalHistory.deleteRecord(item.record.id);
       }
     }),
-    register('lookout.focusRemoteSession', async (item?: LiveHistoryTreeItem) => {
+    register('lookout.focusRemoteSession', async (item?: LiveSessionTreeItem) => {
       if (!item) {
         return;
       }
@@ -301,11 +319,6 @@ export async function activate(
       const id = sessionId(item);
       return id ? sessions.unarchiveSession(id) : undefined;
     }),
-    register('lookout.browseHistory', async () => {
-      await vscode.commands.executeCommand('workbench.view.extension.lookout');
-      await vscode.commands.executeCommand('lookout.history.focus');
-    }),
-    register('lookout.refreshHistory', () => historyTree.refresh()),
     register('lookout.deleteHistory', async () => {
       const choice = await vscode.window.showWarningMessage(
         'Delete closed and archived Lookout history? This removes only Lookout metadata and does not delete provider conversations, terminals, worktrees, files, or commits.',
@@ -421,7 +434,12 @@ export async function activate(
   updateSessionBadge();
   await updateSoundContext();
 
-  void reviewTree.initialize();
+  void reviewTree.initialize().catch((error: unknown) => {
+    reportBackgroundError('review-initialize', error);
+    void vscode.window.showWarningMessage(
+      'Lookout Review could not initialize. Run Lookout: Run Doctor for current health information.'
+    );
+  });
   usage.initialize();
 
   return process.env.LOOKOUT_TEST === '1'
@@ -442,11 +460,34 @@ async function updateSoundContext(): Promise<void> {
   );
 }
 
+async function updateTemplateContext(templates: TemplateManager): Promise<void> {
+  await vscode.commands.executeCommand(
+    'setContext',
+    'lookout.hasTemplates',
+    templates.list().length > 0
+  );
+}
+
 function register<Args extends unknown[]>(
   command: string,
   callback: (...args: Args) => unknown
 ): vscode.Disposable {
-  return vscode.commands.registerCommand(command, callback);
+  return vscode.commands.registerCommand(command, async (...args: Args) => {
+    try {
+      return await callback(...args);
+    } catch (error) {
+      reportBackgroundError(`command:${command}`, error);
+      void vscode.window.showErrorMessage(
+        'Lookout could not complete that command. Run Lookout: Run Doctor for current health information.'
+      );
+      return undefined;
+    }
+  });
+}
+
+function reportBackgroundError(scope: string, error: unknown): void {
+  const { name, code } = runtimeErrorIdentity(error);
+  runtimeLog?.error(`[${scope}] failed (${name}${code ? `:${code}` : ''})`);
 }
 
 async function launchAgent(
@@ -690,6 +731,7 @@ async function createSessionTemplate(templates: TemplateManager): Promise<void> 
   };
   try {
     await templates.create(draft);
+    await updateTemplateContext(templates);
     void vscode.window.showInformationMessage(`Created template ${name}.`);
   } catch (error) {
     void vscode.window.showErrorMessage(
@@ -815,6 +857,7 @@ async function deleteSessionTemplate(templates: TemplateManager): Promise<void> 
   );
   if (choice === 'Delete Template') {
     await templates.remove(selected.template.id);
+    await updateTemplateContext(templates);
   }
 }
 
@@ -1179,32 +1222,36 @@ function nonEmpty(value: string): string | undefined {
   return value.trim() ? undefined : 'Enter a value';
 }
 
-async function focusNextAttentionAcrossWindows(
+export async function focusNextAttentionAcrossWindows(
   sessions: SessionManager,
   coordination: CoordinationService
 ): Promise<void> {
   const local = sessions
     .list()
     .filter((session) => sessions.isOpen(session.id))
-    .find((session) => session.status === 'attention' || session.unread);
-  if (local) {
-    await sessions.focus(local.id);
-    return;
-  }
+    .map((session) => ({ kind: 'local' as const, session }));
   const remote = coordination
     .windows()
     .flatMap((window) =>
-      window.sessions.map((session) => ({ window, session }))
-    )
-    .find(({ session }) => session.status === 'attention' || session.unread);
-  if (remote) {
+      window.sessions.map((session) => ({
+        kind: 'remote' as const,
+        window,
+        session
+      }))
+    );
+  const candidate = nextUnreadAttention([...local, ...remote]);
+  if (candidate?.kind === 'local') {
+    await sessions.focus(candidate.session.id);
+    return;
+  }
+  if (candidate?.kind === 'remote') {
     const accepted = await coordination.focusRemote(
-      remote.window.windowId,
-      remote.session.sessionId
+      candidate.window.windowId,
+      candidate.session.sessionId
     );
     if (accepted) {
       void vscode.window.showInformationMessage(
-        `Asked ${remote.window.workspaceLabel} to reveal ${remote.session.label}.`
+        `Asked ${candidate.window.workspaceLabel} to reveal ${candidate.session.label}.`
       );
       return;
     }
@@ -1212,6 +1259,19 @@ async function focusNextAttentionAcrossWindows(
   void vscode.window.showInformationMessage(
     'No agents need attention in this or another coordinated window.'
   );
+}
+
+function nextUnreadAttention<
+  T extends {
+    readonly session: {
+      readonly status: SessionStatus;
+      readonly unread: boolean;
+    };
+  }
+>(candidates: readonly T[]): T | undefined {
+  return candidates.find(
+    ({ session }) => session.status === 'attention' && session.unread
+  ) ?? candidates.find(({ session }) => session.unread);
 }
 
 async function openGlobalHistoryRecord(

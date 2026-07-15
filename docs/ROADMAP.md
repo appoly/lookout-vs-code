@@ -83,7 +83,7 @@ existing attribution and privacy guarantees.
 
 ## Then: make parallel work legible and resumable
 
-- [x] Add a persisted session inbox/timeline built only from explicit lifecycle and attention events—never raw terminal output or prompts—with next/previous unread navigation. Review/task event producers remain a later extension of the same fixed ledger.
+- [x] Add a persisted session event timeline built only from explicit lifecycle and attention events—never raw terminal output or prompts—with next/previous unread navigation. Review/task event producers remain a later extension of the same fixed ledger.
 - [x] Add privacy-safe per-session operational stats for elapsed time,
   attention/events, delegated-agent activity, provider-identity observations,
   and known exit result. Worktree diff stats and native verification outcome
@@ -105,7 +105,7 @@ existing attribution and privacy guarantees.
 ## Deferred: opt-in Compound Engineering
 
 Compound Engineering remains opt-in and is deferred until the universal
-profiles, continuity, inbox, and verification loop in the pre-release program
+profiles, continuity, attention navigation, and verification loop in the pre-release program
 is complete. None of the release phases may silently install or enable it.
 
 The decision-complete design is in [the opt-in Compound Engineering plan](plans/compound-engineering-opt-in.md). Compound Engineering is credited to [Kieran Klaassen and Every](https://every.to/guides/compound-engineering). Integration is Workshop-first because [The Workshop](https://github.com/adamhulme/the-workshop)'s manifest contract is captured and verified; [Every's official plugin](https://github.com/EveryInc/compound-engineering-plugin) is credited and guided, and gains its own catalog once its contract is captured the same way. Lookout never silently installs either.
@@ -164,8 +164,11 @@ The decision-complete design is in [the opt-in Compound Engineering plan](plans/
   it does not claim federation between local, WSL, SSH, and container hosts.
 - [x] Accessible Activity Bar and 256×256 Marketplace icons, gallery banner,
   user-first README, privacy/support/security docs, and a release checklist.
-- Settings walkthrough, real Marketplace screenshots/GIF, and publishing automation.
-- [x] Passive Getting Started walkthrough for profiles, launch, Inbox, Review, and continuity.
+- [x] Passive settings walkthrough, current Marketplace screenshots, and gated
+  Marketplace/Open VSX publishing automation.
+- [ ] Add a native Review diff screenshot and, if it improves the listing, a
+  short launch → attention → review recording.
+- [x] Passive Getting Started walkthrough for profiles, launch, Sessions, Review, and continuity.
 - [x] Advisory three-OS provider compatibility lab with deterministic fake CLIs and sanitized installed-CLI surface reports.
 
 ## Then: Marketplace release (0.1, preview)

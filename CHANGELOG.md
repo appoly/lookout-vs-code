@@ -20,16 +20,16 @@
 - Add bounded, abortable Git evidence collection for diff statistics, commits,
   upstream state, conflicts, and stale or unstable baselines as the foundation
   for verification-oriented review packets.
-- Add metadata-only Inbox and History views with unread navigation, safe
-  provider resume/fork, collision refusal, archive/unarchive, and bounded
-  retention.
-- Extend History across projects on the same execution host, with atomic
-  multi-window storage, deletion tombstones, expiring reopen/resume handoffs,
-  and explicit trust/provider revalidation in the target window.
+- Add a metadata-only event ledger with safe provider continuation, collision
+  refusal, deletion tombstones, and bounded retention. Attention and live
+  cross-window sessions remain on agent rows rather than a separate history feed.
+- Maintain bounded session metadata across projects on the same execution host,
+  with atomic multi-window storage and explicit trust/provider revalidation.
 - Add opt-in authenticated live coordination between Lookout windows on one VS
   Code profile and execution host: leased metadata-only snapshots, cross-window
   attention focus, duplicate-provider-session detection, crash recovery, and
   strict local/WSL/SSH/container boundaries.
+- Add persistent drag-and-drop ordering for Current Workspace agent rows.
 - Add a non-installing provider profile catalog and privacy-bounded session
   templates for reusable folder, worktree, task, browser, and review recipes.
 - Add stable verification contexts, diagnostic hash baselines, freshness-aware
@@ -40,7 +40,7 @@
   advisory cross-platform provider compatibility lab with deterministic fake
   CLIs.
 - Add a passive Getting Started walkthrough covering profiles, native launch,
-  Inbox attention, Review, and provider continuity.
+  agent-row attention routing, Review, and provider continuity.
 - Only warn about uncommitted work when removing an agent. Clean commits made
   since launch no longer trigger the changes warning, and the prompt now makes
   clear that removing an agent does not delete worktree files or Git commits.

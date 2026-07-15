@@ -1,6 +1,5 @@
 import * as path from 'node:path';
-
-const SHELL_OPERATORS = /[\n;&|<>`$]/;
+import { directCommandExecutable } from './directCommand';
 
 /**
  * The shell that will parse a launch command typed into a terminal. Quoting
@@ -19,11 +18,11 @@ export type LaunchShell =
 
 export function classifyShell(
   shellPath: string | undefined,
-  platform: NodeJS.Platform = process.platform
+  _platform: NodeJS.Platform = process.platform
 ): LaunchShell {
   const trimmed = shellPath?.trim();
   if (!trimmed) {
-    return platform === 'win32' ? 'unknown' : 'posix';
+    return 'unknown';
   }
   const base = path
     .basename(trimmed.replace(/\\/g, '/'))
@@ -47,7 +46,7 @@ export function classifyShell(
   ) {
     return 'posix';
   }
-  return platform === 'win32' ? 'unknown' : 'posix';
+  return 'unknown';
 }
 
 /** The shell a provider uses to run hook command strings it was configured with. */
@@ -177,13 +176,7 @@ export function isDirectAgentCommand(
   command: string,
   executableName: 'claude' | 'codex'
 ): boolean {
-  if (SHELL_OPERATORS.test(command)) {
-    return false;
-  }
-  const firstToken = command
-    .trim()
-    .split(/\s+/, 1)[0]
-    ?.replace(/^['"]|['"]$/g, '');
+  const firstToken = directCommandExecutable(command);
   if (!firstToken) {
     return false;
   }

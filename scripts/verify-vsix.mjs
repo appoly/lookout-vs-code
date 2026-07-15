@@ -1,7 +1,14 @@
-import { existsSync, readFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { runVSCodeCommand } from '@vscode/test-electron';
+import { runTests, runVSCodeCommand } from '@vscode/test-electron';
+import { inspectVsix } from './verify-vsix-contents.mjs';
 
 const repositoryRoot = path.dirname(
   path.dirname(fileURLToPath(import.meta.url))
@@ -16,6 +23,7 @@ const vsixPath = path.join(
 if (!existsSync(vsixPath)) {
   throw new Error(`VSIX does not exist: ${vsixPath}`);
 }
+await inspectVsix(vsixPath);
 
 const options = {
   version: process.env.LOOKOUT_VSCODE_VERSION ?? 'stable',
@@ -26,10 +34,33 @@ const profileRoot = path.join(
   '.vscode-test',
   `vsix-profile-${manifest.publisher}.${manifest.name}`
 );
+rmSync(profileRoot, {
+  recursive: true,
+  force: true,
+  maxRetries: 3,
+  retryDelay: 100
+});
 const profileArgs = [
   `--extensions-dir=${path.join(profileRoot, 'extensions')}`,
   `--user-data-dir=${path.join(profileRoot, 'user-data')}`
 ];
+const workspaceRoot = path.join(profileRoot, 'workspace');
+mkdirSync(path.join(workspaceRoot, '.vscode'), { recursive: true });
+writeFileSync(
+  path.join(workspaceRoot, '.vscode', 'settings.json'),
+  `${JSON.stringify(
+    {
+      'telemetry.telemetryLevel': 'off',
+      'extensions.autoCheckUpdates': false,
+      'lookout.attentionSound.enabled': false,
+      'lookout.usage.codex.enabled': false,
+      'lookout.usage.claude.enabled': false
+    },
+    undefined,
+    2
+  )}\n`,
+  'utf8'
+);
 const install = await runVSCodeCommand(
   [...profileArgs, '--install-extension', vsixPath, '--force'],
   options
@@ -51,4 +82,25 @@ const installed = listed.stdout
 if (!installed) {
   throw new Error(`Installed extension list did not contain ${expected}`);
 }
-console.log(`Verified installed VSIX: ${expected}`);
+await runTests({
+  version: options.version,
+  extensionDevelopmentPath: path.join(
+    repositoryRoot,
+    'test',
+    'fixtures',
+    'vsix-smoke-extension'
+  ),
+  extensionTestsPath: path.join(
+    repositoryRoot,
+    'test',
+    'fixtures',
+    'vsix-smoke-extension',
+    'run.cjs'
+  ),
+  launchArgs: [workspaceRoot, ...profileArgs],
+  reuseMachineInstall: true,
+  extensionTestsEnv: {
+    LOOKOUT_VSIX_SMOKE: '1'
+  }
+});
+console.log(`Verified installed and activated VSIX: ${expected}`);

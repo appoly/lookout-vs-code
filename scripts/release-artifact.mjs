@@ -52,6 +52,33 @@ function readManifest(file) {
   return manifest;
 }
 
+function expectedReleaseIdentity(options, manifest) {
+  const tag = options.get('tag');
+  const expectedTag = `v${manifest.version}`;
+  if (tag !== expectedTag) {
+    fail(`Release tag ${tag ?? '<missing>'} does not match ${expectedTag}`);
+  }
+
+  const commit = options.get('commit');
+  if (!commit || !/^[a-f0-9]{40,64}$/i.test(commit)) {
+    fail('Commit must be a full hexadecimal object ID');
+  }
+
+  const extensionId = options.get('extension-id');
+  const manifestExtensionId = `${manifest.publisher}.${manifest.name}`;
+  if (extensionId !== manifestExtensionId) {
+    fail(
+      `Extension ID ${extensionId ?? '<missing>'} does not match ${manifestExtensionId}`
+    );
+  }
+
+  return {
+    tag,
+    commit: commit.toLowerCase(),
+    extensionId
+  };
+}
+
 function assertPlainFile(file, label) {
   if (!existsSync(file) || !lstatSync(file).isFile()) {
     fail(`${label} is not a plain file: ${file}`);
@@ -70,22 +97,13 @@ function writeOutputs(file, values) {
 function prepare(options) {
   const manifestPath = path.resolve(options.get('manifest') ?? 'package.json');
   const manifest = readManifest(manifestPath);
-  const tag = options.get('tag');
-  const expectedTag = `v${manifest.version}`;
-  if (tag !== expectedTag) {
-    fail(`Release tag ${tag ?? '<missing>'} does not match ${expectedTag}`);
-  }
+  const identity = expectedReleaseIdentity(options, manifest);
 
   const expectedFile = `${manifest.name}-${manifest.version}.vsix`;
   const source = path.resolve(options.get('source') ?? expectedFile);
   assertPlainFile(source, 'Source VSIX');
   if (path.basename(source) !== expectedFile) {
     fail(`VSIX must be named ${expectedFile}`);
-  }
-
-  const commit = options.get('commit');
-  if (!commit || !/^[a-f0-9]{40,64}$/i.test(commit)) {
-    fail('Commit must be a full hexadecimal object ID');
   }
 
   const outputDirectory = path.resolve(
@@ -108,11 +126,11 @@ function prepare(options) {
 
   const metadata = {
     schemaVersion: SCHEMA_VERSION,
-    extensionId: `${manifest.publisher}.${manifest.name}`,
+    extensionId: identity.extensionId,
     name: manifest.name,
     version: manifest.version,
-    tag,
-    commit: commit.toLowerCase(),
+    tag: identity.tag,
+    commit: identity.commit,
     file: expectedFile,
     checksumFile,
     sha256: digest,
@@ -129,7 +147,7 @@ function prepare(options) {
     vsix_file: expectedFile,
     sha256: digest,
     version: manifest.version,
-    artifact_name: `${manifest.name}-${tag}-${digest.slice(0, 12)}`
+    artifact_name: `${manifest.name}-${identity.tag}-${digest.slice(0, 12)}`
   });
   process.stdout.write(
     `Prepared ${expectedFile} (${metadata.bytes} bytes, sha256:${digest})\n`
@@ -137,6 +155,9 @@ function prepare(options) {
 }
 
 function verify(options) {
+  const manifestPath = path.resolve(options.get('manifest') ?? 'package.json');
+  const manifest = readManifest(manifestPath);
+  const identity = expectedReleaseIdentity(options, manifest);
   const directory = path.resolve(options.get('directory') ?? 'release-artifact');
   const metadataPath = path.join(directory, METADATA_FILE);
   assertPlainFile(metadataPath, 'Release metadata');
@@ -146,11 +167,23 @@ function verify(options) {
     fail(`Unsupported release metadata schema: ${metadata.schemaVersion}`);
   }
   if (
+    metadata.extensionId !== identity.extensionId ||
+    metadata.name !== manifest.name ||
+    metadata.version !== manifest.version ||
+    metadata.tag !== identity.tag ||
+    metadata.commit !== identity.commit
+  ) {
+    fail(
+      'Release metadata identity does not match the expected manifest, tag, commit, and extension'
+    );
+  }
+  const expectedFile = `${manifest.name}-${manifest.version}.vsix`;
+  if (
     typeof metadata.file !== 'string' ||
     path.basename(metadata.file) !== metadata.file ||
-    !metadata.file.endsWith('.vsix')
+    metadata.file !== expectedFile
   ) {
-    fail('Release metadata contains an invalid VSIX filename');
+    fail(`Release metadata VSIX filename does not match ${expectedFile}`);
   }
   if (
     typeof metadata.checksumFile !== 'string' ||
@@ -164,10 +197,6 @@ function verify(options) {
   if (!Number.isSafeInteger(metadata.bytes) || metadata.bytes < 1) {
     fail('Release metadata contains an invalid byte count');
   }
-  if (metadata.tag !== `v${metadata.version}`) {
-    fail('Release metadata tag and version do not match');
-  }
-
   const expectedEntries = [METADATA_FILE, metadata.checksumFile, metadata.file].sort();
   const entries = readdirSync(directory).sort();
   if (JSON.stringify(entries) !== JSON.stringify(expectedEntries)) {

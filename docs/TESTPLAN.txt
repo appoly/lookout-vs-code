@@ -31,8 +31,9 @@ SETUP (once)
     interactive installed-VSIX path is still a separate release gate.
 
 A. RENAME INTEGRITY (~5 min)
-  1. Activity bar shows a Lookout icon; Agents, Review, and Usage
-     Limits views all render.
+  1. Activity bar shows a Lookout icon; Agents, Review, and Usage Limits views
+     all render. Agents groups Current Workspace separately from live sessions
+     in other windows when coordination is enabled.
   2. Command palette: typing "Lookout" lists every command under that
      category; nothing appears under "Paraterm" or "MultiTerm".
   3. Settings UI: searching "lookout" shows every contributed setting,
@@ -45,8 +46,11 @@ B. LAUNCH AND LAYOUT (~10 min)
   5. "+" picker offers Codex / Claude Code / Custom. Launch two Codex
      and one Claude: terminals open in the native terminal panel by default,
      leaving the editor area free for code and review.
-  6. Terminal tab names read "Lookout: <label> [<id>]"; tree rows show
-     directory - branch - state.
+  6. Terminal tab names read "Lookout: <label> [<id>]"; tree rows show stable
+     directory - branch - state labels. Drag the Current Workspace rows into a
+     new order and reload;
+     the order persists. Live in Other Windows rows cannot be reordered into the
+     current workspace.
   7. Split an agent (inline action): native split beside its parent,
      not a new column.
   8. Set lookout.terminals.location = editor, launch -> lands in editor
@@ -148,20 +152,17 @@ H. TRUST (~5 min)
      readable; launching agents and running tasks is blocked with the
      trust warning; the three command settings are shown restricted.
 
-I. ATTENTION ROUTING, HISTORY, PROFILES, AND TEMPLATES (~15 min)
+I. ATTENTION ROUTING, PROFILES, AND TEMPLATES (~15 min)
  32. Configure Agent Profiles reports direct Codex/Claude executables as
      detected, missing executables as unavailable, and wrapper commands as
      launch-only without claiming identity/resume/fork support.
  33. Agent rows and the status bar surface unread/attention state from fixed
      operational labels. Next/Previous Unread cycles and focusing the session
-     clears only its event read state. History tooltips show the latest fixed
-     event label. No prompt, hook message, command text, tool output, or
-     transcript path appears anywhere.
- 34. Close a managed session after its SessionStart identity arrives. History
-     marks it resumable; Custom/adopted rows remain terminal-only. Resume opens
-     the provider's native continuation in the original folder. A duplicate
-     live resume is refused with Focus Existing / Fork Instead. Fork obtains a
-     distinct provider ID. Archive/unarchive changes Lookout metadata only.
+     clears only its event read state. No prompt, hook message, command text,
+     tool output, or transcript path appears anywhere.
+ 34. Remove a completed managed, custom, or adopted session. Its row disappears
+     from Agents and there is no separate History view presenting a stale or
+     incomplete record.
  35. Create and relaunch both shared-folder and isolated-worktree templates.
      Tasks, browser URL, and review layout run only after explicit launch.
      Remove a configured profile/executable: launch is refused with guidance.
@@ -178,48 +179,48 @@ J. DOCTOR, SUPPORT, AND VERIFICATION HONESTY (~10 min)
      tokens, prompts, transcript paths, event messages, stdout/stderr, and
      credentials: none may appear. Canceling the picker writes nothing and no
      upload occurs.
- 38. Review diff statistics, commits/upstream/conflicts, diagnostic delta, and
-     verification readiness remain scoped to the physical worktree and earliest
-     attached baseline. Attach a second shared-worktree agent and close the
-     first: the baseline must not jump. Switch/rewrite HEAD or make evidence
+ 38. Workspace Changes shows only Diff evidence above the changed files. The
+     underlying verification packet remains scoped to the physical worktree and
+     earliest attached baseline. Attach a second shared-worktree agent and close
+     the first: the baseline must not jump. Switch/rewrite HEAD or make evidence
      partial: readiness becomes stale/incomplete, never a false green claim.
 
-K. CROSS-PROJECT HISTORY AND LIVE WINDOWS (~20 min per host)
- 39. With global history enabled, launch and close managed/custom sessions in
-     project A, then open project B. History groups current rows separately from
-     Other Projects, marks managed provider history resumable, keeps custom
-     history terminal-only, and never says the old terminal is live.
- 40. From project B, select a resumable project-A row. Confirm the first modal
-     names the provider, project, operation, and cwd. The owning project opens;
-     its Lookout window claims the expiring handoff, rechecks Workspace Trust
-     and provider configuration, then shows the final provider command modal.
-     Cancel at either modal -> no terminal and no later surprise launch.
- 41. Repeat while project A is already open. The existing window claims the
-     handoff without requiring reload. Expire an intent before claim -> nothing
-     launches. Delete history while another window is open -> the stale window
-     cannot immediately resurrect it; genuinely newer provider activity may.
- 42. Verify lookout.experimental.crossWindowCoordination is false by default.
+K. LIVE WINDOWS (~20 min per host)
+ 39. Verify lookout.experimental.crossWindowCoordination is false by default.
      Enable it in two windows on the same host/profile: one Doctor reports owner,
-     the other client, and History shows leased live rows under Live in Other
+     the other client, and Agents shows leased rows under Live in Other
      Windows without exposing cwd/provider IDs in the live payload. A session
-     live in another window appears only as its live row — not additionally
-     under Other Projects or Current Workspace — and reloading a window never
-     leaves the same session listed twice under two leases.
- 43. Trigger attention in window A while using window B. Focus Next Attention
+     live in another window appears only as its live row, while this window's
+     agents remain under Current Workspace. Reloading never leaves a remote
+     session listed twice under two leases.
+ 40. Trigger attention in window A while using window B. Focus Next Attention
      or the live row sends one request; A reveals the exact terminal and reports
      the routed action. Close A -> its row expires within the lease window.
- 44. Attempt to resume a provider ID already live in A: B refuses duplicate
+ 41. Attempt to resume a provider ID already live in A: B refuses duplicate
      resume and offers Focus Existing / Fork Instead. Disable/break coordination
      while global history still says live: Lookout refuses to guess and offers
      fork, open project, or coordinator configuration.
- 45. Kill the coordinator-owning extension host, then keep the client alive.
+ 42. Kill the coordinator-owning extension host, then keep the client alive.
      After stale-owner expiry a remaining window elects a replacement and
      Doctor returns healthy. Exercise a port conflict and mixed protocol fixture:
      no unauthenticated connection, split brain, or silent version takeover.
- 46. Repeat 39-45 separately on local desktop, WSL, one Remote SSH host, and one
+ 43. Repeat 39-42 separately on local desktop, WSL, one Remote SSH host, and one
      dev container. Same-host windows coordinate; local/WSL/SSH/container rows
      never federate or claim that another execution host is reachable. Repeat
      with two VS Code profiles and confirm their coordinators/history are isolated.
+
+L. ACCESSIBILITY (~10 min)
+ 44. Complete launch, attention focus, Review navigation, and agent removal using
+     only the keyboard. Focus order remains visible and every action is reachable
+     without a pointer.
+ 45. With a screen reader, Agents/Review/Usage rows announce useful labels,
+     states, counts, and actions without relying on icon shape or color alone.
+ 46. In both built-in high-contrast themes and at 200% zoom, badges, warnings,
+     inline actions, status-bar text, and native diffs remain legible without
+     clipping important state.
+ 47. Disable sound and notifications, then trigger attention and completion.
+     Activity Bar, Agents rows, unread navigation, and status-bar state still
+     provide a complete visual workflow.
 
 EXIT CRITERIA (ROADMAP release gates)
   - launch -> monitor -> jump -> review loop passes interactively
@@ -228,7 +229,8 @@ EXIT CRITERIA (ROADMAP release gates)
   - no user auth file or terminal output is read
   - provider and Lookout session IDs remain distinct; duplicate resume is refused
   - support export passes the adversarial redaction check
-  - global history reopens the correct project without inventing live state
+  - removing an agent does not leave a misleading user-facing history record
   - live coordination expires dead windows and never crosses execution hosts
   - shared-worktree changes are never misattributed to one agent
   - package, CI, and the documented manual matrix are green
+  - keyboard, screen-reader, high-contrast, zoom, and silent-mode checks pass

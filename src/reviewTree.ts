@@ -13,6 +13,11 @@ import {
   type WorkspaceChange
 } from './gitReview';
 import type { SessionManager } from './sessionManager';
+import {
+  boundedReviewItemLimit,
+  normalizeReviewGlobs,
+  reviewSearchResultLimit
+} from './reviewSearchPolicy';
 import type { AgentSession, CommandResult } from './types';
 import type { ReviewPacket } from './verification/reviewPacket';
 import { VerificationManager } from './verification/verificationManager';
@@ -37,6 +42,7 @@ import type { ReviewContext } from './verification/verificationTypes';
 const BASELINE_SCHEME = 'lookout-baseline';
 const COMMAND_RESULT_SCHEME = 'lookout-command-result';
 const VERIFICATION_STORE_KEY = 'lookout.verificationStore.v1';
+const MAX_REVIEW_ROOTS = 32;
 type ReviewKind =
   | 'group'
   | 'image'
@@ -81,6 +87,8 @@ interface WorktreeChanges {
   readonly changes: readonly WorkspaceChange[] | undefined;
   readonly state: GitWorktreeState;
 }
+
+type ReviewErrorReporter = (scope: string, error: unknown) => void;
 
 export class ReviewTreeItem extends vscode.TreeItem {
   public readonly group?: ReviewGroup;
@@ -230,12 +238,15 @@ export class ReviewTreeProvider
   private persistChain: Promise<void> = Promise.resolve();
   private refreshTimer: NodeJS.Timeout | undefined;
   private worktreeRefreshTimer: NodeJS.Timeout | undefined;
+  private initialized = false;
+  private visible = true;
   public readonly onDidChangeTreeData = this.changedEmitter.event;
   public readonly onDidChange = this.contentChangedEmitter.event;
 
   public constructor(
     private readonly sessions: SessionManager,
-    private readonly workspaceState?: vscode.Memento
+    private readonly workspaceState?: vscode.Memento,
+    private readonly reportError: ReviewErrorReporter = () => undefined
   ) {
     const imageWatcher = vscode.workspace.createFileSystemWatcher(
       '**/*.{png,jpg,jpeg,gif,webp}'
@@ -264,22 +275,26 @@ export class ReviewTreeProvider
       }),
       vscode.workspace.onDidSaveTextDocument((document) => {
         this.invalidateEvidenceForUri(document.uri);
-        void this.refreshChanges();
+        if (this.visible) {
+          this.runBackground('save-refresh', () => this.refreshChanges());
+        }
       }),
       vscode.languages.onDidChangeDiagnostics((event) => {
         for (const root of this.diagnosticsSource.noteChanges(event.uris)) {
           this.verification?.invalidateRoot(root);
         }
-        this.refreshDiagnostics();
-        void this.refreshChanges();
+        if (this.visible) {
+          this.refreshDiagnostics();
+          this.runBackground('diagnostic-refresh', () => this.refreshChanges());
+        }
       }),
       vscode.tasks.onDidStartTask(() => this.refreshRuntime()),
       vscode.tasks.onDidEndTask(() => this.refreshRuntime()),
       vscode.debug.onDidStartDebugSession(() => this.refreshRuntime()),
       vscode.debug.onDidTerminateDebugSession(() => this.refreshRuntime()),
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (event.affectsConfiguration('lookout.review')) {
-          void this.refresh();
+        if (this.visible && event.affectsConfiguration('lookout.review')) {
+          this.runBackground('configuration-refresh', () => this.refresh());
         }
       })
     );
@@ -297,13 +312,29 @@ export class ReviewTreeProvider
         diagnosticBaselines: [...initial.diagnosticBaselines]
       }
     });
+    this.initialized = true;
     this.reconcileVerificationContexts();
-    await this.refresh();
     this.refreshRuntime();
-    this.worktreeRefreshTimer = setInterval(
-      () => void this.refreshChanges(),
-      10_000
-    );
+    if (this.visible) {
+      await this.refresh();
+      this.startWorktreePolling();
+    }
+  }
+
+  public setVisible(visible: boolean): void {
+    if (this.visible === visible) {
+      return;
+    }
+    this.visible = visible;
+    if (!this.initialized) {
+      return;
+    }
+    if (visible) {
+      this.startWorktreePolling();
+      this.runBackground('visible-refresh', () => this.refresh());
+    } else {
+      this.stopWorktreePolling();
+    }
   }
 
   public getTreeItem(element: ReviewTreeItem): vscode.TreeItem {
@@ -392,26 +423,38 @@ export class ReviewTreeProvider
     const generation = ++this.refreshGeneration;
     const changeGeneration = ++this.changeGeneration;
     const config = vscode.workspace.getConfiguration('lookout.review');
-    const max = config.get<number>('maxItemsPerGroup', 12);
+    const max = boundedReviewItemLimit(
+      config.get<number>('maxItemsPerGroup', 12)
+    );
     const showImages = config.get<boolean>('showRecentImages', false);
+    const imageGlobs = normalizeReviewGlobs(
+      [config.get<unknown>('imageGlob', '**/*.{png,jpg,jpeg,gif,webp}')],
+      ['**/*.{png,jpg,jpeg,gif,webp}']
+    );
+    const artifactGlobs = normalizeReviewGlobs(
+      config.get<unknown[]>('artifactGlobs'),
+      [
+        '**/{plans,docs}/**/*.{md,mdx,txt}',
+        '**/todos/**/*.{md,mdx,txt}',
+        '**/{TODOS,DESIGN,TESTPLAN}.{md,mdx,txt}'
+      ]
+    );
+    const searchLimit = reviewSearchResultLimit(max);
     const session = this.sessions.selectedSession;
     const [imageUris, planUris, worktreeChanges] = await Promise.all([
       showImages
         ? findFilesAcrossAgentRoots(
             this.sessions,
-            [config.get<string>('imageGlob', '**/*.{png,jpg,jpeg,gif,webp}')],
+            imageGlobs,
             '**/{node_modules,.git,out,dist}/**',
-            max * 8
+            searchLimit
           )
         : Promise.resolve([]),
       findFilesAcrossAgentRoots(
         this.sessions,
-        config.get<string[]>('artifactGlobs', [
-          '**/{plans,docs}/**/*.{md,mdx,txt}',
-          '**/todos/**/*.{md,mdx,txt}',
-          '**/{TODOS,DESIGN,TESTPLAN}.{md,mdx,txt}'
-        ]),
-        '**/{node_modules,.git,out,dist}/**'
+        artifactGlobs,
+        '**/{node_modules,.git,out,dist}/**',
+        searchLimit
       ),
       loadWorktreeChanges(this.sessions)
     ]);
@@ -445,12 +488,15 @@ export class ReviewTreeProvider
   }
 
   private scheduleRefresh(): void {
+    if (!this.visible) {
+      return;
+    }
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
     }
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
-      void this.refresh();
+      this.runBackground('scheduled-refresh', () => this.refresh());
     }, 250);
   }
 
@@ -559,7 +605,7 @@ export class ReviewTreeProvider
     const running = startTaskVerificationRun(context.id, identity);
     verification.recordRun(running);
     this.persistVerificationSnapshot();
-    void this.refreshChanges();
+    this.runBackground('verification-start-refresh', () => this.refreshChanges());
 
     const completion = await observeTaskCompletion(selection.task);
     let signature: import('./verification/verificationTypes').VerificationFreshnessSignature | undefined;
@@ -635,9 +681,7 @@ export class ReviewTreeProvider
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
     }
-    if (this.worktreeRefreshTimer) {
-      clearInterval(this.worktreeRefreshTimer);
-    }
+    this.stopWorktreePolling();
     this.verification?.dispose();
     for (const watcher of this.watchers) {
       watcher.dispose();
@@ -647,6 +691,27 @@ export class ReviewTreeProvider
     }
     this.changedEmitter.dispose();
     this.contentChangedEmitter.dispose();
+  }
+
+  private startWorktreePolling(): void {
+    if (this.worktreeRefreshTimer) {
+      return;
+    }
+    this.worktreeRefreshTimer = setInterval(
+      () => this.runBackground('poll-refresh', () => this.refreshChanges()),
+      10_000
+    );
+  }
+
+  private stopWorktreePolling(): void {
+    if (this.worktreeRefreshTimer) {
+      clearInterval(this.worktreeRefreshTimer);
+      this.worktreeRefreshTimer = undefined;
+    }
+  }
+
+  private runBackground(scope: string, operation: () => Promise<void>): void {
+    void operation().catch((error: unknown) => this.reportError(scope, error));
   }
 
   private reconcileVerificationContexts(): void {
@@ -1141,22 +1206,28 @@ async function findFilesAcrossAgentRoots(
   maxResultsPerRoot?: number
 ): Promise<vscode.Uri[]> {
   const roots = new Map<string, vscode.Uri>();
-  for (const folder of vscode.workspace.workspaceFolders ?? []) {
-    roots.set(normalizeRootKey(folder.uri.fsPath), folder.uri);
-  }
   for (const session of sessions.list()) {
     const root = session.baseline?.repoRoot ?? session.cwd;
     const resolved = path.resolve(root);
     roots.set(normalizeRootKey(resolved), vscode.Uri.file(resolved));
   }
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    const key = normalizeRootKey(folder.uri.fsPath);
+    if (!roots.has(key)) {
+      roots.set(key, folder.uri);
+    }
+  }
 
+  const perPatternLimit = maxResultsPerRoot === undefined
+    ? undefined
+    : Math.max(1, Math.ceil(maxResultsPerRoot / Math.max(1, includes.length)));
   const matches = await Promise.all(
-    [...roots.values()].flatMap((root) => includes.map(async (include) => {
+    [...roots.values()].slice(0, MAX_REVIEW_ROOTS).flatMap((root) => includes.map(async (include) => {
       try {
         return await vscode.workspace.findFiles(
           new vscode.RelativePattern(root, include),
           exclude,
-          maxResultsPerRoot
+          perPatternLimit
         );
       } catch {
         return [];
@@ -1195,37 +1266,8 @@ function reviewPacketItems(
       })
     ];
   }
-  const readiness = packet.readiness;
   const diff = packet.git.diff;
-  const commits = packet.git.commits;
-  const upstream = packet.git.upstream;
-  const conflicts = packet.git.conflicts;
-  const diagnostics = packet.diagnostics;
-  const readinessReasons = readiness.reasons.length > 0
-    ? readiness.reasons.join('; ')
-    : 'Required evidence is current';
-  const commitTooltip = commits.entries.length > 0
-    ? commits.entries
-        .map(
-          (commit) =>
-            `${commit.hash.slice(0, 7)} ${commit.subject} — ${commit.author}`
-        )
-        .join('\n')
-    : 'No commits since the captured baseline';
   return [
-    new ReviewTreeItem(
-      'evidence',
-      `Verification ${readiness.state}`,
-      {
-        description: readinessReasons,
-        tooltip: [
-          `Attribution: ${packet.attribution} physical worktree`,
-          `Evidence collected: ${new Date(packet.collectedAt).toLocaleString()}`,
-          readinessReasons
-        ].join('\n'),
-        warning: readiness.state === 'failed'
-      }
-    ),
     new ReviewTreeItem('evidence', 'Diff evidence', {
       description: `${diff.files} files · +${diff.additions} −${diff.deletions} · ${diff.untrackedFiles} untracked`,
       tooltip: [
@@ -1237,58 +1279,8 @@ function reviewPacketItems(
         .filter(Boolean)
         .join('\n'),
       warning: packet.git.state !== 'complete' || packet.git.baseline.stale
-    }),
-    new ReviewTreeItem('evidence', 'Commits since baseline', {
-      description: `${commits.count}${commits.truncated ? '+' : ''}`,
-      tooltip: commitTooltip,
-      warning: commits.incomplete
-    }),
-    new ReviewTreeItem('evidence', 'Local upstream evidence', {
-      description: upstreamDescription(upstream),
-      tooltip:
-        upstream.state === 'available'
-          ? `Compared with the existing local tracking ref ${upstream.name}; no network fetch was performed.`
-          : 'No network fetch was performed.',
-      warning: upstream.state === 'unavailable'
-    }),
-    new ReviewTreeItem('evidence', 'Conflicts', {
-      description:
-        conflicts.count === 0
-          ? 'none detected'
-          : `${conflicts.count}${conflicts.truncated ? '+' : ''} paths`,
-      tooltip:
-        conflicts.count === 0
-          ? 'No unmerged index entries were detected.'
-          : conflicts.paths.join('\n'),
-      warning: conflicts.count > 0 || conflicts.truncated
-    }),
-    new ReviewTreeItem('evidence', 'Diagnostic delta', {
-      description: `${diagnostics.addedCount} added · ${diagnostics.removedCount} resolved · ${diagnostics.currentCount} current`,
-      tooltip: [
-        `Diagnostic baseline: ${diagnostics.state}`,
-        `${diagnostics.unchangedCount} unchanged`,
-        ...(diagnostics.issues.length > 0
-          ? [`Limits: ${diagnostics.issues.join(', ')}`]
-          : [])
-      ].join('\n'),
-      warning: diagnostics.state !== 'complete' || diagnostics.addedCount > 0
     })
   ];
-}
-
-function upstreamDescription(
-  upstream: ReviewPacket['git']['upstream']
-): string {
-  switch (upstream.state) {
-    case 'available':
-      return `${upstream.name} · ${upstream.ahead} ahead · ${upstream.behind} behind`;
-    case 'none':
-      return 'no local tracking ref';
-    case 'detached':
-      return 'detached HEAD';
-    case 'unavailable':
-      return 'unavailable';
-  }
 }
 
 function packetDescription(

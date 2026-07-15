@@ -53,7 +53,10 @@
       "restrictedConfigurations": [
         "lookout.codex.command",
         "lookout.claude.command",
-        "lookout.usage.codex.executable"
+        "lookout.usage.codex.executable",
+        "lookout.review.showRecentImages",
+        "lookout.review.imageGlob",
+        "lookout.review.artifactGlobs"
       ]
     },
     "virtualWorkspaces": {
@@ -79,28 +82,33 @@
     "package": "npm run clean && tsc -p ./ --sourceMap false",
     "clean": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\"",
     "lint": "eslint src test",
-    "test": "npm run compile && node --test out/test/**/*.test.js",
-    "test:provider-compat": "npm run compile && node --test out/test/providerCompatibility.test.js",
+    "test": "npm run clean && npm run compile && node --test out/test/**/*.test.js",
+    "test:provider-compat": "npm run clean && npm run compile && node --test out/test/providerCompatibility.test.js",
     "compat:providers": "node scripts/provider-compat.mjs",
     "test:integration": "npm run compile && vscode-test --label integration --fail-zero --forbid-only",
-    "verify:vsix": "npm run vsix && node scripts/verify-vsix.mjs",
-    "check": "npm run lint && npm test",
+    "verify:vsix": "npm run vsix && npm run verify:installed-vsix",
+    "verify:installed-vsix": "node scripts/verify-vsix.mjs",
+    "verify:vsix-contents": "node scripts/verify-vsix-contents.mjs",
+    "check": "npm run check:repository && npm run lint && npm test",
     "check:all": "npm run check && npm run test:integration",
     "audit:runtime": "npm audit --omit=dev",
+    "check:repository": "node scripts/check-repository.mjs",
     "check:release": "npm run check:all && npm run audit:runtime && npm run verify:vsix",
     "vsix": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@eslint/js": "^9.31.0",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^24.0.13",
-    "@types/vscode": "^1.96.0",
+    "@types/node": "20.17.0",
+    "@types/vscode": "1.96.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0",
     "@vscode/vsce": "^3.9.2",
     "eslint": "^9.31.0",
+    "ovsx": "1.0.2",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.37.0"
+    "typescript-eslint": "^8.37.0",
+    "yauzl": "3.4.0"
   },
   "contributes": {
     "commands": [
@@ -114,6 +122,12 @@
       {
         "command": "lookout.configureProfiles",
         "title": "Configure Agent Profiles",
+        "category": "Lookout",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "lookout.openSettings",
+        "title": "Open Lookout Settings",
         "category": "Lookout",
         "icon": "$(settings-gear)"
       },
@@ -268,18 +282,6 @@
         "title": "Unarchive Lookout History",
         "category": "Lookout",
         "icon": "$(history)"
-      },
-      {
-        "command": "lookout.browseHistory",
-        "title": "Browse Agent History",
-        "category": "Lookout",
-        "icon": "$(history)"
-      },
-      {
-        "command": "lookout.refreshHistory",
-        "title": "Refresh Agent History",
-        "category": "Lookout",
-        "icon": "$(refresh)"
       },
       {
         "command": "lookout.configureCrossWindowCoordination",
@@ -493,11 +495,6 @@
           "icon": "$(terminal)"
         },
         {
-          "id": "lookout.history",
-          "name": "History",
-          "icon": "$(history)"
-        },
-        {
           "id": "lookout.review",
           "name": "Review",
           "icon": "$(preview)"
@@ -512,7 +509,7 @@
     "viewsWelcome": [
       {
         "view": "lookout.sessions",
-        "contents": "No agents are running.\n[Launch Codex](command:lookout.launchCodex)\n[Launch Claude Code](command:lookout.launchClaude)\n[Adopt an existing terminal](command:lookout.adoptTerminal)",
+        "contents": "No agents are running.\n[Launch an agent](command:lookout.launchAgent)\n[Check agent profiles](command:lookout.configureProfiles)\n[Adopt an existing terminal](command:lookout.adoptTerminal)",
         "when": "isWorkspaceTrusted"
       },
       {
@@ -590,6 +587,34 @@
         {
           "command": "lookout.focusRemoteSession",
           "when": "false"
+        },
+        {
+          "command": "lookout.splitCodex",
+          "when": "false"
+        },
+        {
+          "command": "lookout.splitClaude",
+          "when": "false"
+        },
+        {
+          "command": "lookout.refreshSessions",
+          "when": "false"
+        },
+        {
+          "command": "lookout.refreshReview",
+          "when": "false"
+        },
+        {
+          "command": "lookout.refreshUsage",
+          "when": "false"
+        },
+        {
+          "command": "lookout.muteAttentionSound",
+          "when": "false"
+        },
+        {
+          "command": "lookout.unmuteAttentionSound",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -597,11 +622,6 @@
           "command": "lookout.launchAgent",
           "when": "view == lookout.sessions && isWorkspaceTrusted",
           "group": "navigation@1"
-        },
-        {
-          "command": "lookout.launchAgentInWorktree",
-          "when": "view == lookout.sessions && isWorkspaceTrusted",
-          "group": "navigation@2"
         },
         {
           "command": "lookout.adoptTerminal",
@@ -624,18 +644,13 @@
           "group": "navigation@5"
         },
         {
-          "command": "lookout.configureAttentionSound",
+          "command": "lookout.openSettings",
           "when": "view == lookout.sessions",
           "group": "navigation@6"
         },
         {
-          "command": "lookout.configureProfiles",
-          "when": "view == lookout.sessions",
-          "group": "navigation@7"
-        },
-        {
           "command": "lookout.launchTemplate",
-          "when": "view == lookout.sessions && isWorkspaceTrusted",
+          "when": "view == lookout.sessions && isWorkspaceTrusted && lookout.hasTemplates",
           "group": "navigation@2.5"
         },
         {
@@ -667,21 +682,6 @@
           "command": "lookout.refreshUsage",
           "when": "view == lookout.usage",
           "group": "navigation@1"
-        },
-        {
-          "command": "lookout.deleteHistory",
-          "when": "view == lookout.history",
-          "group": "navigation@1"
-        },
-        {
-          "command": "lookout.configureCrossWindowCoordination",
-          "when": "view == lookout.history",
-          "group": "navigation@2"
-        },
-        {
-          "command": "lookout.refreshHistory",
-          "when": "view == lookout.history",
-          "group": "navigation@3"
         }
       ],
       "terminal/context": [
@@ -753,48 +753,8 @@
           "group": "lookout@5"
         },
         {
-          "command": "lookout.resumeSession",
-          "when": "view == lookout.history && viewItem == lookout.historySession.resumable && isWorkspaceTrusted",
-          "group": "inline@1"
-        },
-        {
-          "command": "lookout.forkSession",
-          "when": "view == lookout.history && viewItem == lookout.historySession.resumable && isWorkspaceTrusted",
-          "group": "lookout@1"
-        },
-        {
-          "command": "lookout.archiveSession",
-          "when": "view == lookout.history && (viewItem == lookout.historySession.resumable || viewItem == lookout.historySession.terminal-only || viewItem == lookout.historySession.closed)",
-          "group": "lookout@2"
-        },
-        {
-          "command": "lookout.unarchiveSession",
-          "when": "view == lookout.history && viewItem == lookout.historySession.archived",
-          "group": "lookout@2"
-        },
-        {
-          "command": "lookout.openGlobalHistory",
-          "when": "view == lookout.history && (viewItem == lookout.globalHistory.terminal-only || viewItem == lookout.globalHistory.archived)",
-          "group": "inline@1"
-        },
-        {
-          "command": "lookout.resumeGlobalSession",
-          "when": "view == lookout.history && viewItem == lookout.globalHistory.resumable && isWorkspaceTrusted",
-          "group": "inline@1"
-        },
-        {
-          "command": "lookout.forkGlobalSession",
-          "when": "view == lookout.history && viewItem == lookout.globalHistory.resumable && isWorkspaceTrusted",
-          "group": "lookout@1"
-        },
-        {
-          "command": "lookout.deleteGlobalHistory",
-          "when": "view == lookout.history && (viewItem == lookout.globalHistory.resumable || viewItem == lookout.globalHistory.terminal-only || viewItem == lookout.globalHistory.archived)",
-          "group": "lookout@2"
-        },
-        {
           "command": "lookout.focusRemoteSession",
-          "when": "view == lookout.history && viewItem == lookout.liveSession",
+          "when": "view == lookout.sessions && viewItem == lookout.liveSession",
           "group": "inline@1"
         }
       ]
@@ -809,45 +769,48 @@
             "id": "lookout.walkthrough.profiles",
             "title": "Check your agent profiles",
             "description": "[Inspect detected Codex, Claude Code, and generic terminal profiles](command:lookout.configureProfiles). Lookout never installs or authenticates a provider for you.",
+            "completionEvents": [
+              "onCommand:lookout.configureProfiles"
+            ],
             "media": {
-              "image": "resources/icon.png",
-              "altText": "Lookout icon"
+              "image": "assets/screenshots/lookout-overview.png",
+              "altText": "Lookout Agents, Review, and Usage views"
             }
           },
           {
             "id": "lookout.walkthrough.launch",
             "title": "Launch a native agent terminal",
             "description": "[Launch an agent](command:lookout.launchAgent) or [create a reusable session template](command:lookout.createTemplate). Provider UX stays in its real terminal.",
+            "completionEvents": [
+              "onCommand:lookout.launchAgent"
+            ],
             "media": {
-              "image": "resources/icon.png",
-              "altText": "Lookout agent launch"
+              "image": "assets/screenshots/lookout-overview.png",
+              "altText": "Lookout sidebar with native terminal agents"
             }
           },
           {
             "id": "lookout.walkthrough.attention",
             "title": "Triage explicit agent events",
             "description": "Watch the **Agents** view badges and status bar, and [focus the next unread agent](command:lookout.focusNextUnread). Lookout uses provider hooks and never scrapes terminal output.",
+            "completionEvents": [
+              "onCommand:lookout.focusNextUnread"
+            ],
             "media": {
-              "image": "resources/icon.png",
-              "altText": "Lookout attention routing"
+              "image": "assets/screenshots/usage-status.png",
+              "altText": "Lookout finished-turn notification and status bar"
             }
           },
           {
             "id": "lookout.walkthrough.review",
             "title": "Review and verify in VS Code",
             "description": "[Open the review layout](command:lookout.openReviewLayout) for native diffs, Problems, Tasks, tests, debugging, and browser tools.",
+            "completionEvents": [
+              "onCommand:lookout.openReviewLayout"
+            ],
             "media": {
-              "image": "resources/icon.png",
-              "altText": "Lookout review workflow"
-            }
-          },
-          {
-            "id": "lookout.walkthrough.continuity",
-            "title": "Resume provider-owned work",
-            "description": "[Browse Lookout history](command:lookout.browseHistory) to reopen projects and resume supported provider sessions without reading their transcripts. Live coordination across same-host windows remains an explicit experimental setting.",
-            "media": {
-              "image": "resources/icon.png",
-              "altText": "Lookout session history"
+              "image": "assets/screenshots/lookout-overview.png",
+              "altText": "Lookout Review view with workspace evidence"
             }
           }
         ]

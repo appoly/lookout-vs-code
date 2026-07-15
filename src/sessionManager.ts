@@ -43,6 +43,7 @@ import {
   providerSessionCollision
 } from './providerSessionBinding';
 import { providerFor } from './providers/providerRegistry';
+import { matchRestoredTerminals } from './restoreTerminalMatcher';
 import type {
   AgentEvent,
   AgentReportedStatus,
@@ -85,6 +86,9 @@ export class SessionManager implements vscode.Disposable {
     string,
     vscode.TerminalShellExecution
   >();
+  private readonly agentLaunchesInFlight = new Set<string>();
+  private readonly untrackedAgentCommands = new Set<string>();
+  private readonly restartsInFlight = new Set<string>();
   private readonly sessionIdsByTerminal = new Map<vscode.Terminal, string>();
   private readonly changedEmitter = new vscode.EventEmitter<void>();
   private readonly topologyEmitter = new vscode.EventEmitter<void>();
@@ -135,21 +139,24 @@ export class SessionManager implements vscode.Disposable {
       nextSequence: persisted.nextSequence,
       events: persisted.events
     };
-    const terminalsByName = new Map(
-      vscode.window.terminals.map((terminal) => [terminal.name, terminal])
+    const restoredTerminals = matchRestoredTerminals(
+      stored.map((session) => ({
+        id: session.id,
+        terminalName: session.terminalName
+      })),
+      vscode.window.terminals.map((terminal) => {
+        const sessionId = sessionIdFromTerminal(terminal);
+        return {
+          value: terminal,
+          name: terminal.name,
+          ...(sessionId ? { sessionId } : {})
+        };
+      })
     );
-    const terminalsBySessionId = new Map<string, vscode.Terminal>();
-    for (const terminal of vscode.window.terminals) {
-      const sessionId = sessionIdFromTerminal(terminal);
-      if (sessionId) {
-        terminalsBySessionId.set(sessionId, terminal);
-      }
-    }
 
     for (const saved of stored) {
       const normalizedSaved = normalizeSessionActivity(saved);
-      const terminal =
-        terminalsBySessionId.get(saved.id) ?? terminalsByName.get(saved.terminalName);
+      const terminal = restoredTerminals.get(saved.id);
       // Without a reusable bridge no event can ever arrive, so transient
       // statuses would otherwise be stuck (a permanent false "waiting for
       // you"). A live process is only ever claimed as active.
@@ -197,6 +204,11 @@ export class SessionManager implements vscode.Disposable {
       this.sessions.set(session.id, session);
       if (terminal) {
         this.attachTerminal(session.id, terminal);
+        if (session.command) {
+          // Shell execution handles do not survive extension-host reloads, so
+          // the process state cannot be proven safe for in-place restart.
+          this.untrackedAgentCommands.add(session.id);
+        }
       }
     }
     this.selectedSessionId =
@@ -280,10 +292,14 @@ export class SessionManager implements vscode.Disposable {
         }
         this.terminals.delete(id);
         this.agentExecutions.delete(id);
+        this.agentLaunchesInFlight.delete(id);
+        this.untrackedAgentCommands.delete(id);
+        this.restartsInFlight.delete(id);
         this.commandResults.delete(id);
         this.pendingDelegatedUsage.delete(id);
         this.delegatedUsageObservedAt.delete(id);
         this.sessionIdsByTerminal.delete(terminal);
+        void this.deleteClaudeSettings(id);
         this.topologyEmitter.fire();
         this.recordEvent(
           id,
@@ -416,6 +432,7 @@ export class SessionManager implements vscode.Disposable {
 
     const launched = await this.prepareLaunchCommand(
       request,
+      session.id,
       classifyShell(vscode.env.shell),
       session.tokenBudget
     );
@@ -726,7 +743,9 @@ export class SessionManager implements vscode.Disposable {
     // must not become a dead end that hides the next real candidate.
     const sessions = this.list().filter((candidate) => this.isOpen(candidate.id));
     const session =
-      sessions.find((candidate) => candidate.status === 'attention') ??
+      sessions.find(
+        (candidate) => candidate.status === 'attention' && candidate.unread
+      ) ??
       sessions.find((candidate) => candidate.unread);
     if (!session) {
       void vscode.window.showInformationMessage('No agents need attention.');
@@ -820,9 +839,16 @@ export class SessionManager implements vscode.Disposable {
     if (terminal) {
       this.terminals.delete(id);
       this.agentExecutions.delete(id);
+      this.agentLaunchesInFlight.delete(id);
+      this.untrackedAgentCommands.delete(id);
+      this.restartsInFlight.delete(id);
       this.sessionIdsByTerminal.delete(terminal);
       terminal.dispose();
     }
+    this.agentLaunchesInFlight.delete(id);
+    this.untrackedAgentCommands.delete(id);
+    this.restartsInFlight.delete(id);
+    await this.deleteClaudeSettings(id);
     this.commandResults.delete(id);
     this.pendingDelegatedUsage.delete(id);
     this.delegatedUsageObservedAt.delete(id);
@@ -858,37 +884,55 @@ export class SessionManager implements vscode.Disposable {
       );
       return;
     }
-    session.status = 'starting';
-    session.unread = false;
-    session.backgroundAgents = [];
-    session.runningCommands = [];
-    session.tokenUsage = undefined;
-    this.commandResults.delete(id);
-    this.pendingDelegatedUsage.delete(id);
-    this.delegatedUsageObservedAt.delete(id);
-    session.foregroundState = 'unknown';
-    session.latestEvent = 'Restarting agent command';
-    session.updatedAt = Date.now();
-    await this.persistAndNotify();
-    terminal.show(false);
-    const launched = await this.prepareLaunchCommand(
-      {
-        kind: session.kind,
-        label: session.label,
-        command: session.command,
-        cwd: session.cwd
-      },
-      classifyShell(vscode.env.shell),
-      session.tokenBudget
-    );
-    await this.executeAgentCommand(
-      id,
-      terminal,
-      launched.command,
-      launched.integrationsSkipped
-        ? 'Agent session active · hooks unavailable in this terminal shell'
-        : undefined
-    );
+    if (this.agentLaunchesInFlight.has(id) || this.restartsInFlight.has(id)) {
+      void vscode.window.showWarningMessage(
+        'The agent command is already starting. Wait for it to settle before restarting it.'
+      );
+      return;
+    }
+    if (this.untrackedAgentCommands.has(id)) {
+      void vscode.window.showWarningMessage(
+        'Lookout cannot confirm that this untracked agent command has ended. Close this terminal and launch a new agent instead.'
+      );
+      return;
+    }
+    this.restartsInFlight.add(id);
+    try {
+      session.status = 'starting';
+      session.unread = false;
+      session.backgroundAgents = [];
+      session.runningCommands = [];
+      session.tokenUsage = undefined;
+      this.commandResults.delete(id);
+      this.pendingDelegatedUsage.delete(id);
+      this.delegatedUsageObservedAt.delete(id);
+      session.foregroundState = 'unknown';
+      session.latestEvent = 'Restarting agent command';
+      session.updatedAt = Date.now();
+      await this.persistAndNotify();
+      terminal.show(false);
+      const launched = await this.prepareLaunchCommand(
+        {
+          kind: session.kind,
+          label: session.label,
+          command: session.command,
+          cwd: session.cwd
+        },
+        id,
+        classifyShell(vscode.env.shell),
+        session.tokenBudget
+      );
+      await this.executeAgentCommand(
+        id,
+        terminal,
+        launched.command,
+        launched.integrationsSkipped
+          ? 'Agent session active · hooks unavailable in this terminal shell'
+          : undefined
+      );
+    } finally {
+      this.restartsInFlight.delete(id);
+    }
   }
 
   public async rename(id: string, label: string): Promise<void> {
@@ -959,24 +1003,31 @@ export class SessionManager implements vscode.Disposable {
     command: string,
     activeMessage = 'Agent session active'
   ): Promise<void> {
-    const shellIntegration = await waitForShellIntegration(terminal, 2_000);
-    if (shellIntegration) {
-      try {
-        const execution = shellIntegration.executeCommand(command);
-        this.agentExecutions.set(id, execution);
-        this.updateSession(id, 'active', undefined, activeMessage);
-        return;
-      } catch {
-        // Fall through to sendText for terminals that reject execution tracking.
+    this.agentLaunchesInFlight.add(id);
+    try {
+      const shellIntegration = await waitForShellIntegration(terminal, 2_000);
+      if (shellIntegration) {
+        try {
+          const execution = shellIntegration.executeCommand(command);
+          this.agentExecutions.set(id, execution);
+          this.untrackedAgentCommands.delete(id);
+          this.updateSession(id, 'active', undefined, activeMessage);
+          return;
+        } catch {
+          // Fall through to sendText for terminals that reject execution tracking.
+        }
       }
+      this.untrackedAgentCommands.add(id);
+      terminal.sendText(command, true);
+      this.updateSession(
+        id,
+        'active',
+        undefined,
+        `${activeMessage} · detailed lifecycle unavailable`
+      );
+    } finally {
+      this.agentLaunchesInFlight.delete(id);
     }
-    terminal.sendText(command, true);
-    this.updateSession(
-      id,
-      'active',
-      undefined,
-      `${activeMessage} · detailed lifecycle unavailable`
-    );
   }
 
   private markRead(id: string): void {
@@ -1218,10 +1269,13 @@ export class SessionManager implements vscode.Disposable {
       }
       this.delegatedUsageObservedAt.set(event.sessionId, event.observedAt);
       if (!session.tokenUsage) {
-        this.pendingDelegatedUsage.set(event.sessionId, {
-          observedAt: event.observedAt,
-          delegatedAgents: event.delegatedAgents
-        });
+        this.pendingDelegatedUsage.set(
+          event.sessionId,
+          {
+            observedAt: event.observedAt,
+            delegatedAgents: event.delegatedAgents
+          }
+        );
         return;
       }
       session.tokenUsage = {
@@ -1269,6 +1323,7 @@ export class SessionManager implements vscode.Disposable {
 
   private async prepareLaunchCommand(
     request: LaunchRequest,
+    lookoutSessionId: string,
     launchShell: LaunchShell,
     tokenBudget?: AgentSession['tokenBudget']
   ): Promise<{ command: string; integrationsSkipped: boolean }> {
@@ -1342,10 +1397,7 @@ export class SessionManager implements vscode.Disposable {
       'src',
       'claudeStatusLine.js'
     );
-    const settingsUri = vscode.Uri.joinPath(
-      this.context.globalStorageUri,
-      'claude-lookout-settings.json'
-    );
+    const settingsUri = this.claudeSettingsUri(lookoutSessionId);
     const hooks = {
       SessionStart: [hookGroup(notifyHelperPath, 'session-start')],
       UserPromptSubmit: [
@@ -1420,6 +1472,23 @@ export class SessionManager implements vscode.Disposable {
       )}`,
       integrationsSkipped: false
     };
+  }
+
+  private claudeSettingsUri(id: string): vscode.Uri {
+    return vscode.Uri.joinPath(
+      this.context.globalStorageUri,
+      `claude-lookout-settings-${safeStorageSegment(id)}.json`
+    );
+  }
+
+  private async deleteClaudeSettings(id: string): Promise<void> {
+    try {
+      await vscode.workspace.fs.delete(this.claudeSettingsUri(id), {
+        useTrash: false
+      });
+    } catch {
+      // Missing or locked cleanup files must not prevent session removal.
+    }
   }
 
   private async showCodexHookNotice(id: string): Promise<void> {
@@ -1525,6 +1594,11 @@ function hookGroup(
 
 const isDirectClaudeCommand = (command: string): boolean =>
   isDirectAgentCommand(command, 'claude');
+
+function safeStorageSegment(value: string): string {
+  const sanitized = value.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 120);
+  return sanitized || 'session';
+}
 
 function sessionIdFromTerminal(terminal: vscode.Terminal): string | undefined {
   const options = terminal.creationOptions;

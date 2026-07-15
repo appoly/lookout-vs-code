@@ -90,10 +90,15 @@ test('preserves explicit Codex notifier and hook overrides', () => {
 
 test('recognizes direct provider commands without accepting shell expressions', () => {
   assert.equal(isDirectAgentCommand('/usr/bin/codex resume', 'codex'), true);
+  assert.equal(
+    isDirectAgentCommand('"C:\\Program Files\\codex.exe" resume', 'codex'),
+    true
+  );
   assert.equal(isDirectAgentCommand('claude --model opus', 'claude'), true);
   assert.equal(isDirectAgentCommand('codex && echo done', 'codex'), false);
   assert.equal(isDirectAgentCommand('codex $(pwd)', 'codex'), false);
   assert.equal(isDirectAgentCommand('codex `pwd`', 'codex'), false);
+  assert.equal(isDirectAgentCommand('"codex.exe"suffix', 'codex'), false);
   assert.equal(shellQuote("it's ready", 'posix'), "'it'\\''s ready'");
 });
 
@@ -121,8 +126,10 @@ test('classifies terminal shells from their executable paths', () => {
     'posix'
   );
   assert.equal(classifyShell('C:\\tools\\nu.exe', 'win32'), 'unknown');
+  assert.equal(classifyShell('/usr/bin/nu', 'linux'), 'unknown');
+  assert.equal(classifyShell('/usr/bin/elvish', 'linux'), 'unknown');
   assert.equal(classifyShell(undefined, 'win32'), 'unknown');
-  assert.equal(classifyShell(undefined, 'linux'), 'posix');
+  assert.equal(classifyShell(undefined, 'linux'), 'unknown');
 });
 
 test('skips Codex hook injection when the launch shell is unknown', () => {
