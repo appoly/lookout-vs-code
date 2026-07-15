@@ -22,6 +22,7 @@ import {
   markSessionRead,
   transitionSession
 } from './sessionModel';
+import { latestDelegatedTokenUsage } from './sessionTokenUsage';
 import {
   applyAgentEvent,
   normalizeSessionActivity
@@ -1242,25 +1243,25 @@ export class SessionManager implements vscode.Disposable {
     }
     const pendingDelegated = this.pendingDelegatedUsage.get(event.sessionId);
     this.pendingDelegatedUsage.delete(event.sessionId);
-    const delegatedAgents =
-      pendingDelegated && pendingDelegated.observedAt > event.observedAt
-        ? pendingDelegated.delegatedAgents
-        : event.tokenUsage.delegatedAgents.length > 0
-        ? event.tokenUsage.delegatedAgents
-        : pendingDelegated?.delegatedAgents ??
-          session.tokenUsage?.delegatedAgents ??
-          [];
-    if (
-      event.tokenUsage.delegatedAgents.length > 0 &&
-      event.observedAt >=
-        (this.delegatedUsageObservedAt.get(event.sessionId) ?? -1)
-    ) {
-      this.delegatedUsageObservedAt.set(event.sessionId, event.observedAt);
-    }
+    const delegatedUsage = latestDelegatedTokenUsage(
+      {
+        observedAt: event.observedAt,
+        delegatedAgents: event.tokenUsage.delegatedAgents
+      },
+      {
+        observedAt: this.delegatedUsageObservedAt.get(event.sessionId) ?? -1,
+        delegatedAgents: session.tokenUsage?.delegatedAgents ?? []
+      },
+      pendingDelegated
+    );
+    this.delegatedUsageObservedAt.set(
+      event.sessionId,
+      delegatedUsage.observedAt
+    );
     session.tokenUsage = {
       ...event.tokenUsage,
       observedAt: event.observedAt,
-      delegatedAgents
+      delegatedAgents: delegatedUsage.delegatedAgents
     };
     session.updatedAt = Math.max(session.updatedAt, event.observedAt);
     void this.persistAndNotify();

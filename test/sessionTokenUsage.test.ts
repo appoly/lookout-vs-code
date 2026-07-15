@@ -3,6 +3,7 @@ import test from 'node:test';
 import { createSession } from '../src/sessionModel';
 import {
   formatTokenCount,
+  latestDelegatedTokenUsage,
   sessionTokenSummary,
   tokenUsageSeverity
 } from '../src/sessionTokenUsage';
@@ -41,4 +42,35 @@ test('shows configured Codex budgets before usage is available', () => {
   };
   assert.equal(sessionTokenSummary(session), '50k budget');
   assert.equal(tokenUsageSeverity(session), 'normal');
+});
+
+test('keeps newer delegated usage when account snapshots arrive out of order', () => {
+  const newer = {
+    observedAt: 200,
+    delegatedAgents: [{ id: 'new', label: 'New', tokenCount: 2_000 }]
+  };
+  assert.strictEqual(
+    latestDelegatedTokenUsage(
+      {
+        observedAt: 100,
+        delegatedAgents: [{ id: 'old', label: 'Old', tokenCount: 1_000 }]
+      },
+      newer
+    ),
+    newer
+  );
+});
+
+test('does not treat an empty account snapshot as delegated-agent completion', () => {
+  const delegated = {
+    observedAt: 100,
+    delegatedAgents: [{ id: 'live', label: 'Live', tokenCount: 1_000 }]
+  };
+  assert.strictEqual(
+    latestDelegatedTokenUsage(
+      { observedAt: 200, delegatedAgents: [] },
+      delegated
+    ),
+    delegated
+  );
 });
