@@ -6,6 +6,13 @@ import test from 'node:test';
 interface ManifestCommand {
   readonly command: string;
   readonly enablement?: string;
+  readonly icon?: string;
+  readonly title?: string;
+}
+
+interface ManifestMenuEntry {
+  readonly command?: string;
+  readonly when?: string;
 }
 
 interface Manifest {
@@ -25,6 +32,9 @@ interface Manifest {
   };
   readonly contributes?: {
     readonly commands?: ManifestCommand[];
+    readonly menus?: {
+      readonly 'view/title'?: ManifestMenuEntry[];
+    };
     readonly viewsWelcome?: Array<{ readonly when?: string }>;
     readonly walkthroughs?: Array<{
       readonly id?: string;
@@ -79,6 +89,25 @@ test('ships the minimum Marketplace presentation metadata', () => {
     assert.ok(image.readUInt32BE(16) >= 400, `${screenshot} is too narrow`);
     assert.ok(image.readUInt32BE(20) >= 50, `${screenshot} is too short`);
   }
+});
+
+test('shows one Agents settings action that opens all Lookout settings', () => {
+  const commands = new Map(
+    manifest.contributes?.commands?.map((entry) => [entry.command, entry]) ?? []
+  );
+  const settingsActions =
+    manifest.contributes?.menus?.['view/title']?.filter(
+      (entry) =>
+        entry.when?.includes('view == lookout.sessions') &&
+        entry.command &&
+        commands.get(entry.command)?.icon === '$(settings-gear)'
+    ) ?? [];
+
+  assert.deepEqual(
+    settingsActions.map((entry) => entry.command),
+    ['lookout.openSettings']
+  );
+  assert.equal(commands.get('lookout.openSettings')?.title, 'Open Lookout Settings');
 });
 
 test('disables command-launching contributions outside trusted workspaces', () => {

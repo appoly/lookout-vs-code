@@ -126,6 +126,12 @@
         "icon": "$(settings-gear)"
       },
       {
+        "command": "lookout.openSettings",
+        "title": "Open Lookout Settings",
+        "category": "Lookout",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "lookout.runDoctor",
         "title": "Run Doctor",
         "category": "Lookout",
@@ -664,14 +670,9 @@
           "group": "navigation@5"
         },
         {
-          "command": "lookout.configureAttentionSound",
+          "command": "lookout.openSettings",
           "when": "view == lookout.sessions",
           "group": "navigation@6"
-        },
-        {
-          "command": "lookout.configureProfiles",
-          "when": "view == lookout.sessions",
-          "group": "navigation@7"
         },
         {
           "command": "lookout.launchTemplate",

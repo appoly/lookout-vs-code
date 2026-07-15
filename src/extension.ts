@@ -162,6 +162,12 @@ export async function activate(
     vscode.window.registerTreeDataProvider('lookout.history', historyTree),
     register('lookout.launchAgent', () => chooseAndLaunchAgent(sessions)),
     register('lookout.configureProfiles', () => configureProfiles()),
+    register('lookout.openSettings', () =>
+      vscode.commands.executeCommand(
+        'workbench.action.openSettings',
+        '@ext:appoly.lookout'
+      )
+    ),
     register('lookout.runDoctor', () =>
       runDoctor(context, sessions, usage, coordination, globalHistory, doctorOutput)
     ),
