@@ -3,7 +3,7 @@
 Run, monitor, and review several terminal coding agents while VS Code remains
 your editor, diff viewer, task runner, and source-control client.
 
-> **Preview:** Lookout 0.1 is an early public release. The core workflow is
+> **Preview:** Lookout 1.0 is an early public release. The core workflow is
 > tested, but provider CLI integrations and remote-platform behavior can change
 > as Codex, Claude Code, and VS Code evolve.
 
@@ -32,46 +32,47 @@ terminal emulator or code viewer inside a webview.
 
 ## Lookout at a glance
 
-The Lookout sidebar keeps active agents, cross-project history, live sessions
-from other windows, review evidence, and plans in one place.
-
-<p align="center">
-  <img src="assets/screenshots/lookout-overview.png" width="520" alt="Lookout sidebar showing Codex and Claude agents, a finished-turn attention state, local and cross-project history, another live window, review evidence, workspace changes, and provider usage limits" />
-</p>
+The Lookout sidebar groups agents in the current workspace separately from live
+agents in other windows, with review evidence, plans, and usage limits alongside
+them.
 
 ## What Lookout adds
 
 - **Agents** — launch Codex, Claude Code, or a custom command in a named native
   terminal. Focus, split, rename, restart, adopt, and safely remove sessions from
-  one tree.
+  one tree. Current Workspace rows can be reordered by dragging; live rows from
+  other windows stay in their own group.
 - **Attention routing** — explicit provider lifecycle hooks distinguish working,
   delegated-agent activity, authorization checks, finished turns, and genuine
   waits for input. Unread badges, status-bar state, notifications, and an optional
-  bell make background work visible.
-- **Continuity** — move through unread agent events, browse closed history
-  backed by a bounded, metadata-only event ledger, and explicitly resume or
-  fork supported provider-owned sessions without reading their transcripts.
-- **Cross-project history** — reopen a previous project and hand a confirmed
-  provider resume or fork to its Lookout window. Historical rows never claim
-  that an old terminal is still live.
+  bell make background work visible. Focusing an update clears its bell and
+  removes it from attention navigation without changing the underlying waiting
+  or finished state. Active Codex Apps and MCP calls use an extensions icon so
+  they are distinct from ordinary shell work.
+- **Continuity** — move through unread agent events and explicitly resume or
+  fork supported provider-owned sessions while their agent row is present,
+  without reading provider transcripts. There is no separate History view.
 - **Live coordination (experimental)** — optionally see metadata-only agent
   state from other VS Code windows on the same profile and execution host,
   route attention to the owning window, and refuse duplicate provider resumes.
 - **Profiles and templates** — detect direct provider CLIs, explain degraded
   wrapper capabilities, and save reusable launch recipes without persisting raw
-  commands, arguments, environment variables, prompts, or credentials.
+  commands, arguments, environment variables, prompts, or credentials. The
+  Agents template action appears only after at least one template is configured.
 - **Review** — open each session's Git changes as native diffs against its
   launch commit, grouped by worktree with branch-switch warnings and separately
   classified plans and docs. Diagnostics, Tasks, Test Explorer, debugging,
   Source Control, recent images, and a local browser stay VS Code-owned
   surfaces, one step away. Bounded Git/diagnostic evidence and an explicit
   native Task-backed verification run make ready/failed/stale claims visible
-  without parsing terminal output.
+  without parsing terminal output. Workspace Changes keeps only the useful
+  **Diff evidence** summary above the changed files.
 - **Usage Limits** — show authoritative Codex and Claude account windows and
   reset times. Unknown, stale, unsupported, and signed-out states stay distinct
   from zero usage.
 - **Isolated worktrees** — optionally create and launch an agent in a sibling Git
-  worktree when parallel tasks should not share a working tree.
+  worktree from the advanced command or a configured template when parallel
+  tasks should not share a working tree; it does not occupy the Agents toolbar.
 
 ## Requirements
 
@@ -104,6 +105,10 @@ provider's own CLI before relying on lifecycle or usage information.
 5. Use **Review** to inspect native diffs and plans, run tasks or tests, open
    Source Control, and return to the agent with feedback.
 
+The Agents toolbar has one settings cog, which opens all Lookout settings. Its
+template shortcut is hidden until templates exist; isolated-worktree launch
+remains available from the Command Palette and reusable templates.
+
 On the first Codex launch, Lookout explains the one-time `/hooks` review needed
 for full lifecycle detail. The turn-complete fallback works before those hooks
 are trusted. Claude hooks are session-local, passed through a generated
@@ -127,6 +132,10 @@ modifies your user or repository Claude settings.
 | `Lookout: Export Sanitized Support Bundle…` | Explicitly save a redacted, identifier-free diagnostic bundle. |
 | `Lookout: Configure Attention Sound` | Open the bell enablement and volume settings. |
 | `Lookout: Open Browser` | Open a local URL in VS Code's browser when available. |
+
+The isolated-worktree and template commands remain available in the Command
+Palette. They are intentionally not permanent top-level Agents actions; the
+template shortcut appears there only when a template has been configured.
 
 The default shortcuts are `Ctrl+Alt+C` / `Cmd+Alt+C` for Codex,
 `Ctrl+Alt+A` / `Cmd+Alt+A` for Claude Code, `Ctrl+Alt+N` / `Cmd+Alt+N` for the
@@ -187,6 +196,8 @@ Lookout contains no telemetry or analytics and sends nothing to a Lookout-owned
 server. It does not read authentication files or scrape terminal output. When
 you explicitly enable command-result capture, it retains up to 8 KiB from the
 provider's completed shell-tool result in memory only; it is never persisted.
+For active MCP calls, Lookout retains only a bounded tool identifier in memory;
+it does not retain MCP arguments or responses.
 Lifecycle events use a random bearer token over a size-limited HTTP server bound
 only to `127.0.0.1`; custom agent commands are not persisted. Workspace-provided
 command settings are restricted in untrusted workspaces, and execution commands
@@ -259,9 +270,10 @@ npm run verify:vsix
 ```
 
 The extension-host suite exercises activation, terminal launch and splitting,
-authenticated attention routing, Git review baselines, host-local history
-projection, and terminal closure. Domain tests additionally exercise concurrent
-history writers and real authenticated loopback coordinator clients.
+authenticated attention routing, MCP activity presentation, consolidated local
+and live Agents groups, Git review baselines, host-local metadata projection,
+and terminal closure. Domain tests additionally exercise concurrent history
+writers and real authenticated loopback coordinator clients.
 CI runs Stable on Linux, Windows, and macOS, plus VS Code 1.96.0 on Linux. The
 VSIX check also inspects an allow-listed package, installs it into an isolated
 profile, activates the installed extension, and runs Doctor. See

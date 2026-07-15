@@ -55,9 +55,9 @@ the release program:
 - provider identity, lineage, archive state, and a bounded fixed-kind event
   ledger persist through a versioned, migrating store; live command state,
   custom commands, prompts, output, and transcripts do not;
-- agent-row attention routing and the History view support unread navigation,
-  explicit resume/fork, collision refusal, archive/unarchive, and metadata-only
-  deletion;
+- agent-row attention routing supports unread navigation, explicit resume/fork,
+  collision refusal, archive/unarchive, and metadata-only deletion; live rows
+  now share the consolidated Agents tree and there is no separate History view;
 - the non-installing profile catalog and allow-listed session templates are
   wired to launch, worktree, task, browser, and review-layout flows;
 - Git execution is abortable, bounded, shell-free, and NUL-streaming. Git and
@@ -309,10 +309,11 @@ what happened, and explicitly resume supported provider work.
 
 ### Work packages
 
-#### P2.1 Resume, fork, archive, and history
+#### P2.1 Resume, fork, archive, and metadata retention
 
-- Add `Resume Agent Session`, `Fork Agent Session`, `Archive Agent Session`, and
-  `Browse Agent History` commands with capability-based visibility.
+- Expose `Resume Agent Session` and `Fork Agent Session` from eligible current
+  agent rows. Keep archive/deletion metadata-only; do not add a separate Browse
+  Agent History view whose rows disappear with the agent they describe.
 - Codex: use the stable provider CLI for interactive resume/fork/archive. Keep
   app-server `thread/list/read/resume` behind an optional experimental discovery
   setting until its maturity permits a production dependency.
@@ -328,8 +329,8 @@ what happened, and explicitly resume supported provider work.
 
 #### P2.2 Attention routing and integration health
 
-- Keep the bounded event ledger behind attention-first Agent rows and History
-  tooltips rather than duplicating fixed labels in a feed (D15).
+- Keep the bounded event ledger behind attention-first Agent rows and tooltips
+  rather than duplicating fixed labels in a feed or History view (D15/D16).
 - Provide next/previous unread navigation, focus-to-acknowledge behavior, and
   explicit metadata-only history deletion.
 - Show per-session elapsed time, event count, attention count, delegated-agent
@@ -469,11 +470,13 @@ hosts, and support reports can be diagnosed without sensitive data.
 
 #### P4.2 Cross-workspace coordination
 
-**Implementation status:** global history, reopen/resume handoff, coordinator
-election/authentication, leased live snapshots, focus routing, collision
-detection, stale-owner recovery, protocol refusal, Doctor state, and the native
-History UI are implemented. The coordinator remains disabled by default until
-the installed two-window and remote matrix below is recorded.
+**Implementation status:** global-history storage, reopen/resume handoff,
+coordinator election/authentication, leased live snapshots, focus routing,
+collision detection, stale-owner recovery, protocol refusal, and Doctor state
+are implemented. Live rows are consolidated under Agents; the separate History
+UI was removed because deleting a finished agent made it incomplete and added
+no useful detail. The coordinator remains disabled by default until the
+installed two-window and remote matrix below is recorded.
 
 - First ship global history that can reopen a folder and resume a provider
   session without claiming the old terminal is live.

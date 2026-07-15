@@ -25,8 +25,12 @@ disabled, and verifies:
 - native terminal creation, panel placement, Git baseline capture, and bridge
   credentials;
 - authenticated lifecycle attention, unread state, and attention navigation;
+- MCP activity start/stop tracking and its distinct Agents icon;
+- Current Workspace and Live in Other Windows grouping, including unread-first
+  remote ordering and read-state icon clearing;
 - provider identity binding without conflating provider and Lookout IDs;
-- projection into the host-local cross-project history boundary;
+- projection into the host-local cross-project metadata boundary without a
+  separate History view;
 - native sibling-split requests relative to the parent terminal;
 - changed-file discovery and virtual Git-baseline content;
 - closed-terminal state and session removal.

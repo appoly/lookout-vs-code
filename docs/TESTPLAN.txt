@@ -37,7 +37,8 @@ A. RENAME INTEGRITY (~5 min)
   2. Command palette: typing "Lookout" lists every command under that
      category; nothing appears under "Paraterm" or "MultiTerm".
   3. Settings UI: searching "lookout" shows every contributed setting,
-     titled correctly.
+     titled correctly. Agents has one settings cog and it opens the complete
+     Lookout settings search rather than a provider-only subset.
   4. Inside a launched agent terminal:
      env | grep -i 'multiterm\|paraterm'  -> nothing
      env | grep LOOKOUT                    -> the 5 LOOKOUT_* vars
@@ -45,7 +46,9 @@ A. RENAME INTEGRITY (~5 min)
 B. LAUNCH AND LAYOUT (~10 min)
   5. "+" picker offers Codex / Claude Code / Custom. Launch two Codex
      and one Claude: terminals open in the native terminal panel by default,
-     leaving the editor area free for code and review.
+     leaving the editor area free for code and review. The Agents toolbar has
+     no permanent isolated-worktree action, and Launch from Template is absent
+     until at least one template is configured.
   6. Terminal tab names read "Lookout: <label> [<id>]"; tree rows show stable
      directory - branch - state labels. Drag the Current Workspace rows into a
      new order and reload;
@@ -62,7 +65,8 @@ C. LIFECYCLE, ATTENTION, AND THE BELL (~20 min — the heart of it)
  10. Claude: send a prompt -> row shows working. Trigger a permission
      prompt -> attention + notification with "Focus Agent". Let a
      turn finish while another terminal is focused -> calm finished/idle
-     state + unread dot; focusing clears unread.
+     state + unread dot; focusing clears the bell-style indicator and unread
+     navigation candidate while retaining the underlying waiting/idle status.
  11. Codex first launch: the one-time /hooks trust review flow
      appears as designed (D8) — Lookout instructs, never bypasses.
      Before trusting, turn-complete attention still arrives via the
@@ -91,7 +95,10 @@ C. LIFECYCLE, ATTENTION, AND THE BELL (~20 min — the heart of it)
      With lookout.review.captureCommandOutput enabled before launch, a finished
      Codex/Claude Bash command leaves Running and opens a bounded, transient
      result under Recent Command Results. Disable the setting -> results clear;
-     reload -> no result remains.
+     reload -> no result remains. Start a Codex Apps/MCP call such as
+     codex_apps.github.fetch_pr: the agent uses the extensions icon while the
+     call is active and Running shows only its tool identifier. Its arguments
+     and response never appear, including when command-result capture is on.
 
 D. NAVIGATION (~5 min)
  16. Tree click focuses the exact terminal. Focus Agent quick-pick
@@ -158,13 +165,17 @@ I. ATTENTION ROUTING, PROFILES, AND TEMPLATES (~15 min)
      launch-only without claiming identity/resume/fork support.
  33. Agent rows and the status bar surface unread/attention state from fixed
      operational labels. Next/Previous Unread cycles and focusing the session
-     clears only its event read state. No prompt, hook message, command text,
-     tool output, or transcript path appears anywhere.
+     clears only its event read state. No prompt, hook message, MCP arguments or
+     responses, or transcript path appears anywhere. Shell command labels are
+     confined to live Running state; shell output appears only in the explicit,
+     transient command-result opt-in tested above.
  34. Remove a completed managed, custom, or adopted session. Its row disappears
      from Agents and there is no separate History view presenting a stale or
      incomplete record.
  35. Create and relaunch both shared-folder and isolated-worktree templates.
      Tasks, browser URL, and review layout run only after explicit launch.
+     The Agents template action appears after the first template is saved and
+     disappears again after the last template is deleted.
      Remove a configured profile/executable: launch is refused with guidance.
      Inspect extension storage and confirm templates contain no command, args,
      environment, prompt, token, or credentials.

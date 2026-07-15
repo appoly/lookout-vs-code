@@ -16,12 +16,13 @@ its UI:
   persisted);
 - provider-owned session identifiers received through documented authenticated
   hooks, plus bounded operational event kinds and fixed summaries used for
-  session continuity and unread history. Lookout does not read the associated
+  session continuity and unread state. Lookout does not read the associated
   provider transcript paths;
-- currently running shell-command labels in memory only. They are cleared from
-  persisted snapshots because commands may contain sensitive arguments and are
-  no longer current after restoration. By default Lookout never retains command
-  output. If you globally opt in to
+- currently running shell-command labels and bounded MCP tool identifiers in
+  memory only. MCP arguments and responses do not cross the bridge. Activity is
+  cleared from persisted snapshots because it may be sensitive and is no longer
+  current after restoration. By default Lookout never retains command output.
+  If you globally opt in to
   `lookout.review.captureCommandOutput`, Lookout keeps up to 8 KiB from each
   completed Codex or Claude shell-tool result in memory only, until the window
   reloads or session closes; it never reads terminal scrollback or persists

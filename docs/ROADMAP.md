@@ -48,6 +48,11 @@ existing attribution and privacy guarantees.
 - [x] Experimental same-profile/same-execution-host live coordination with
   authenticated loopback leases, cross-window focus routing, and duplicate
   resume detection.
+- [x] Consolidated Agents tree with Current Workspace and Live in Other Windows
+  groups, persistent local drag ordering, one settings cog, conditional template
+  launch, and no separate History view or permanent isolated-worktree action.
+- [x] Read-state-aware indicators/navigation, MCP activity tracking with a
+  distinct icon, and a Workspace Changes group reduced to Diff evidence.
 
 ## Next: close the manual smoke findings
 
@@ -88,9 +93,10 @@ existing attribution and privacy guarantees.
   attention/events, delegated-agent activity, provider-identity observations,
   and known exit result. Worktree diff stats and native verification outcome
   live in Review; arbitrary debug-result inference remains out of scope.
-- [x] Resume supported Codex/Claude sessions through provider-owned IDs; browse prior Lookout session metadata and clearly distinguish resumable, terminal-only, and unavailable records.
-- [x] Extend bounded History across projects and reopen the owning workspace
-  with an expiring one-shot resume/fork handoff.
+- [x] Resume or fork supported Codex/Claude sessions through provider-owned IDs
+  while their agent row is present. The bounded event and cross-project stores
+  remain metadata-only safety/restoration infrastructure rather than a separate
+  user-facing History view.
 - [x] Offer a privacy-safe support export of identifier-free health metadata, not a transcript or raw event stream.
 - [x] Display session integration health in Agent tooltips and a dedicated Doctor report: lifecycle bridge state, hook-trust state, usage availability/staleness, remote-host scope, dependencies, provider identity, and worktree baseline availability.
 
@@ -164,14 +170,15 @@ The decision-complete design is in [the opt-in Compound Engineering plan](plans/
   it does not claim federation between local, WSL, SSH, and container hosts.
 - [x] Accessible Activity Bar and 256×256 Marketplace icons, gallery banner,
   user-first README, privacy/support/security docs, and a release checklist.
-- [x] Passive settings walkthrough, current Marketplace screenshots, and gated
-  Marketplace/Open VSX publishing automation.
-- [ ] Add a native Review diff screenshot and, if it improves the listing, a
-  short launch → attention → review recording.
-- [x] Passive Getting Started walkthrough for profiles, launch, Sessions, Review, and continuity.
+- [x] Passive settings walkthrough and gated Marketplace/Open VSX publishing
+  automation.
+- [ ] Refresh Marketplace media for the consolidated Agents groups and
+  Diff-evidence-only Workspace Changes; add a native Review diff and, if it
+  improves the listing, a short launch → attention → review recording.
+- [x] Passive Getting Started walkthrough for profiles, launch, Agents, Review, and continuity.
 - [x] Advisory three-OS provider compatibility lab with deterministic fake CLIs and sanitized installed-CLI surface reports.
 
-## Then: Marketplace release (0.1, preview)
+## Then: Marketplace release (1.0, preview)
 
 Details in [the 2026-07-10 review](sessions/2026-07-10-review.md):
 

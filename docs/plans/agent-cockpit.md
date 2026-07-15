@@ -1,5 +1,10 @@
 # Terminal-native agent cockpit plan
 
+> Historical planning record. The current UI follows
+> [D16](../DECISIONS.md#d16--current-and-live-agents-share-one-focused-control-surface):
+> live rows are consolidated under Agents, the separate History/Inbox surfaces
+> are removed, and metadata history remains infrastructure rather than a feed.
+
 ## Objective
 
 Make Lookout the fastest trustworthy control plane for several concurrent terminal coding agents in VS Code:

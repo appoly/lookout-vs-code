@@ -7,12 +7,15 @@
   across windows, and discard quota windows after their reset time.
 - Track active Codex Apps and MCP calls without retaining their arguments, and
   distinguish them from shell execution with a dedicated Agents icon.
+- Consolidate Current Workspace and Live in Other Windows under Agents, remove
+  the separate History view, keep one all-settings cog, show template launch
+  only when configured, and reduce Workspace Changes evidence to Diff evidence.
 
 - Add per-agent Claude context, cost, and delegated-agent token tracking, plus
   visible warning thresholds and provider-managed Codex rollout token budgets.
 - Prepare the first public release under Appoly's publisher and repository
   identity, with explicit README risk, warranty, and liability guidance.
-- Add current sidebar and usage screenshots to the Marketplace README.
+- Add current usage screenshots to the Marketplace README.
 - Open new agent terminals in VS Code's native terminal panel by default while
   retaining editor-area terminals as an explicit setting.
 - Capture documented Codex and Claude provider session identity through
@@ -54,7 +57,7 @@
 - Launch, name, focus, split, restart, adopt, and safely remove Codex, Claude
   Code, and custom agents in native VS Code terminals.
 - Route explicit working, authorization, delegated-agent, turn-complete,
-  attention, and running-command lifecycle events through a token-authenticated
+  attention, and running-activity lifecycle events through a token-authenticated
   loopback bridge, and track agent-command exits through VS Code shell
   integration — never by scraping terminal output.
 - Surface unread activity through the Lookout tree, Activity Bar badge, status

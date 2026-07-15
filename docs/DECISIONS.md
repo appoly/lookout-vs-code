@@ -34,6 +34,11 @@ Lookout runs a token-authenticated loopback bridge. Extension-launched Claude se
 
 A live interactive process is `active`, not automatically `running`: process lifetime does not reveal whether an agent is thinking or waiting at its prompt. Provider child IDs are tracked per session. Foreground stop with active children becomes `background`; foreground stop with no remaining children resolves by *reason*: a plain turn end (Claude's `Stop`, Codex's `Stop`/turn-complete notifier) becomes the quiet `idle` status ("finished, nothing pending"), while a genuine wait for a decision — such as Claude's permission or idle-nudge notification — becomes `attention`. Both are unread and count as active, but only `attention` gets the warning-coloured bell-dot and status-bar escalation; `idle` gets a calm bell so a finished agent is not mistaken for a blocked one. Permission attention has higher priority than child progress. Providers do not identify whether every subagent is foreground or background, so the UI deliberately says **delegated agent**, not a stronger claim.
 
+Read state and lifecycle state remain separate. Focusing an agent acknowledges
+its update, clears bell-style indicators, and removes it from unread attention
+navigation, while retaining the underlying `attention` or `idle` status for an
+honest account of what the provider last reported.
+
 Codex has no idle-nudge hook, so a Codex foreground stop always resolves to `idle`. Its `PermissionRequest` hook runs before automatic guardian review or user approval and does not receive the eventual decision; Lookout therefore reports the hook as `running` ("checking authorization"), not `attention`. This avoids a false needs-permission alert when automatic review approves the action. Lookout does not infer a pending human decision Codex never resolved through a hook.
 
 The bridge endpoint/token is persisted per workspace so restored terminals can reconnect when the port is reusable. If it is not reusable, the restored row visibly reports that hooks are unavailable.
@@ -75,7 +80,7 @@ Custom session commands are deliberately omitted from persisted workspace state 
 
 ## D8 — Codex lifecycle integration is session-local and conservative
 
-**Decision:** for direct `codex` invocations, pass command-line-only `SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `SubagentStart`, `SubagentStop`, `Stop`, and Bash-matched `PreToolUse`/`PostToolUse` hooks plus a `notify` turn-complete fallback. `SessionStart` captures the documented provider session ID without reading its transcript path. `PermissionRequest` is a neutral authorization-check signal because it precedes and cannot observe automatic approval. Do not modify user or project Codex files. Leave wrapper commands and shell expressions untouched; preserve explicit notifier or hook overrides. The integration can be disabled with `lookout.codex.lifecycleIntegration`.
+**Decision:** for direct `codex` invocations, pass command-line-only `SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `SubagentStart`, `SubagentStop`, `Stop`, and allow-listed `PreToolUse`/`PostToolUse` hooks for the canonical `Bash` tool plus Codex Apps/MCP tool names, together with a `notify` turn-complete fallback. `SessionStart` captures the documented provider session ID without reading its transcript path. `PermissionRequest` is a neutral authorization-check signal because it precedes and cannot observe automatic approval. Do not modify user or project Codex files. Leave wrapper commands and shell expressions untouched; preserve explicit notifier or hook overrides. The integration can be disabled with `lookout.codex.lifecycleIntegration`.
 
 Non-managed Codex hooks require review and trust. Lookout tells the user to run `/hooks` once; it never passes `--dangerously-bypass-hook-trust`. Until hooks are trusted, the external notifier still supplies conservative turn-complete attention. Composing a user's global Codex notifier with Lookout remains an open design task.
 
@@ -91,9 +96,29 @@ VS Code has configurable internal accessibility signals but no public extension 
 
 Before the first public extension release, use `lookout` consistently for the extension package, Activity Bar container, commands, settings, storage, virtual-document scheme, generated integration files, `LOOKOUT_*` bridge variables, and the `lookout-vs-code` GitHub repository. There is no compatibility alias for the unreleased prototype namespaces.
 
-## D11 — The Review "Running" group surfaces agent commands, authoritatively
+## D11 — The Review "Running" group surfaces agent activity authoritatively
 
-**Decision:** the Review view's **Running** group lists the shell commands agents are executing right now (builds, tests, dev servers), above any native VS Code Tasks and the active debug session. Command lifecycle comes only from explicit provider tool-use hooks — both Claude and Codex `PreToolUse`/`PostToolUse` matched to the `Bash` tool (the canonical shell-tool name for both providers) report `command-start`/`command-stop` through the same `notify.ts` bridge as delegated-agent events — never from terminal-output scraping (upholds [D3](#d3--attention-comes-from-explicit-events)). Only in-flight commands are shown: fast commands finish before their start is observed, so the list self-filters to genuinely long-running work without any command-name heuristic. A fresh prompt, a turn end, or a session reset clears the list so a missing stop hook cannot leak a stale entry. If a user globally opts in to `lookout.review.captureCommandOutput`, a separate **Recent Command Results** group keeps a trailing 8 KiB provider result in memory only; it is not terminal scraping or persisted session data. The Codex hook set was verified against the installed CLI (`codex-cli 0.144.1`) and the [official hooks reference](https://developers.openai.com/codex/hooks): both providers share the Claude-compatible `tool_name`/`tool_input.command`/`tool_use_id` payload, so a single extraction path serves both. Non-shell tool calls (`apply_patch`, `Edit`, MCP) carry no command; the matcher limits firing, and `notify.ts` no-ops on any command event without a command as a defensive backstop. Codex's experimental code-mode host routes shell calls through an `exec` JavaScript tool rather than `Bash`, so those are not surfaced — a known, acceptable gap. This resolves former open decision 3 in favor of surfacing running commands directly rather than only opening the Test Explorer.
+**Decision:** the Review view's **Running** group lists shell commands (builds,
+tests, dev servers) and allow-listed Codex Apps/MCP calls that agents are
+executing now, above native VS Code Tasks and the active debug session. The
+Agents row uses an extensions icon while an MCP call is active so it is distinct
+from ordinary shell work.
+
+Activity comes only from explicit provider `PreToolUse`/`PostToolUse` hooks —
+never terminal-output scraping (upholds [D3](#d3--attention-comes-from-explicit-events)).
+The matcher accepts the canonical `Bash` tool plus `codex_apps.*` and `mcp__*`
+names. Shell activity retains the bounded command label already used by Review;
+MCP activity retains only the bounded tool identifier, never tool arguments or
+responses. Even when `lookout.review.captureCommandOutput` is enabled, only a
+shell-tool result can enter the transient **Recent Command Results** group.
+
+Only in-flight activity is shown. Fast calls can finish before their start is
+noticed, and a fresh prompt, turn end, or session reset clears the list so a
+missing stop hook cannot leave stale state. Unknown non-shell tools still
+normalize to no activity and are acknowledged without crossing the bridge.
+Codex's experimental code-mode `exec` host remains outside this hook contract.
+This resolves former open decision 3 in favor of surfacing running activity
+directly rather than only opening Test Explorer.
 
 ## D12 — Cross-workspace coordination is experimental and host-scoped
 
@@ -124,7 +149,7 @@ transcripts, terminal scrollback, command output, or live command text. Resume
 and fork are explicit actions built through provider adapters; custom and
 adopted terminals remain honestly terminal-only. This resolves former open
 decisions 2 and 5 in favor of provider-native continuity plus a metadata-only
-Lookout inbox.
+Lookout event ledger.
 
 ## D14 — Global history is host-local; live coordination is explicit and leased
 
@@ -151,7 +176,7 @@ project was reopened.
 **Decision:** remove the dedicated Inbox view. The bounded operational event
 ledger from [D13](#d13--provider-identity-and-lookout-history-are-metadata-only)
 remains — it still drives session status, unread state, next/previous-unread
-navigation, History tooltips, and live-coordination summaries — but its
+navigation, Agents tooltips, and live-coordination summaries — but its
 feed-style presentation is gone.
 
 Because event text is deliberately enum-only (D3/D13), a feed row could never
@@ -162,11 +187,27 @@ triage stays on agent rows, the status bar, and the
 read state remains ledger bookkeeping only; no future surface should reintroduce
 a view whose rows cannot carry more information than the row they link to.
 
+## D16 — Current and live agents share one focused control surface
+
+**Decision:** remove the separate History view and consolidate live state in
+**Agents**. The tree groups **Current Workspace** separately from **Live in Other
+Windows**; only current-workspace rows support persistent drag-and-drop
+ordering. Removing a finished agent removes its row immediately, rather than
+leaving a user-facing history row that cannot provide useful additional detail.
+The metadata stores in D13/D14 remain for restoration, collision safety, and
+explicit deletion, not as a parallel navigation surface.
+
+Keep the Agents toolbar focused: one settings cog opens all Lookout settings;
+the template action appears only when templates exist; isolated-worktree launch
+remains an advanced Command Palette/template capability instead of a permanent
+toolbar action. In Review, **Workspace Changes** keeps only **Diff evidence** as
+its top-level evidence summary before the changed files.
+
 ## Open decisions
 
-1. Should “new agent” optionally create a Git worktree by default, or remain a separate advanced command?
+1. ~~Should “new agent” optionally create a Git worktree by default, or remain a separate advanced command?~~ Resolved by [D16](#d16--current-and-live-agents-share-one-focused-control-surface): it remains an advanced command/template capability and is not a permanent Agents toolbar action.
 2. ~~Should session resume IDs be captured for `codex resume` and `claude --resume`, and what stable source should provide them?~~ Resolved by [D13](#d13--provider-identity-and-lookout-history-are-metadata-only): authenticated documented hook fields provide the identity; transcripts are never read.
-3. ~~Should the Review view expose discovered tests directly, or only open the native Test Explorer/run tasks?~~ Resolved by [D11](#d11--the-review-running-group-surfaces-agent-commands-authoritatively): running agent commands (including test runs) are surfaced directly in the Running group.
+3. ~~Should the Review view expose discovered tests directly, or only open the native Test Explorer/run tasks?~~ Resolved by [D11](#d11--the-review-running-group-surfaces-agent-activity-authoritatively): running agent activity (including test runs) is surfaced directly in the Running group.
 4. How should existing Claude status-line commands be composed without executing arbitrary global configuration implicitly?
 5. ~~Should Lookout expose a notification feed view, or keep unread/latest-event state only in agent rows?~~ Resolved by [D13](#d13--provider-identity-and-lookout-history-are-metadata-only) then revised by [D15](#d15--attention-routing-lives-on-agent-rows-not-a-feed-view): the bounded event ledger persists, but unread/attention state lives on agent rows and navigation commands; the Phase 2 inbox UI was removed.
 6. How should a user's global Codex `notify` command be composed with Lookout's session-only notifier?
