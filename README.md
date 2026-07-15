@@ -3,7 +3,7 @@
 Run, monitor, and review several terminal coding agents while VS Code remains
 your editor, diff viewer, task runner, and source-control client.
 
-> **Preview:** Lookout 0.1 is an early public release. The core workflow is
+> **Preview:** Lookout 1.0 is an early public release. The core workflow is
 > tested, but provider CLI integrations and remote-platform behavior can change
 > as Codex, Claude Code, and VS Code evolve.
 

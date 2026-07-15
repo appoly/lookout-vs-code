@@ -171,7 +171,7 @@ The decision-complete design is in [the opt-in Compound Engineering plan](plans/
 - [x] Passive Getting Started walkthrough for profiles, launch, Sessions, Review, and continuity.
 - [x] Advisory three-OS provider compatibility lab with deterministic fake CLIs and sanitized installed-CLI surface reports.
 
-## Then: Marketplace release (0.1, preview)
+## Then: Marketplace release (1.0, preview)
 
 Details in [the 2026-07-10 review](sessions/2026-07-10-review.md):
 
