@@ -254,6 +254,33 @@ test('accepts authenticated agent and usage events on loopback', async (context)
   }
 });
 
+test('provider hooks fail open when their Lookout bridge is stale', async () => {
+  const result = await runNotify(
+    {
+      url: 'http://127.0.0.1:1/events',
+      token: 'stale-bridge-token'
+    },
+    ['--hook', 'codex', 'turn-end'],
+    { hook_event_name: 'Stop' }
+  );
+  assert.equal(result.code, 0);
+  assert.equal(result.stdout.trim(), '{}');
+});
+
+test('custom attention commands report stale bridge delivery failures', async () => {
+  const result = await runNotify(
+    {
+      url: 'http://127.0.0.1:1/events',
+      token: 'stale-bridge-token'
+    },
+    ['attention'],
+    {}
+  );
+  assert.equal(result.code, 1);
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr, 'Lookout notification failed\n');
+});
+
 function post(url: string, token: string, value: object): Promise<Response> {
   return fetch(url, {
     method: 'POST',

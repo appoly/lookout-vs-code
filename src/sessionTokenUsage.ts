@@ -1,6 +1,35 @@
-import type { AgentSession, SessionTokenUsage } from './types';
+import type {
+  AgentSession,
+  DelegatedAgentTokenUsage,
+  SessionTokenUsage
+} from './types';
 
 export type TokenUsageSeverity = 'normal' | 'warning' | 'critical';
+
+interface ObservedDelegatedUsage {
+  readonly observedAt: number;
+  readonly delegatedAgents: readonly DelegatedAgentTokenUsage[];
+}
+
+export function latestDelegatedTokenUsage(
+  snapshot: ObservedDelegatedUsage,
+  previous: ObservedDelegatedUsage,
+  pending?: ObservedDelegatedUsage
+): ObservedDelegatedUsage {
+  let latest = previous;
+  if (pending && pending.observedAt > latest.observedAt) {
+    latest = pending;
+  }
+  // An empty account snapshot means that this status-line payload did not
+  // carry task data; only a dedicated delegated-agent event may clear tasks.
+  if (
+    snapshot.delegatedAgents.length > 0 &&
+    snapshot.observedAt > latest.observedAt
+  ) {
+    latest = snapshot;
+  }
+  return latest;
+}
 
 export function formatTokenCount(value: number): string {
   const count = Math.max(0, Math.floor(value));

@@ -105,7 +105,11 @@ async function main(): Promise<void> {
       req.destroy(new Error('Lookout notification timed out'));
     });
     req.end(body);
-  }).catch(() => undefined);
+  }).catch((error: unknown) => {
+    if (!parsedArguments.hookProvider) {
+      throw error;
+    }
+  });
   acknowledge(parsedArguments.hookProvider);
 }
 
@@ -195,5 +199,15 @@ function acknowledge(provider: HookProvider | undefined): void {
 void main().catch(() => {
   const values = process.argv.slice(2);
   const hookIndex = values.indexOf('--hook');
-  acknowledge(hookIndex >= 0 && values[hookIndex + 1] === 'codex' ? 'codex' : undefined);
+  const candidate = hookIndex >= 0 ? values[hookIndex + 1] : undefined;
+  const provider =
+    candidate === 'codex' || candidate === 'claude'
+      ? candidate
+      : undefined;
+  if (provider) {
+    acknowledge(provider);
+    return;
+  }
+  process.stderr.write('Lookout notification failed\n');
+  process.exitCode = 1;
 });

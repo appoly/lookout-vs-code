@@ -58,6 +58,7 @@ import type {
 } from './globalHistoryModel';
 import { currentWorkspaceIdentity } from './workspaceIdentity';
 import { CoordinationService } from './coordinationService';
+import { runtimeErrorIdentity } from './runtimeError';
 
 let runtimeLog: vscode.LogOutputChannel | undefined;
 
@@ -480,19 +481,8 @@ function register<Args extends unknown[]>(
 }
 
 function reportBackgroundError(scope: string, error: unknown): void {
-  const name = error instanceof Error ? error.name : typeof error;
-  const code = errorCode(error);
+  const { name, code } = runtimeErrorIdentity(error);
   runtimeLog?.error(`[${scope}] failed (${name}${code ? `:${code}` : ''})`);
-}
-
-function errorCode(error: unknown): string | undefined {
-  if (!error || typeof error !== 'object' || !('code' in error)) {
-    return undefined;
-  }
-  const code = (error as { readonly code?: unknown }).code;
-  return typeof code === 'string' && /^[A-Z0-9_-]{1,40}$/i.test(code)
-    ? code
-    : undefined;
 }
 
 async function launchAgent(
