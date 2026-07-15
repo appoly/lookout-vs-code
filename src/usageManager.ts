@@ -47,6 +47,9 @@ export class UsageManager implements vscode.Disposable {
     );
     this.disposables.push(
       sessions.onDidReceiveUsage((event) => {
+        if (event.kind === 'delegated-agents') {
+          return;
+        }
         const snapshot: UsageSnapshot = {
           provider: 'claude',
           status: event.windows.length > 0 ? 'available' : 'waiting',
@@ -57,8 +60,9 @@ export class UsageManager implements vscode.Disposable {
             ? { detail: 'Claude did not report subscription quota windows' }
             : {})
         };
-        this.setSnapshot(snapshot);
-        void this.context.globalState.update(CLAUDE_STORAGE_KEY, snapshot);
+        if (this.setSnapshot(snapshot)) {
+          void this.context.globalState.update(CLAUDE_STORAGE_KEY, snapshot);
+        }
       }),
       vscode.window.onDidChangeWindowState((state) => {
         if (state.focused) {
@@ -122,9 +126,14 @@ export class UsageManager implements vscode.Disposable {
     this.changedEmitter.dispose();
   }
 
-  private setSnapshot(snapshot: UsageSnapshot): void {
+  private setSnapshot(snapshot: UsageSnapshot): boolean {
+    const current = this.snapshots.get(snapshot.provider);
+    if (current && snapshot.observedAt < current.observedAt) {
+      return false;
+    }
     this.snapshots.set(snapshot.provider, snapshot);
     this.changedEmitter.fire();
+    return true;
   }
 }
 

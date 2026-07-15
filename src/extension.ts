@@ -80,7 +80,7 @@ export async function activate(
   const sessionStatus = new SessionStatusBar(sessions);
   const reviewTree = new ReviewTreeProvider(sessions, context.workspaceState);
   const usage = new UsageManager(context, sessions);
-  const usageTree = new UsageTreeProvider(usage);
+  const usageTree = new UsageTreeProvider(usage, sessions);
   const usageStatus = new UsageStatusBar(usage);
   const workspaceIdentity = currentWorkspaceIdentity(context);
   const globalHistory = new GlobalHistoryService(

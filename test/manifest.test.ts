@@ -124,6 +124,15 @@ test('launches agents in the native terminal panel by default', () => {
   assert.equal(setting?.default, 'panel');
 });
 
+test('keeps per-agent token budgets opt-in', () => {
+  const properties = manifest.contributes?.configuration?.properties;
+  assert.equal(properties?.['lookout.usage.codex.tokenBudget']?.default, 0);
+  assert.equal(
+    properties?.['lookout.usage.claude.contextWarningTokens']?.default,
+    0
+  );
+});
+
 test('ships a passive getting-started walkthrough', () => {
   const walkthrough = manifest.contributes?.walkthroughs?.find(
     (candidate) => candidate.id === 'lookout.gettingStarted'

@@ -37,6 +37,26 @@ test('persisted snapshots remove transient command state and custom commands', (
   assert.equal(JSON.stringify(store).includes('--secret'), false);
 });
 
+test('persists numeric token telemetry without delegated identities', () => {
+  const session = {
+    ...createSession('claude', 'Claude', 'claude', '/repo', 1, 'one'),
+    tokenUsage: {
+      source: 'claude-statusline' as const,
+      observedAt: 2,
+      contextTokens: 12_000,
+      inputTokens: 11_000,
+      outputTokens: 1_000,
+      delegatedAgents: [
+        { id: 'private-task-id', label: 'private task label', tokenCount: 5_000 }
+      ]
+    }
+  };
+  const stored = createPersistedSessionStore([session], [], 1).sessions[0];
+  assert.equal(stored.tokenUsage?.contextTokens, 12_000);
+  assert.deepEqual(stored.tokenUsage?.delegatedAgents, []);
+  assert.doesNotMatch(JSON.stringify(stored), /private/);
+});
+
 test('decodes valid v2 state idempotently and advances event sequence', () => {
   const session = createSession('claude', 'One', 'claude', '/repo', 1, 'one');
   const current = {

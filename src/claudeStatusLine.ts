@@ -1,16 +1,44 @@
 import { request } from 'node:http';
-import { formatClaudeUsage, normalizeClaudeUsage } from './claudeUsage';
+import {
+  formatClaudeUsage,
+  normalizeClaudeDelegatedAgentTokenUsage,
+  normalizeClaudeSessionTokenUsage,
+  normalizeClaudeUsage
+} from './claudeUsage';
+
+const subagentMode = process.argv.includes('--subagents');
+const MAX_STDIN_BYTES = 64 * 1024;
 
 async function main(): Promise<void> {
   const input = await readStdin();
   const parsed: unknown = JSON.parse(input);
-  const windows = normalizeClaudeUsage(parsed);
+  const observedAt = Date.now();
+  if (subagentMode) {
+    const sessionId = process.env.LOOKOUT_SESSION_ID;
+    if (sessionId) {
+      await postUsage({
+        kind: 'delegated-agents',
+        provider: 'claude',
+        observedAt,
+        sessionId,
+        delegatedAgents: normalizeClaudeDelegatedAgentTokenUsage(parsed)
+      });
+    }
+    return;
+  }
 
-  if (windows.length > 0) {
+  const windows = normalizeClaudeUsage(parsed);
+  const tokenUsage = normalizeClaudeSessionTokenUsage(parsed, observedAt);
+
+  if (windows.length > 0 || tokenUsage) {
     await postUsage({
       provider: 'claude',
-      observedAt: Date.now(),
-      windows
+      observedAt,
+      windows,
+      ...(process.env.LOOKOUT_SESSION_ID
+        ? { sessionId: process.env.LOOKOUT_SESSION_ID }
+        : {}),
+      ...(tokenUsage ? { tokenUsage } : {})
     });
   }
   process.stdout.write(formatClaudeUsage(windows));
@@ -50,12 +78,20 @@ async function postUsage(body: object): Promise<void> {
 
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
+  let total = 0;
   for await (const chunk of process.stdin) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.length;
+    if (total > MAX_STDIN_BYTES) {
+      throw new Error('Claude status-line input exceeded the size limit');
+    }
+    chunks.push(buffer);
   }
   return Buffer.concat(chunks).toString('utf8');
 }
 
 void main().catch(() => {
-  process.stdout.write('Claude');
+  if (!subagentMode) {
+    process.stdout.write('Claude');
+  }
 });

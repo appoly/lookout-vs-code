@@ -1,18 +1,27 @@
 import * as vscode from 'vscode';
 import type { UsageManager } from './usageManager';
+import type { SessionManager } from './sessionManager';
 import type { UsageSnapshot, UsageWindow } from './usageTypes';
 import { formatResetDescription, selectStatusWindow } from './usageFormatting';
+import type { AgentSession } from './types';
+import {
+  sessionTokenDetailLines,
+  sessionTokenSummary,
+  tokenUsageSeverity
+} from './sessionTokenUsage';
 
 type UsageTreeValue =
   | { readonly kind: 'provider'; readonly snapshot: UsageSnapshot }
   | { readonly kind: 'window'; readonly snapshot: UsageSnapshot; readonly window: UsageWindow }
+  | { readonly kind: 'agents' }
+  | { readonly kind: 'agent'; readonly session: AgentSession }
   | { readonly kind: 'detail'; readonly label: string; readonly description?: string };
 
 export class UsageTreeItem extends vscode.TreeItem {
   public constructor(public readonly value: UsageTreeValue) {
     super(
       itemLabel(value),
-      value.kind === 'provider'
+      value.kind === 'provider' || value.kind === 'agents' || value.kind === 'agent'
         ? vscode.TreeItemCollapsibleState.Expanded
         : vscode.TreeItemCollapsibleState.None
     );
@@ -20,6 +29,17 @@ export class UsageTreeItem extends vscode.TreeItem {
       this.description = providerDescription(value.snapshot);
       this.iconPath = providerIcon(value.snapshot);
       this.tooltip = `${title(value.snapshot.provider)} usage from ${sourceLabel(value.snapshot.source)}\nLast checked ${new Date(value.snapshot.observedAt).toLocaleString()}`;
+    } else if (value.kind === 'agents') {
+      this.iconPath = new vscode.ThemeIcon('server-process');
+      this.tooltip = 'Per-agent token tracking and configured budgets';
+    } else if (value.kind === 'agent') {
+      this.description = sessionTokenSummary(value.session);
+      this.iconPath = agentUsageIcon(value.session);
+      this.tooltip = [
+        `${value.session.label} · ${value.session.kind}`,
+        ...sessionTokenDetailLines(value.session)
+      ].join('\n');
+      this.contextValue = 'lookout.usage.agent';
     } else if (value.kind === 'window') {
       this.description = formatResetDescription(value.window.resetsAt);
       this.iconPath = usageIcon(value.window.usedPercent);
@@ -39,11 +59,17 @@ export class UsageTreeProvider
   implements vscode.TreeDataProvider<UsageTreeItem>, vscode.Disposable
 {
   private readonly changedEmitter = new vscode.EventEmitter<void>();
-  private readonly subscription: vscode.Disposable;
+  private readonly subscriptions: vscode.Disposable[];
   public readonly onDidChangeTreeData = this.changedEmitter.event;
 
-  public constructor(private readonly manager: UsageManager) {
-    this.subscription = manager.onDidChange(() => this.changedEmitter.fire());
+  public constructor(
+    private readonly manager: UsageManager,
+    private readonly sessions: SessionManager
+  ) {
+    this.subscriptions = [
+      manager.onDidChange(() => this.changedEmitter.fire()),
+      sessions.onDidChange(() => this.changedEmitter.fire())
+    ];
   }
 
   public getTreeItem(element: UsageTreeItem): vscode.TreeItem {
@@ -52,9 +78,25 @@ export class UsageTreeProvider
 
   public getChildren(element?: UsageTreeItem): UsageTreeItem[] {
     if (!element) {
-      return this.manager
+      const agents = trackedSessions(this.sessions.list());
+      return [
+        ...(agents.length > 0
+          ? [new UsageTreeItem({ kind: 'agents' as const })]
+          : []),
+        ...this.manager
         .list()
-        .map((snapshot) => new UsageTreeItem({ kind: 'provider', snapshot }));
+        .map((snapshot) => new UsageTreeItem({ kind: 'provider', snapshot }))
+      ];
+    }
+    if (element.value.kind === 'agents') {
+      return trackedSessions(this.sessions.list()).map(
+        (session) => new UsageTreeItem({ kind: 'agent', session })
+      );
+    }
+    if (element.value.kind === 'agent') {
+      return sessionTokenDetailLines(element.value.session).map(
+        (label) => new UsageTreeItem({ kind: 'detail', label })
+      );
     }
     if (element.value.kind !== 'provider') {
       return [];
@@ -85,7 +127,9 @@ export class UsageTreeProvider
   }
 
   public dispose(): void {
-    this.subscription.dispose();
+    for (const subscription of this.subscriptions) {
+      subscription.dispose();
+    }
     this.changedEmitter.dispose();
   }
 }
@@ -148,7 +192,37 @@ function itemLabel(value: UsageTreeValue): string {
   if (value.kind === 'window') {
     return `${value.window.label}: ${Math.round(value.window.usedPercent)}% used`;
   }
+  if (value.kind === 'agents') {
+    return 'Agents';
+  }
+  if (value.kind === 'agent') {
+    return value.session.label;
+  }
   return value.label;
+}
+
+function trackedSessions(sessions: readonly AgentSession[]): AgentSession[] {
+  return sessions.filter(
+    (session) => session.tokenUsage !== undefined || session.tokenBudget !== undefined
+  );
+}
+
+function agentUsageIcon(session: AgentSession): vscode.ThemeIcon {
+  const severity = tokenUsageSeverity(
+    session,
+    warningThreshold(),
+    criticalThreshold()
+  );
+  if (severity === 'critical') {
+    return new vscode.ThemeIcon('flame', new vscode.ThemeColor('list.errorForeground'));
+  }
+  if (severity === 'warning') {
+    return new vscode.ThemeIcon(
+      'warning',
+      new vscode.ThemeColor('list.warningForeground')
+    );
+  }
+  return new vscode.ThemeIcon(session.kind === 'claude' ? 'sparkle' : 'terminal');
 }
 
 function title(provider: UsageSnapshot['provider']): string {

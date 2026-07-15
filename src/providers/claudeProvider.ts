@@ -29,7 +29,8 @@ const capabilities: ProviderCapabilities = {
   },
   usage: {
     support: 'supported',
-    detail: 'Claude usage is available through the existing status-line bridge.'
+    detail:
+      'The status-line bridge reports account limits, live context, cost, and delegated-agent token counts.'
   },
   historyDiscovery: {
     support: 'limited',
@@ -52,4 +53,3 @@ export const claudeProvider: ProviderAdapter = {
       (id) => `--resume ${id} --fork-session`
     )
 };
-

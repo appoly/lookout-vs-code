@@ -941,10 +941,22 @@
           "default": false,
           "description": "Show separate GPT Codex Spark rate-limit buckets in the Usage Limits view."
         },
+        "lookout.usage.codex.tokenBudget": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "description": "Provider-managed rollout token budget applied to newly launched direct Codex sessions. Set to 0 to disable. Requires a Codex CLI version that supports rollout budgets."
+        },
         "lookout.usage.claude.statusLineIntegration": {
           "type": "boolean",
           "default": true,
-          "description": "Add a Lookout status-line bridge to extension-launched Claude sessions so subscription limits can be tracked."
+          "description": "Add Lookout status-line bridges to extension-launched Claude sessions so subscription limits, live context tokens, estimated session cost, and delegated-agent token counts can be tracked."
+        },
+        "lookout.usage.claude.contextWarningTokens": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "description": "Highlight newly launched Claude sessions when their current context reaches this many tokens. This is a warning, not a cumulative token cap, and does not stop Claude. Set to 0 to disable."
         },
         "lookout.usage.claude.enabled": {
           "type": "boolean",

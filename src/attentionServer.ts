@@ -1,7 +1,13 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { AgentEvent, AgentReportedStatus, CommandResult } from './types';
+import type {
+  AgentEvent,
+  AgentReportedStatus,
+  CommandResult,
+  DelegatedAgentTokenUsage,
+  SessionTokenUsage
+} from './types';
 import type { UsageBridgeEvent, UsageWindow } from './usageTypes';
 
 const EVENT_STATUSES = new Set<AgentReportedStatus>([
@@ -295,18 +301,124 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseUsageEvent(value: unknown): UsageBridgeEvent {
-  if (!isRecord(value) || value.provider !== 'claude' || !Array.isArray(value.windows)) {
+  if (!isRecord(value) || value.provider !== 'claude') {
+    throw new Error('Invalid usage event');
+  }
+  const observedAt = sanitizeObservedAt(value.observedAt);
+  const sessionId =
+    typeof value.sessionId === 'string' && value.sessionId.length > 0
+      ? value.sessionId.slice(0, 200)
+      : undefined;
+  if (value.kind === 'delegated-agents') {
+    if (!sessionId || !Array.isArray(value.delegatedAgents)) {
+      throw new Error('Invalid delegated usage event');
+    }
+    if (value.delegatedAgents.length > 64) {
+      throw new Error('Too many delegated agents');
+    }
+    return {
+      kind: 'delegated-agents',
+      provider: 'claude',
+      observedAt,
+      sessionId,
+      delegatedAgents: value.delegatedAgents.flatMap(parseDelegatedTokenUsage)
+    };
+  }
+  if (
+    (value.kind !== undefined && value.kind !== 'snapshot') ||
+    !Array.isArray(value.windows)
+  ) {
     throw new Error('Invalid usage event');
   }
   if (value.windows.length > 16) {
     throw new Error('Too many usage windows');
   }
   const windows = value.windows.map(parseUsageWindow);
+  const tokenUsage = parseSessionTokenUsage(value.tokenUsage);
   return {
     provider: 'claude',
-    observedAt: typeof value.observedAt === 'number' ? value.observedAt : Date.now(),
-    windows
+    observedAt,
+    windows,
+    ...(sessionId ? { sessionId } : {}),
+    ...(tokenUsage ? { tokenUsage } : {})
   };
+}
+
+function parseSessionTokenUsage(value: unknown): SessionTokenUsage | undefined {
+  if (
+    !isRecord(value) ||
+    value.source !== 'claude-statusline' ||
+    typeof value.contextTokens !== 'number' ||
+    typeof value.inputTokens !== 'number' ||
+    typeof value.outputTokens !== 'number' ||
+    !Number.isFinite(value.contextTokens) ||
+    !Number.isFinite(value.inputTokens) ||
+    !Number.isFinite(value.outputTokens)
+  ) {
+    return undefined;
+  }
+  const delegatedAgents = Array.isArray(value.delegatedAgents)
+    ? value.delegatedAgents.slice(0, 64).flatMap(parseDelegatedTokenUsage)
+    : [];
+  return {
+    source: 'claude-statusline',
+    observedAt: sanitizeObservedAt(value.observedAt),
+    contextTokens: boundedCount(value.contextTokens),
+    inputTokens: boundedCount(value.inputTokens),
+    outputTokens: boundedCount(value.outputTokens),
+    ...(typeof value.contextWindowTokens === 'number' &&
+    Number.isFinite(value.contextWindowTokens)
+      ? { contextWindowTokens: boundedCount(value.contextWindowTokens) }
+      : {}),
+    ...(typeof value.contextUsedPercent === 'number' &&
+    Number.isFinite(value.contextUsedPercent)
+      ? {
+          contextUsedPercent: Math.max(
+            0,
+            Math.min(100, value.contextUsedPercent)
+          )
+        }
+      : {}),
+    ...(typeof value.totalCostUsd === 'number' && Number.isFinite(value.totalCostUsd)
+      ? { totalCostUsd: Math.max(0, value.totalCostUsd) }
+      : {}),
+    delegatedAgents
+  };
+}
+
+function parseDelegatedTokenUsage(value: unknown): DelegatedAgentTokenUsage[] {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== 'string' ||
+    value.id.length === 0 ||
+    typeof value.label !== 'string' ||
+    value.label.length === 0 ||
+    typeof value.tokenCount !== 'number' ||
+    !Number.isFinite(value.tokenCount)
+  ) {
+    return [];
+  }
+  return [{
+    id: value.id.slice(0, 200),
+    label: value.label.slice(0, 120),
+    tokenCount: boundedCount(value.tokenCount),
+    ...(typeof value.status === 'string'
+      ? { status: value.status.slice(0, 40) }
+      : {})
+  }];
+}
+
+function boundedCount(value: number): number {
+  return Number.isFinite(value)
+    ? Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(value)))
+    : 0;
+}
+
+function sanitizeObservedAt(value: unknown): number {
+  const now = Date.now();
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(now + 5 * 60_000, Math.floor(value)))
+    : now;
 }
 
 function parseUsageWindow(value: unknown): UsageWindow {
@@ -314,7 +426,8 @@ function parseUsageWindow(value: unknown): UsageWindow {
     !isRecord(value) ||
     typeof value.id !== 'string' ||
     typeof value.label !== 'string' ||
-    typeof value.usedPercent !== 'number'
+    typeof value.usedPercent !== 'number' ||
+    !Number.isFinite(value.usedPercent)
   ) {
     throw new Error('Invalid usage window');
   }
@@ -322,8 +435,12 @@ function parseUsageWindow(value: unknown): UsageWindow {
     id: value.id.slice(0, 80),
     label: value.label.slice(0, 80),
     usedPercent: Math.max(0, Math.min(100, value.usedPercent)),
-    ...(typeof value.resetsAt === 'number' ? { resetsAt: value.resetsAt } : {}),
-    ...(typeof value.windowMinutes === 'number' ? { windowMinutes: value.windowMinutes } : {})
+    ...(typeof value.resetsAt === 'number' && Number.isFinite(value.resetsAt)
+      ? { resetsAt: boundedCount(value.resetsAt) }
+      : {}),
+    ...(typeof value.windowMinutes === 'number' && Number.isFinite(value.windowMinutes)
+      ? { windowMinutes: boundedCount(value.windowMinutes) }
+      : {})
   };
 }
 

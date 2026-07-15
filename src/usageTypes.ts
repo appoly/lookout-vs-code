@@ -1,3 +1,8 @@
+import type {
+  DelegatedAgentTokenUsage,
+  SessionTokenUsage
+} from './types';
+
 export type UsageProviderId = 'codex' | 'claude';
 
 export type UsageStatus =
@@ -31,8 +36,24 @@ export interface UsageSnapshot {
   };
 }
 
-export interface UsageBridgeEvent {
+interface UsageBridgeEventBase {
   readonly provider: 'claude';
   readonly observedAt: number;
-  readonly windows: readonly UsageWindow[];
+  readonly sessionId?: string;
 }
+
+export interface UsageSnapshotBridgeEvent extends UsageBridgeEventBase {
+  readonly kind?: 'snapshot';
+  readonly windows: readonly UsageWindow[];
+  readonly tokenUsage?: SessionTokenUsage;
+}
+
+export interface DelegatedUsageBridgeEvent extends UsageBridgeEventBase {
+  readonly kind: 'delegated-agents';
+  readonly sessionId: string;
+  readonly delegatedAgents: readonly DelegatedAgentTokenUsage[];
+}
+
+export type UsageBridgeEvent =
+  | UsageSnapshotBridgeEvent
+  | DelegatedUsageBridgeEvent;

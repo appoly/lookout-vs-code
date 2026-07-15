@@ -25,6 +25,21 @@ const checks = [
     /SESSION_ID/i
   ]),
   commandCheck('codex-features', 'codex', ['features', 'list'], []),
+  commandCheck(
+    'codex-rollout-budget-config',
+    'codex',
+    [
+      '-c',
+      'features.rollout_budget.enabled=true',
+      '-c',
+      'features.rollout_budget.limit_tokens=1000',
+      '-c',
+      'features.rollout_budget.reminder_at_remaining_tokens=[]',
+      'features',
+      'list'
+    ],
+    [/^rollout_budget\s+.*\btrue\s*$/im]
+  ),
   commandCheck('claude-version', 'claude', ['--version'], []),
   commandCheck('claude-help', 'claude', ['--help'], [
     /--resume/i,

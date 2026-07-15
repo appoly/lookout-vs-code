@@ -171,13 +171,51 @@ test('accepts authenticated agent and usage events on loopback', async (context)
       {
         provider: 'claude',
         observedAt: 42,
+        sessionId: 'session-1',
         windows: [
           { id: 'five_hour', label: '5 hour', usedPercent: 150 }
-        ]
+        ],
+        tokenUsage: {
+          source: 'claude-statusline',
+          observedAt: 42,
+          contextTokens: 12_000,
+          inputTokens: 11_000,
+          outputTokens: 1_000,
+          contextUsedPercent: 6,
+          delegatedAgents: [
+            { id: 'child-1', label: 'Review', tokenCount: 4_000 }
+          ]
+        }
       }
     );
     assert.equal(usageResponse.status, 204);
-    assert.equal(usageEvents[0]?.windows[0]?.usedPercent, 100);
+    const usage = usageEvents[0];
+    assert.ok(usage && usage.kind !== 'delegated-agents');
+    assert.equal(usage.windows[0]?.usedPercent, 100);
+    assert.equal(usage.sessionId, 'session-1');
+    assert.equal(usage.tokenUsage?.contextTokens, 12_000);
+    assert.equal(
+      usage.tokenUsage?.delegatedAgents[0]?.tokenCount,
+      4_000
+    );
+
+    const delegatedResponse = await post(
+      endpoint.url.replace(/\/events$/, '/usage'),
+      endpoint.token,
+      {
+        kind: 'delegated-agents',
+        provider: 'claude',
+        observedAt: 43,
+        sessionId: 'session-1',
+        delegatedAgents: [
+          { id: 'child-1', label: 'Review', tokenCount: 4_500 }
+        ]
+      }
+    );
+    assert.equal(delegatedResponse.status, 204);
+    const delegated = usageEvents[1];
+    assert.ok(delegated && delegated.kind === 'delegated-agents');
+    assert.equal(delegated.delegatedAgents[0]?.tokenCount, 4_500);
 
     const unauthorized = await post(endpoint.url, 'wrong-token', {
       sessionId: 'session-1',
@@ -187,6 +225,19 @@ test('accepts authenticated agent and usage events on loopback', async (context)
   } finally {
     server.dispose();
   }
+});
+
+test('provider hooks fail open when their Lookout bridge is stale', async () => {
+  const result = await runNotify(
+    {
+      url: 'http://127.0.0.1:1/events',
+      token: 'stale-bridge-token'
+    },
+    ['--hook', 'codex', 'turn-end'],
+    { hook_event_name: 'Stop' }
+  );
+  assert.equal(result.code, 0);
+  assert.equal(result.stdout.trim(), '{}');
 });
 
 function post(url: string, token: string, value: object): Promise<Response> {

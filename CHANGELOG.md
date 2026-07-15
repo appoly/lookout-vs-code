@@ -2,6 +2,8 @@
 
 ## 0.1.0 — Unreleased
 
+- Add per-agent Claude context, cost, and delegated-agent token tracking, plus
+  visible warning thresholds and provider-managed Codex rollout token budgets.
 - Prepare the first public release under Appoly's publisher and repository
   identity, with explicit README risk, warranty, and liability guidance.
 - Add current sidebar and usage screenshots to the Marketplace README.

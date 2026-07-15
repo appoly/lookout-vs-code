@@ -71,36 +71,52 @@ async function main(): Promise<void> {
 
   const body = JSON.stringify(event);
 
-  await new Promise<void>((resolve, reject) => {
-    const req = request(
-      url,
-      {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${token}`,
-          'content-type': 'application/json',
-          'content-length': Buffer.byteLength(body)
-        }
-      },
-      (response) => {
-        response.resume();
-        response.on('end', () => {
-          if ((response.statusCode ?? 500) >= 300) {
-            reject(new Error(`Lookout notification failed: ${response.statusCode}`));
-          } else {
-            resolve();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const req = request(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${token}`,
+            'content-type': 'application/json',
+            'content-length': Buffer.byteLength(body)
           }
-        });
-      }
-    );
-    req.once('error', reject);
-    // A stale endpoint that accepts but never answers must not stall the
-    // agent's hook budget (Claude allows ~60s per hook; Codex 10s).
-    req.setTimeout(3_000, () => {
-      req.destroy(new Error('Lookout notification timed out'));
+        },
+        (response) => {
+          response.resume();
+          response.on('end', () => {
+            if ((response.statusCode ?? 500) >= 300) {
+              reject(
+                new Error(`Lookout notification failed: ${response.statusCode}`)
+              );
+            } else {
+              resolve();
+            }
+          });
+        }
+      );
+      req.once('error', reject);
+      // A stale endpoint that accepts but never answers must not stall the
+      // agent's hook budget (Claude allows ~60s per hook; Codex 10s).
+      req.setTimeout(3_000, () => {
+        req.destroy(new Error('Lookout notification timed out'));
+      });
+      req.end(body);
     });
-    req.end(body);
-  });
+  } catch (error) {
+    // The bridge is extension-owned and can disappear while an agent terminal
+    // remains alive (window reload, extension update, or shutdown). Provider
+    // lifecycle hooks are best-effort telemetry, so a stale endpoint must not
+    // turn an otherwise successful provider event into visible hook noise.
+    if (!parsedArguments.hookProvider) {
+      throw error;
+    }
+    if (parsedArguments.hookProvider === 'codex') {
+      process.stdout.write('{}\n');
+    }
+    return;
+  }
   if (parsedArguments.hookProvider === 'codex') {
     process.stdout.write('{}\n');
   }

@@ -63,10 +63,37 @@ export interface AgentSession {
   providerSessions: ProviderSessionReference[];
   lineage: SessionLineage;
   integration: SessionIntegration;
+  tokenUsage?: SessionTokenUsage;
+  tokenBudget?: SessionTokenBudget;
   archivedAt?: number;
   latestEvent?: string;
   exitCode?: number;
   readonly baseline?: GitBaseline;
+}
+
+export interface SessionTokenUsage {
+  readonly source: 'claude-statusline';
+  readonly observedAt: number;
+  /** Tokens currently occupying Claude's context, not cumulative session spend. */
+  readonly contextTokens: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly contextWindowTokens?: number;
+  readonly contextUsedPercent?: number;
+  readonly totalCostUsd?: number;
+  readonly delegatedAgents: readonly DelegatedAgentTokenUsage[];
+}
+
+export interface DelegatedAgentTokenUsage {
+  readonly id: string;
+  readonly label: string;
+  readonly tokenCount: number;
+  readonly status?: string;
+}
+
+export interface SessionTokenBudget {
+  readonly kind: 'codex-rollout' | 'claude-context-warning';
+  readonly limitTokens: number;
 }
 
 export interface BackgroundAgent {

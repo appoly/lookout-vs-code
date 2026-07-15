@@ -144,6 +144,10 @@ The most common settings are:
   `lookout.claude.lifecycleIntegration` — session-local lifecycle hooks;
 - `lookout.usage.codex.enabled` and `lookout.usage.claude.enabled` — usage
   providers and UI;
+- `lookout.usage.codex.tokenBudget` — apply Codex's provider-managed rollout
+  token budget to newly launched direct Codex sessions (`0` disables it);
+- `lookout.usage.claude.contextWarningTokens` — highlight a Claude session
+  when its live context reaches the configured size (`0` disables it);
 - `lookout.terminals.location` — `panel` (default) or `editor`;
 - `lookout.notifyOnAttention`, `lookout.notifyOnTurnComplete`, and
   `lookout.notifyOnAgentExit` — notification behavior;
@@ -157,13 +161,17 @@ The most common settings are:
 - `lookout.experimental.crossWindowCoordination` — share live metadata between
   Lookout windows on the same execution host; disabled by default.
 
-Codex usage comes from the CLI's app-server JSON-RPC rate-limit method. Claude
-usage comes from its documented custom status-line JSON after the first response
-in a Lookout-launched session. Both are account-wide limits, not per-terminal
-budgets.
+Codex account usage comes from the CLI's app-server JSON-RPC rate-limit method.
+Claude account usage comes from its documented custom status-line JSON after the
+first response in a Lookout-launched session. Those provider windows are
+account-wide. The same Claude bridge also reports per-session live context,
+estimated cost when available, and delegated-agent token counts; current-context
+tokens are not cumulative spend. Codex can additionally receive a native rollout
+token budget at launch. Claude's interactive CLI exposes no equivalent hard
+token cap, so its configurable per-session threshold is warning-only.
 
 The Usage Limits view distinguishes available, stale, exhausted, and reset-due
-provider windows:
+provider windows and lists tracked per-agent token data and budgets:
 
 ![Lookout Usage Limits view showing Codex and Claude quota windows and reset times](assets/screenshots/usage-limits.png)
 

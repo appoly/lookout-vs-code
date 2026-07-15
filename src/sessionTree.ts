@@ -7,6 +7,11 @@ import {
   sessionOperationalStats
 } from './sessionStats';
 import type { AgentSession, SessionStatus } from './types';
+import {
+  sessionTokenDetailLines,
+  sessionTokenSummary,
+  tokenUsageSeverity
+} from './sessionTokenUsage';
 
 const STATUS_ICONS: Record<SessionStatus, vscode.ThemeIcon> = {
   starting: new vscode.ThemeIcon('loading~spin'),
@@ -52,9 +57,10 @@ export class SessionTreeItem extends vscode.TreeItem {
       ...(session.integration.conflict
         ? ['Integration warning: provider session identity conflict']
         : []),
+      ...sessionTokenDetailLines(session),
       ...operationalStatsTooltipLines(stats)
     ].join('\n');
-    this.iconPath = STATUS_ICONS[session.status];
+    this.iconPath = sessionIcon(session);
     this.command = {
       command: 'lookout.focusSession',
       title: 'Focus Agent',
@@ -173,7 +179,36 @@ function sessionDescription(session: AgentSession): string {
   const unread = session.unread ? '● ' : '';
   const detail = statusLabel(session.status);
   const branch = session.baseline?.branch ? ` · ${session.baseline.branch}` : '';
-  return `${unread}${directory}${branch} · ${detail}`;
+  const tokens = sessionTokenSummary(session);
+  return `${unread}${directory}${branch} · ${detail}${
+    tokens ? ` · ${tokens}` : ''
+  }`;
+}
+
+function sessionIcon(session: AgentSession): vscode.ThemeIcon {
+  const base = STATUS_ICONS[session.status];
+  if (session.status === 'attention' || session.status === 'failed') {
+    return base;
+  }
+  const severity = tokenUsageSeverity(
+    session,
+    vscode.workspace
+      .getConfiguration('lookout.usage')
+      .get('warningThreshold', 80),
+    vscode.workspace
+      .getConfiguration('lookout.usage')
+      .get('criticalThreshold', 95)
+  );
+  if (severity === 'critical') {
+    return new vscode.ThemeIcon(base.id, new vscode.ThemeColor('list.errorForeground'));
+  }
+  if (severity === 'warning') {
+    return new vscode.ThemeIcon(
+      base.id,
+      new vscode.ThemeColor('list.warningForeground')
+    );
+  }
+  return base;
 }
 
 function statusLabel(status: SessionStatus): string {

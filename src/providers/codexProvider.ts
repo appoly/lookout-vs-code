@@ -23,7 +23,8 @@ const capabilities: ProviderCapabilities = {
   },
   usage: {
     support: 'supported',
-    detail: 'Structured Codex usage is available through the existing provider.'
+    detail:
+      'Structured account usage is available, and direct launches can receive a native rollout token budget.'
   },
   historyDiscovery: {
     support: 'limited',
@@ -42,4 +43,3 @@ export const codexProvider: ProviderAdapter = {
   buildFork: (request) =>
     buildDirectContinuation('codex', request, (id) => `fork ${id}`)
 };
-

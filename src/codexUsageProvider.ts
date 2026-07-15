@@ -6,6 +6,24 @@ import {
 import type { UsageSnapshot, UsageWindow } from './usageTypes';
 
 const JSON_RPC_METHOD_NOT_FOUND = -32601;
+const MAX_STDOUT_LINE_LENGTH = 1024 * 1024;
+
+type AppServerSpawner = (
+  command: string,
+  args: readonly string[],
+  viaCmdWrapper: boolean
+) => ChildProcessWithoutNullStreams;
+
+interface AppServerLaunchTarget {
+  readonly command: string;
+  readonly args: string[];
+  readonly viaCmdWrapper: boolean;
+}
+
+interface AppServerRuntime {
+  readonly spawnAppServer?: AppServerSpawner;
+  readonly resolveLaunchTarget?: () => Promise<AppServerLaunchTarget>;
+}
 
 interface RpcResponse {
   readonly id?: number;
@@ -58,8 +76,11 @@ export class CodexUsageProvider {
   >();
   private lastError = '';
   private refreshPromise: Promise<void> | undefined;
+  private startPromise: Promise<void> | undefined;
   private startAttempted = false;
-  private viaCmdWrapper = false;
+  private processViaCmdWrapper = false;
+  private lifecycleGeneration = 0;
+  private disposed = false;
 
   public constructor(
     private readonly executable: string,
@@ -72,7 +93,8 @@ export class CodexUsageProvider {
      */
     private readonly resolveExecutableOverride?: (
       executable: string
-    ) => Promise<string | undefined>
+    ) => Promise<string | undefined>,
+    private readonly runtime: AppServerRuntime = {}
   ) {}
 
   /**
@@ -80,11 +102,10 @@ export class CodexUsageProvider {
    * CVE fix) and does not search PATH for them, so a bare or shim executable
    * must be resolved with `where.exe` and run through cmd.exe.
    */
-  private async resolveLaunchTarget(): Promise<{
-    command: string;
-    args: string[];
-    viaCmdWrapper: boolean;
-  }> {
+  private async resolveLaunchTarget(): Promise<AppServerLaunchTarget> {
+    if (this.runtime.resolveLaunchTarget) {
+      return this.runtime.resolveLaunchTarget();
+    }
     const args = ['app-server', '--stdio'];
     if (process.platform !== 'win32') {
       const override = await this.resolveExecutableOverride?.(this.executable);
@@ -107,20 +128,28 @@ export class CodexUsageProvider {
     return { command: target, args, viaCmdWrapper: false };
   }
 
-  private terminate(child: ChildProcessWithoutNullStreams): void {
+  private terminate(
+    child: ChildProcessWithoutNullStreams,
+    viaCmdWrapper: boolean
+  ): void {
     // Killing the cmd.exe wrapper alone would orphan the actual app-server;
     // take the whole tree down on Windows.
     if (
-      this.viaCmdWrapper &&
+      viaCmdWrapper &&
       process.platform === 'win32' &&
       child.pid &&
       child.exitCode === null
     ) {
       try {
-        spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
-          stdio: 'ignore',
-          windowsHide: true
-        });
+        const taskkill = spawn(
+          'taskkill',
+          ['/pid', String(child.pid), '/T', '/F'],
+          {
+            stdio: 'ignore',
+            windowsHide: true
+          }
+        );
+        taskkill.once('error', () => child.kill());
         return;
       } catch {
         // Fall through to the plain kill below.
@@ -133,8 +162,32 @@ export class CodexUsageProvider {
     this.includeSparkLimits = include;
   }
 
-  public async start(): Promise<void> {
+  public start(): Promise<void> {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
+    if (this.startPromise) {
+      return this.startPromise;
+    }
     if (this.process) {
+      return Promise.resolve();
+    }
+    const generation = ++this.lifecycleGeneration;
+    // Defer the body by one microtask so a synchronous snapshot callback
+    // cannot re-enter start() before startPromise has been installed.
+    const operation = Promise.resolve()
+      .then(() => this.performStart(generation))
+      .finally(() => {
+        if (this.startPromise === operation) {
+          this.startPromise = undefined;
+        }
+      });
+    this.startPromise = operation;
+    return operation;
+  }
+
+  private async performStart(generation: number): Promise<void> {
+    if (!this.isCurrentGeneration(generation)) {
       return;
     }
     // Only announce "starting" once: retries after a failed start would
@@ -145,26 +198,47 @@ export class CodexUsageProvider {
     }
     this.stdoutBuffer = '';
     this.lastError = '';
+    let child: ChildProcessWithoutNullStreams | undefined;
+    let viaCmdWrapper = false;
     try {
       const target = await this.resolveLaunchTarget();
-      this.viaCmdWrapper = target.viaCmdWrapper;
-      const child = spawn(target.command, target.args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true,
-        ...(target.viaCmdWrapper ? { windowsVerbatimArguments: true } : {})
+      if (!this.isCurrentGeneration(generation)) {
+        return;
+      }
+      viaCmdWrapper = target.viaCmdWrapper;
+      const spawned = (this.runtime.spawnAppServer ?? spawnAppServerProcess)(
+        target.command,
+        target.args,
+        viaCmdWrapper
+      );
+      child = spawned;
+      // A test double or future spawn wrapper may synchronously dispose the
+      // provider. Never leave that newly created child untracked.
+      if (!this.isCurrentGeneration(generation)) {
+        this.terminate(spawned, viaCmdWrapper);
+        return;
+      }
+      this.process = spawned;
+      this.processViaCmdWrapper = viaCmdWrapper;
+      spawned.stdout.setEncoding('utf8');
+      spawned.stderr.setEncoding('utf8');
+      spawned.stdout.on('data', (chunk: string) =>
+        this.handleOutput(spawned, generation, viaCmdWrapper, chunk)
+      );
+      spawned.stderr.on('data', (chunk: string) => {
+        if (this.isActiveChild(spawned, generation)) {
+          this.lastError = `${this.lastError}${chunk}`.slice(-1000);
+        }
       });
-      this.process = child;
-      child.stdout.setEncoding('utf8');
-      child.stderr.setEncoding('utf8');
-      child.stdout.on('data', (chunk: string) => this.handleOutput(chunk));
-      child.stderr.on('data', (chunk: string) => {
-        this.lastError = `${this.lastError}${chunk}`.slice(-1000);
-      });
-      child.once('error', (error) => this.handleProcessError(error));
-      child.once('exit', (code) => {
-        if (this.process === child) {
+      spawned.once('error', (error) =>
+        this.handleProcessError(error, generation, spawned, viaCmdWrapper)
+      );
+      spawned.once('exit', (code) => {
+        if (this.isActiveChild(spawned, generation)) {
           this.process = undefined;
+          this.processViaCmdWrapper = false;
           this.initialized = false;
+          this.stdoutBuffer = '';
           this.rejectPending(new Error(`Codex app-server exited (${code ?? 'unknown'})`));
           this.onSnapshot(
             errorSnapshot(cleanError(this.lastError) || 'Codex usage service stopped')
@@ -180,11 +254,24 @@ export class CodexUsageProvider {
         },
         capabilities: { experimentalApi: false }
       });
+      if (!this.isActiveChild(spawned, generation)) {
+        return;
+      }
       this.send({ method: 'initialized' });
       this.initialized = true;
-      await this.readRateLimits();
+      await this.readRateLimits(spawned, generation);
     } catch (error) {
-      this.handleProcessError(error instanceof Error ? error : new Error(String(error)));
+      if (
+        this.isCurrentGeneration(generation) &&
+        (!child || this.process === child)
+      ) {
+        this.handleProcessError(
+          error instanceof Error ? error : new Error(String(error)),
+          generation,
+          child,
+          viaCmdWrapper
+        );
+      }
     }
   }
 
@@ -202,39 +289,58 @@ export class CodexUsageProvider {
   }
 
   private async performRefresh(): Promise<void> {
-    if (!this.process) {
+    if (this.disposed) {
+      return;
+    }
+    if (!this.process || this.startPromise) {
       await this.start();
       return;
     }
     if (!this.initialized) {
       return;
     }
-    await this.readRateLimits();
+    await this.readRateLimits(this.process, this.lifecycleGeneration);
   }
 
-  private async readRateLimits(): Promise<void> {
+  private async readRateLimits(
+    child: ChildProcessWithoutNullStreams,
+    generation: number
+  ): Promise<void> {
     try {
       const result = (await this.request(
         'account/rateLimits/read',
         null
       )) as RateLimitResponsePayload;
+      if (!this.isActiveChild(child, generation)) {
+        return;
+      }
       this.onSnapshot(
         normalizeRateLimits(result, {
           includeSparkLimits: this.includeSparkLimits
         })
       );
     } catch (error) {
-      this.onSnapshot(codexErrorSnapshot(error));
+      if (this.isActiveChild(child, generation)) {
+        this.onSnapshot(codexErrorSnapshot(error));
+      }
     }
   }
 
   public dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    this.lifecycleGeneration += 1;
     const child = this.process;
+    const viaCmdWrapper = this.processViaCmdWrapper;
     this.process = undefined;
+    this.processViaCmdWrapper = false;
     this.initialized = false;
+    this.stdoutBuffer = '';
     this.rejectPending(new Error('Codex usage provider disposed'));
     if (child) {
-      this.terminate(child);
+      this.terminate(child, viaCmdWrapper);
     }
   }
 
@@ -257,16 +363,41 @@ export class CodexUsageProvider {
     this.process.stdin.write(`${JSON.stringify(value)}\n`);
   }
 
-  private handleOutput(chunk: string): void {
+  private handleOutput(
+    child: ChildProcessWithoutNullStreams,
+    generation: number,
+    viaCmdWrapper: boolean,
+    chunk: string
+  ): void {
+    if (!this.isActiveChild(child, generation)) {
+      return;
+    }
     this.stdoutBuffer += chunk;
     let newline = this.stdoutBuffer.indexOf('\n');
     while (newline >= 0) {
+      if (newline > MAX_STDOUT_LINE_LENGTH) {
+        this.handleProcessError(
+          new Error('Codex app-server response exceeded the size limit'),
+          generation,
+          child,
+          viaCmdWrapper
+        );
+        return;
+      }
       const line = this.stdoutBuffer.slice(0, newline).trim();
       this.stdoutBuffer = this.stdoutBuffer.slice(newline + 1);
       if (line) {
         this.handleMessage(line);
       }
       newline = this.stdoutBuffer.indexOf('\n');
+    }
+    if (this.stdoutBuffer.length > MAX_STDOUT_LINE_LENGTH) {
+      this.handleProcessError(
+        new Error('Codex app-server response exceeded the size limit'),
+        generation,
+        child,
+        viaCmdWrapper
+      );
     }
   }
 
@@ -302,13 +433,26 @@ export class CodexUsageProvider {
     }
   }
 
-  private handleProcessError(error: Error): void {
-    const child = this.process;
+  private handleProcessError(
+    error: Error,
+    generation: number,
+    child: ChildProcessWithoutNullStreams | undefined,
+    viaCmdWrapper: boolean
+  ): void {
+    if (!this.isCurrentGeneration(generation)) {
+      return;
+    }
+    if (child && this.process !== child) {
+      return;
+    }
+    const activeChild = child ?? this.process;
     this.process = undefined;
+    this.processViaCmdWrapper = false;
     this.initialized = false;
+    this.stdoutBuffer = '';
     this.rejectPending(error);
-    if (child) {
-      this.terminate(child);
+    if (activeChild) {
+      this.terminate(activeChild, viaCmdWrapper);
     }
     const unsupported = error.message.includes('ENOENT');
     this.onSnapshot({
@@ -319,6 +463,17 @@ export class CodexUsageProvider {
       windows: [],
       detail: unsupported ? 'Codex CLI was not found' : cleanError(error.message)
     });
+  }
+
+  private isCurrentGeneration(generation: number): boolean {
+    return !this.disposed && this.lifecycleGeneration === generation;
+  }
+
+  private isActiveChild(
+    child: ChildProcessWithoutNullStreams,
+    generation: number
+  ): boolean {
+    return this.isCurrentGeneration(generation) && this.process === child;
   }
 
   private rejectPending(error: Error): void {
@@ -504,6 +659,18 @@ export function codexErrorSnapshot(error: unknown): UsageSnapshot {
 
 function cleanError(value: string): string {
   return value.replace(/\s+/g, ' ').trim().slice(0, 240);
+}
+
+function spawnAppServerProcess(
+  command: string,
+  args: readonly string[],
+  viaCmdWrapper: boolean
+): ChildProcessWithoutNullStreams {
+  return spawn(command, [...args], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+    ...(viaCmdWrapper ? { windowsVerbatimArguments: true } : {})
+  });
 }
 
 function resolveWindowsExecutable(name: string): Promise<string | undefined> {

@@ -77,7 +77,7 @@ The installed Claude Code version was `2.1.206`. It has no top-level machine-rea
 - `rate_limits.five_hour.used_percentage` and `.resets_at`
 - `rate_limits.seven_day.used_percentage` and `.resets_at`
 
-Those are emitted after the first API response for eligible Claude.ai Pro/Max sessions, and can be absent for API-key users. The extension launches Claude with a temporary `--settings` file whose status-line command is `claudeStatusLine.js`. That helper sends only normalized quota fields to the loopback bridge and displays a compact local status line.
+Those are emitted after the first API response for eligible Claude.ai Pro/Max sessions, and can be absent for API-key users. The same documented status-line payload can report numeric current-context, input/cache, output, context-window, and estimated-cost fields. Claude's separate subagent status-line payload reports `tasks` instead of account or main-context fields. The extension launches Claude with a temporary `--settings` file whose status-line commands use `claudeStatusLine.js`: the main path sends normalized quota and numeric session telemetry and displays a compact local status line, while the subagent path sends only delegated-task token metadata through a separate merge event so it cannot replace account or main-context usage.
 
 Do not read Claude OAuth credential files or call its internal OAuth endpoint, and do not scrape interactive `/usage`/`/status` output. For external terminals, offer an explicit integration later; do not silently edit global Claude settings.
 
