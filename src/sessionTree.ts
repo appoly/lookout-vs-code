@@ -9,6 +9,10 @@ import { dedupeCoordinatedSessions } from './historyQuery';
 import type { SessionEvent } from './sessionEvents';
 import type { SessionManager } from './sessionManager';
 import {
+  normalizeSessionOrder,
+  reorderSessionIds
+} from './sessionOrder';
+import {
   operationalStatsTooltipLines,
   sessionOperationalStats
 } from './sessionStats';
@@ -31,6 +35,8 @@ const STATUS_ICONS: Record<SessionStatus, vscode.ThemeIcon> = {
   unknown: new vscode.ThemeIcon('question'),
   closed: new vscode.ThemeIcon('circle-slash')
 };
+const SESSION_ORDER_KEY = 'lookout.sessionOrder.v1';
+const SESSION_TREE_MIME = 'application/vnd.code.tree.lookout.sessions';
 
 export type SessionTreeElement =
   | SessionGroupItem
@@ -155,16 +161,27 @@ function integrationLabel(
 }
 
 export class SessionTreeProvider
-  implements vscode.TreeDataProvider<SessionTreeElement>, vscode.Disposable
+  implements
+    vscode.TreeDataProvider<SessionTreeElement>,
+    vscode.TreeDragAndDropController<SessionTreeElement>,
+    vscode.Disposable
 {
   private readonly changedEmitter = new vscode.EventEmitter<void>();
   private readonly subscriptions: vscode.Disposable[];
+  private sessionOrder: string[];
   public readonly onDidChangeTreeData = this.changedEmitter.event;
+  public readonly dragMimeTypes = [SESSION_TREE_MIME];
+  public readonly dropMimeTypes = [SESSION_TREE_MIME];
 
   public constructor(
     private readonly manager: SessionManager,
-    private readonly coordination: CoordinationService
+    private readonly coordination: CoordinationService,
+    private readonly state: vscode.Memento
   ) {
+    this.sessionOrder = normalizeSessionOrder(
+      state.get<unknown>(SESSION_ORDER_KEY),
+      manager.list().map((session) => session.id)
+    );
     this.subscriptions = [
       manager.onDidChange(() => this.changedEmitter.fire()),
       coordination.onDidChange(() => this.changedEmitter.fire())
@@ -176,12 +193,18 @@ export class SessionTreeProvider
   }
 
   public getChildren(element?: SessionTreeElement): SessionTreeElement[] {
-    const local = this.manager
-      .list()
-      .map(
-        (session) =>
-          new SessionTreeItem(session, this.manager.eventsFor(session.id))
-      );
+    const sessions = this.manager.list();
+    this.sessionOrder = normalizeSessionOrder(
+      this.sessionOrder,
+      sessions.map((session) => session.id)
+    );
+    const sessionsById = new Map(sessions.map((session) => [session.id, session]));
+    const local = this.sessionOrder.flatMap((id) => {
+      const session = sessionsById.get(id);
+      return session
+        ? [new SessionTreeItem(session, this.manager.eventsFor(session.id))]
+        : [];
+    });
     const live = dedupeCoordinatedSessions(this.coordination.windows())
       .map(({ window, session }) => new LiveSessionTreeItem(window, session))
       .sort((left, right) => {
@@ -218,6 +241,56 @@ export class SessionTreeProvider
             : 'No other Lookout windows are live',
           vscode.TreeItemCollapsibleState.None
         ) as SessionTreeElement];
+  }
+
+  public handleDrag(
+    source: readonly SessionTreeElement[],
+    dataTransfer: vscode.DataTransfer,
+    token: vscode.CancellationToken
+  ): void {
+    if (token.isCancellationRequested) {
+      return;
+    }
+    const ids = source.flatMap((item) =>
+      item instanceof SessionTreeItem ? [item.session.id] : []
+    );
+    if (ids.length > 0) {
+      dataTransfer.set(SESSION_TREE_MIME, new vscode.DataTransferItem(ids));
+    }
+  }
+
+  public async handleDrop(
+    target: SessionTreeElement | undefined,
+    dataTransfer: vscode.DataTransfer,
+    token: vscode.CancellationToken
+  ): Promise<void> {
+    if (
+      token.isCancellationRequested ||
+      target instanceof LiveSessionTreeItem ||
+      (target instanceof SessionGroupItem && target.group !== 'current')
+    ) {
+      return;
+    }
+    const value = dataTransfer.get(SESSION_TREE_MIME)?.value;
+    const draggedIds = Array.isArray(value)
+      ? value.filter((candidate): candidate is string => typeof candidate === 'string')
+      : [];
+    const activeIds = this.manager.list().map((session) => session.id);
+    const next = reorderSessionIds(
+      this.sessionOrder,
+      activeIds,
+      draggedIds,
+      target instanceof SessionTreeItem ? target.session.id : undefined
+    );
+    if (
+      next.length === this.sessionOrder.length &&
+      next.every((id, index) => id === this.sessionOrder[index])
+    ) {
+      return;
+    }
+    this.sessionOrder = next;
+    this.changedEmitter.fire();
+    await this.state.update(SESSION_ORDER_KEY, next);
   }
 
   public refresh(): void {

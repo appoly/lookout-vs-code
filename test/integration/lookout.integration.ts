@@ -178,7 +178,12 @@ suite('Lookout extension-host integration', () => {
         windows: () => [remoteWindow],
         health: () => ({ state: 'healthy-client', detail: 'test' }),
         workspace: undefined
-      } as unknown as CoordinationService
+      } as unknown as CoordinationService,
+      {
+        get: () => undefined,
+        update: () => Promise.resolve(),
+        keys: () => []
+      } as vscode.Memento
     );
     try {
       const groups = provider

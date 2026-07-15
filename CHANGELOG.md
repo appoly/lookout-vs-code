@@ -29,6 +29,7 @@
   Code profile and execution host: leased metadata-only snapshots, cross-window
   attention focus, duplicate-provider-session detection, crash recovery, and
   strict local/WSL/SSH/container boundaries.
+- Add persistent drag-and-drop ordering for Current Workspace agent rows.
 - Add a non-installing provider profile catalog and privacy-bounded session
   templates for reusable folder, worktree, task, browser, and review recipes.
 - Add stable verification contexts, diagnostic hash baselines, freshness-aware

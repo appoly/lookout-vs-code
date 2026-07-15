@@ -99,7 +99,8 @@ provider's own CLI before relying on lifecycle or usage information.
    your layout better.
 4. Give each session a useful label, then let agents work in parallel. Select a
    row or use **Lookout: Focus Next Agent Needing Attention** to jump directly to
-   the terminal that needs you.
+   the terminal that needs you. Drag Current Workspace rows to keep agents in
+   your preferred order; Lookout remembers that order for the workspace.
 5. Use **Review** to inspect native diffs and plans, run tasks or tests, open
    Source Control, and return to the agent with feedback.
 

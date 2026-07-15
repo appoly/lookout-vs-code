@@ -103,9 +103,14 @@ export async function activate(
     workspaceIdentity
   );
   await coordination.initialize();
-  const sessionTree = new SessionTreeProvider(sessions, coordination);
+  const sessionTree = new SessionTreeProvider(
+    sessions,
+    coordination,
+    context.workspaceState
+  );
   const sessionTreeView = vscode.window.createTreeView('lookout.sessions', {
-    treeDataProvider: sessionTree
+    treeDataProvider: sessionTree,
+    dragAndDropController: sessionTree
   });
   const globalIntentSubscription = globalHistory.onDidReceiveIntent(
     ({ intent, record }) => {

@@ -46,8 +46,11 @@ B. LAUNCH AND LAYOUT (~10 min)
   5. "+" picker offers Codex / Claude Code / Custom. Launch two Codex
      and one Claude: terminals open in the native terminal panel by default,
      leaving the editor area free for code and review.
-  6. Terminal tab names read "Lookout: <label> [<id>]"; tree rows show
-     directory - branch - state.
+  6. Terminal tab names read "Lookout: <label> [<id>]"; tree rows show stable
+     directory - branch - state labels. Drag the Current Workspace rows into a
+     new order and reload;
+     the order persists. Live in Other Windows rows cannot be reordered into the
+     current workspace.
   7. Split an agent (inline action): native split beside its parent,
      not a new column.
   8. Set lookout.terminals.location = editor, launch -> lands in editor
