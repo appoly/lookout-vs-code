@@ -19,6 +19,14 @@ export type LaunchShell =
   | 'argv'
   | 'unknown';
 
+export type ClaudePermissionMode =
+  | 'inherit'
+  | 'auto'
+  | 'acceptEdits'
+  | 'manual'
+  | 'dontAsk'
+  | 'plan';
+
 export function classifyShell(
   shellPath: string | undefined,
   _platform: NodeJS.Platform = process.platform
@@ -189,6 +197,20 @@ export function isDirectAgentCommand(
     executable === executableName ||
     windowsExecutable === `${executableName}.exe`
   );
+}
+
+export function withClaudePermissionMode(
+  command: string,
+  mode: ClaudePermissionMode
+): string {
+  if (
+    mode === 'inherit' ||
+    !isDirectAgentCommand(command, 'claude') ||
+    /(^|\s)--permission-mode(?:\s|=)/.test(command)
+  ) {
+    return command;
+  }
+  return `${command} --permission-mode ${mode}`;
 }
 
 export function shellQuote(value: string, shell: LaunchShell): string {

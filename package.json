@@ -839,6 +839,27 @@
           "default": "claude",
           "description": "Command used to launch a Claude Code session."
         },
+        "lookout.claude.permissionMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "acceptEdits",
+            "manual",
+            "dontAsk",
+            "plan",
+            "inherit"
+          ],
+          "enumDescriptions": [
+            "Let Claude automatically classify whether each action needs approval.",
+            "Automatically approve file edits while prompting for other protected actions.",
+            "Ask before protected actions.",
+            "Deny actions that require permission instead of asking.",
+            "Restrict Claude to planning without making changes.",
+            "Do not pass a permission mode; use Claude's resolved default."
+          ],
+          "default": "auto",
+          "description": "Permission mode for Claude Code sessions launched by Lookout. An explicit --permission-mode in the launch command takes precedence."
+        },
         "lookout.claude.enabled": {
           "type": "boolean",
           "default": true,

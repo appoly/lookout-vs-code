@@ -11,8 +11,10 @@ import {
   isDirectAgentCommand,
   PROVIDER_ACTIVITY_TOOL_MATCHER,
   shellQuote,
+  withClaudePermissionMode,
   withCodexLifecycleIntegration,
   withCodexTokenBudget,
+  type ClaudePermissionMode,
   type LaunchShell
 } from './agentCommand';
 import { captureGitBaseline, listUncommittedChanges } from './gitReview';
@@ -1335,6 +1337,13 @@ export class SessionManager implements vscode.Disposable {
         tokenBudget.limitTokens,
         launchShell
       );
+    } else if (request.kind === 'claude') {
+      command = withClaudePermissionMode(
+        command,
+        vscode.workspace
+          .getConfiguration('lookout.claude')
+          .get<ClaudePermissionMode>('permissionMode', 'auto')
+      );
     }
     const notifyHelperPath = path.join(
       this.context.extensionPath,
@@ -1366,8 +1375,8 @@ export class SessionManager implements vscode.Disposable {
     }
     if (
       request.kind !== 'claude' ||
-      /(^|\s)--settings(?:\s|=)/.test(request.command) ||
-      !isDirectClaudeCommand(request.command)
+      /(^|\s)--settings(?:\s|=)/.test(command) ||
+      !isDirectClaudeCommand(command)
     ) {
       return {
         command,
@@ -1385,11 +1394,11 @@ export class SessionManager implements vscode.Disposable {
       .getConfiguration('lookout.claude')
       .get('lifecycleIntegration', true);
     if (!statusLineIntegration && !lifecycleIntegration) {
-      return { command: request.command, integrationsSkipped: false };
+      return { command, integrationsSkipped: false };
     }
     if (launchShell === 'unknown') {
       // No known-safe way to quote the settings path for this shell.
-      return { command: request.command, integrationsSkipped: true };
+      return { command, integrationsSkipped: true };
     }
     await vscode.workspace.fs.createDirectory(this.context.globalStorageUri);
     const helperPath = path.join(
@@ -1476,7 +1485,7 @@ export class SessionManager implements vscode.Disposable {
       Buffer.from(JSON.stringify(settings), 'utf8')
     );
     return {
-      command: `${request.command} --settings ${shellQuote(
+      command: `${command} --settings ${shellQuote(
         settingsUri.fsPath,
         launchShell
       )}`,
