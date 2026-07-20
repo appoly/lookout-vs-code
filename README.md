@@ -150,6 +150,8 @@ All shortcuts can be changed in Keyboard Shortcuts.
 The most common settings are:
 
 - `lookout.codex.command` and `lookout.claude.command` — provider launch commands;
+- `lookout.claude.permissionMode` — permission mode for Lookout-launched Claude
+  sessions (`auto` by default); an explicit command flag takes precedence;
 - `lookout.codex.enabled` and `lookout.claude.enabled` — entries shown in the
   new-agent picker;
 - `lookout.codex.lifecycleIntegration` and

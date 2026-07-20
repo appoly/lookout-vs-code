@@ -49,6 +49,13 @@ B. LAUNCH AND LAYOUT (~10 min)
      leaving the editor area free for code and review. The Agents toolbar has
      no permanent isolated-worktree action, and Launch from Template is absent
      until at least one template is configured.
+  5a. Claude permission mode: with lookout.claude.permissionMode at its default,
+      launch Claude and confirm /permissions reports auto mode. Set the setting
+      to manual, launch a new Claude session, and confirm manual mode. Restore
+      the setting to auto, set lookout.claude.command to
+      "claude --permission-mode plan", and confirm the explicit plan mode wins.
+      Finally set permissionMode to inherit, restore the command to "claude",
+      launch again, and confirm Lookout does not force a mode. Restore defaults.
   6. Terminal tab names read "Lookout: <label> [<id>]"; tree rows show stable
      directory - branch - state labels. Drag the Current Workspace rows into a
      new order and reload;

@@ -4,6 +4,7 @@ import {
   classifyShell,
   isDirectAgentCommand,
   shellQuote,
+  withClaudePermissionMode,
   withCodexLifecycleIntegration,
   withCodexTokenBudget
 } from '../src/agentCommand';
@@ -102,6 +103,22 @@ test('recognizes direct provider commands without accepting shell expressions', 
   assert.equal(isDirectAgentCommand('codex `pwd`', 'codex'), false);
   assert.equal(isDirectAgentCommand('"codex.exe"suffix', 'codex'), false);
   assert.equal(shellQuote("it's ready", 'posix'), "'it'\\''s ready'");
+});
+
+test('starts direct Claude sessions in the configured permission mode', () => {
+  assert.equal(
+    withClaudePermissionMode('claude --model opus', 'auto'),
+    'claude --model opus --permission-mode auto'
+  );
+  assert.equal(
+    withClaudePermissionMode('claude --permission-mode manual', 'auto'),
+    'claude --permission-mode manual'
+  );
+  assert.equal(withClaudePermissionMode('claude', 'inherit'), 'claude');
+  assert.equal(
+    withClaudePermissionMode('wrapper claude', 'auto'),
+    'wrapper claude'
+  );
 });
 
 test('classifies terminal shells from their executable paths', () => {
