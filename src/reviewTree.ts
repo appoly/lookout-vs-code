@@ -6,6 +6,7 @@ import {
 } from './artifactClassification';
 import {
   excludeWorkspaceArtifacts,
+  listGitWorktrees,
   listWorkspaceChanges,
   readBaselineFile,
   readGitWorktreeState,
@@ -18,7 +19,7 @@ import {
   normalizeReviewGlobs,
   reviewSearchResultLimit
 } from './reviewSearchPolicy';
-import type { AgentSession, CommandResult } from './types';
+import type { AgentSession, CommandResult, GitBaseline } from './types';
 import type { ReviewPacket } from './verification/reviewPacket';
 import { VerificationManager } from './verification/verificationManager';
 import {
@@ -83,6 +84,9 @@ interface WorktreeChanges {
   readonly key: string;
   readonly session: AgentSession;
   readonly sessions: readonly AgentSession[];
+  readonly baseline: GitBaseline;
+  readonly linked: boolean;
+  readonly startedAt: number;
   readonly agentLabels: readonly string[];
   readonly agentDetails: readonly string[];
   readonly changes: readonly WorkspaceChange[] | undefined;
@@ -215,6 +219,9 @@ export class ReviewTreeProvider
   private readonly disposables: vscode.Disposable[] = [];
   private changeGroups: ReviewTreeItem[] = [];
   private readonly changesByWorktree = new Map<string, ReviewTreeItem[]>();
+  private readonly baselinesByWorktree = new Map<string, GitBaseline>();
+  private readonly linkedBaselinesByWorktree = new Map<string, GitBaseline>();
+  private reviewWorktrees: readonly WorktreeChanges[] = [];
   private changeCount = 0;
   private diagnostics: ReviewTreeItem[] = [];
   private runtime: ReviewTreeItem[] = [];
@@ -444,10 +451,20 @@ export class ReviewTreeProvider
     );
     const searchLimit = reviewSearchResultLimit(max);
     const session = this.sessions.selectedSession;
-    const [imageUris, planUris, worktreeChanges] = await Promise.all([
+    const worktreeChanges = await loadWorktreeChanges(
+      this.sessions,
+      this.linkedBaselinesByWorktree
+    );
+    if (generation !== this.refreshGeneration) {
+      return;
+    }
+    this.reviewWorktrees = worktreeChanges;
+    this.reconcileVerificationContexts();
+    const [imageUris, planUris] = await Promise.all([
       showImages
         ? findFilesAcrossAgentRoots(
             this.sessions,
+            worktreeChanges,
             imageGlobs,
             '**/{node_modules,.git,out,dist}/**',
             searchLimit
@@ -455,11 +472,11 @@ export class ReviewTreeProvider
         : Promise.resolve([]),
       findFilesAcrossAgentRoots(
         this.sessions,
+        worktreeChanges,
         artifactGlobs,
         '**/{node_modules,.git,out,dist}/**',
         searchLimit
-      ),
-      loadWorktreeChanges(this.sessions)
+      )
     ]);
     const [images, planArtifacts] = await Promise.all([
       toArtifactItems('image', imageUris, max, session),
@@ -505,7 +522,15 @@ export class ReviewTreeProvider
 
   public async refreshChanges(): Promise<void> {
     const generation = ++this.changeGeneration;
-    const worktreeChanges = await loadWorktreeChanges(this.sessions);
+    const worktreeChanges = await loadWorktreeChanges(
+      this.sessions,
+      this.linkedBaselinesByWorktree
+    );
+    if (generation !== this.changeGeneration) {
+      return;
+    }
+    this.reviewWorktrees = worktreeChanges;
+    this.reconcileVerificationContexts();
     await this.refreshReviewEvidence();
     if (generation !== this.changeGeneration) {
       return;
@@ -670,15 +695,19 @@ export class ReviewTreeProvider
       return commandResultContent(session, result);
     }
     const session = this.sessions.get(uri.authority);
-    if (!session?.baseline) {
+    const query = new URLSearchParams(uri.query);
+    const worktreeKey = query.get('worktree');
+    const baseline = worktreeKey
+      ? this.baselinesByWorktree.get(normalizeRootKey(worktreeKey))
+      : session?.baseline;
+    if (!session || !baseline) {
       throw vscode.FileSystemError.FileNotFound(uri);
     }
-    const query = new URLSearchParams(uri.query);
     if (query.get('empty') === '1') {
       return '';
     }
     const baselinePath = query.get('baselinePath') ?? uri.path.slice(1);
-    return readBaselineFile(session.baseline, baselinePath);
+    return readBaselineFile(baseline, baselinePath);
   }
 
   public dispose(): void {
@@ -722,12 +751,26 @@ export class ReviewTreeProvider
     if (!this.verification) {
       return;
     }
-    this.verification.reconcileSessions(
-      toReviewSessionSnapshots(
-        this.sessions.history(),
-        (sessionId) => this.sessions.isOpen(sessionId)
-      )
+    const direct = toReviewSessionSnapshots(
+      this.sessions.history(),
+      (sessionId) => this.sessions.isOpen(sessionId)
     );
+    const linked = this.reviewWorktrees
+      .filter((worktree) => worktree.linked)
+      .flatMap((worktree) =>
+        worktree.sessions.map((session) => ({
+          id: session.id,
+          isOpen: this.sessions.isOpen(session.id),
+          baseline: {
+            ...worktree.baseline,
+            capturedAt: Math.max(
+              worktree.baseline.capturedAt,
+              session.createdAt
+            )
+          }
+        }))
+      );
+    this.verification.reconcileSessions([...direct, ...linked]);
     this.persistVerificationSnapshot();
   }
 
@@ -846,7 +889,8 @@ export class ReviewTreeProvider
     }
 
     for (const worktree of worktrees) {
-      const baseline = worktree.session.baseline!;
+      const baseline = worktree.baseline;
+      this.baselinesByWorktree.set(normalizeRootKey(worktree.key), baseline);
       // Detached checkouts both report the pseudo-branch HEAD, so the commit
       // is the only signal that the captured baseline went stale.
       const branchChanged =
@@ -872,6 +916,7 @@ export class ReviewTreeProvider
                   new ReviewTreeItem('change', path.basename(change.path), {
                     change,
                     sessionId: worktree.session.id,
+                    worktreeKey: worktree.key,
                     uri: vscode.Uri.file(
                       path.join(baseline.repoRoot, change.path)
                     )
@@ -899,12 +944,18 @@ export class ReviewTreeProvider
       const childItems = [
         ...(branchChanged
           ? [
-            new ReviewTreeItem('message', 'Branch changed since agent launch', {
-              description: `${branchLabel(baseline.branch, baseline.commit)} → ${branchLabel(
-                worktree.state.branch,
-                worktree.state.commit
-              )} · captured baseline is stale`
-            })
+            new ReviewTreeItem(
+              'message',
+              worktree.linked
+                ? 'Branch changed since worktree discovery'
+                : 'Branch changed since agent launch',
+              {
+                description: `${branchLabel(baseline.branch, baseline.commit)} → ${branchLabel(
+                  worktree.state.branch,
+                  worktree.state.commit
+                )} · captured baseline is stale`
+              }
+            )
           ]
           : []),
         ...evidenceItems,
@@ -925,12 +976,17 @@ export class ReviewTreeProvider
                     worktree.state.commit
                   )}`
                 : branchLabel(worktree.state.branch, worktree.state.commit)
-            } · ${changes?.length ?? 0} changes${packetDescription(packet)}`,
+            }${worktree.linked ? ' · delegated worktree' : ''} · ${
+              changes?.length ?? 0
+            } changes${packetDescription(packet)}`,
             warning: branchChanged || packetWarning(packet),
             tooltip: [
               baseline.repoRoot,
               `Agents: ${worktree.agentDetails.join(', ')}`,
-              `Launch baseline: ${baseline.branch} @ ${baseline.commit}`,
+              worktree.linked
+                ? 'Discovered as a linked worktree created while an attached agent was open. Provider hooks do not identify which delegated agent owns it; attribution remains worktree-level.'
+                : 'Direct Lookout session worktree.',
+              `${worktree.linked ? 'Review' : 'Launch'} baseline: ${baseline.branch} @ ${baseline.commit}`,
               `Current branch: ${worktree.state.branch} @ ${worktree.state.commit}`,
               ...(branchChanged
                 ? ['Warning: branch changed; the captured diff baseline is stale.']
@@ -946,7 +1002,10 @@ export class ReviewTreeProvider
   private async openChange(item: ReviewTreeItem): Promise<void> {
     const session = item.sessionId ? this.sessions.get(item.sessionId) : undefined;
     const change = item.change;
-    if (!session?.baseline || !change || !item.uri) {
+    const baseline = item.worktreeKey
+      ? this.baselinesByWorktree.get(normalizeRootKey(item.worktreeKey))
+      : session?.baseline;
+    if (!session || !baseline || !change || !item.uri) {
       return;
     }
     if (isImage(change.path)) {
@@ -967,22 +1026,28 @@ export class ReviewTreeProvider
       return;
     }
     const hasBaseline = change.kind !== 'added' && change.kind !== 'untracked';
+    const worktreeQuery = item.worktreeKey
+      ? `worktree=${encodeURIComponent(item.worktreeKey)}`
+      : '';
+    const baselinePathQuery = change.previousPath
+      ? `baselinePath=${encodeURIComponent(change.previousPath)}`
+      : '';
     const baselineUri = vscode.Uri.from({
       scheme: BASELINE_SCHEME,
       authority: session.id,
       path: `/${change.path}`,
       query: hasBaseline
-        ? change.previousPath
-          ? `baselinePath=${encodeURIComponent(change.previousPath)}`
-          : ''
-        : 'empty=1'
+        ? [worktreeQuery, baselinePathQuery].filter(Boolean).join('&')
+        : [worktreeQuery, 'empty=1'].filter(Boolean).join('&')
     });
     if (change.kind === 'deleted') {
       const emptyWorkingUri = vscode.Uri.from({
         scheme: BASELINE_SCHEME,
         authority: session.id,
         path: `/${change.path}`,
-        query: 'empty=1&side=working'
+        query: [worktreeQuery, 'empty=1', 'side=working']
+          .filter(Boolean)
+          .join('&')
       });
       await vscode.commands.executeCommand(
         'vscode.diff',
@@ -1145,66 +1210,168 @@ function showVerificationOutcome(
 }
 
 async function loadWorktreeChanges(
-  sessions: SessionManager
+  sessions: SessionManager,
+  linkedBaselines: Map<string, GitBaseline>
 ): Promise<WorktreeChanges[]> {
   const sessionsByWorktree = new Map<string, AgentSession[]>();
   for (const session of sessions.history()) {
     if (!session.baseline) {
       continue;
     }
-    const key = path.resolve(session.baseline.repoRoot);
+    const key = normalizeRootKey(session.baseline.repoRoot);
     const existing = sessionsByWorktree.get(key) ?? [];
     existing.push(session);
     sessionsByWorktree.set(key, existing);
   }
 
-  return Promise.all(
-    [...sessionsByWorktree.entries()]
-      .filter(([, attachedSessions]) =>
-        attachedSessions.some((session) => sessions.isOpen(session.id))
-      )
-      .map(async ([key, attachedSessions]) => {
-      const sorted = attachedSessions.sort(
-        (left, right) => left.createdAt - right.createdAt
+  const direct = [...sessionsByWorktree.entries()].filter(
+    ([, attachedSessions]) =>
+      attachedSessions.some((session) => sessions.isOpen(session.id))
+  );
+  const linked = new Map<
+    string,
+    {
+      readonly repoRoot: string;
+      readonly commit: string;
+      readonly branch: string;
+      readonly createdAt: number;
+      readonly sessions: Map<string, AgentSession>;
+    }
+  >();
+  await Promise.all(
+    direct.map(async ([sourceKey, attachedSessions]) => {
+      const openSessions = attachedSessions.filter((session) =>
+        sessions.isOpen(session.id)
       );
-      // One physical worktree has one review context. Keep the earliest valid
-      // launch baseline stable while more sessions attach; switching to the
-      // newest session would make already-reviewed changes disappear.
-      const session = sorted[0];
-      let changes: WorkspaceChange[] | undefined;
-      let state: GitWorktreeState = {
-        repoRoot: session.baseline!.repoRoot,
-        repositoryName: path.basename(session.baseline!.repoRoot),
-        commit: session.baseline!.commit,
-        branch: session.baseline!.branch
-      };
+      let registrations: Awaited<ReturnType<typeof listGitWorktrees>>;
       try {
-        changes = await listWorkspaceChanges(session.baseline!);
+        registrations = await listGitWorktrees(sourceKey);
       } catch {
-        changes = undefined;
+        return;
       }
-      try {
-        state = await readGitWorktreeState(session.baseline!.repoRoot);
-      } catch {
-        // Keep the launch baseline as an honest fallback while retaining changes.
+      await Promise.all(
+        registrations.slice(0, MAX_REVIEW_ROOTS).map(async (registration) => {
+          const key = normalizeRootKey(registration.repoRoot);
+          if (sessionsByWorktree.has(key)) {
+            return;
+          }
+          let createdAt: number;
+          try {
+            createdAt = (
+              await vscode.workspace.fs.stat(
+                vscode.Uri.file(path.join(registration.repoRoot, '.git'))
+              )
+            ).mtime;
+          } catch {
+            return;
+          }
+          // Worktree metadata is created with the worktree. Limiting discovery
+          // to registrations newer than an open session avoids presenting old,
+          // unrelated developer worktrees as delegated-agent output.
+          const owners = openSessions.filter(
+            (session) => createdAt >= session.createdAt - 2_000
+          );
+          if (owners.length === 0) {
+            return;
+          }
+          const existing = linked.get(key) ?? {
+            ...registration,
+            createdAt,
+            sessions: new Map<string, AgentSession>()
+          };
+          for (const session of owners) {
+            existing.sessions.set(session.id, session);
+          }
+          linked.set(key, existing);
+        })
+      );
+    })
+  );
+
+  const directWorktrees = direct.map(
+    ([key, attachedSessions]) => ({
+      key,
+      sessions: attachedSessions,
+      linked: false as const
+    })
+  );
+  const linkedWorktrees = [...linked.entries()].map(([key, registration]) => ({
+    key,
+    sessions: [...registration.sessions.values()],
+    linked: true as const,
+    registration
+  }));
+
+  return Promise.all(
+    [...directWorktrees, ...linkedWorktrees.slice(0, MAX_REVIEW_ROOTS)].map(
+      async (entry) => {
+        const { key, sessions: attachedSessions } = entry;
+        const sorted = attachedSessions.sort(
+          (left, right) => left.createdAt - right.createdAt
+        );
+        // One physical worktree has one review context. Keep the earliest valid
+        // launch baseline stable while more sessions attach; switching to the
+        // newest session would make already-reviewed changes disappear.
+        const session = sorted[0];
+        const linkedRegistration = 'registration' in entry
+          ? entry.registration
+          : undefined;
+        const linkedBaselineKey = `${normalizeRootKey(key)}\0${session.id}`;
+        const cachedLinkedBaseline = linkedRegistration
+          ? linkedBaselines.get(linkedBaselineKey)
+          : undefined;
+        const baseline = linkedRegistration
+          ? cachedLinkedBaseline?.capturedAt === linkedRegistration.createdAt
+            ? cachedLinkedBaseline
+            : {
+                repoRoot: linkedRegistration.repoRoot,
+                commit: session.baseline!.commit,
+                branch: linkedRegistration.branch,
+                capturedAt: linkedRegistration.createdAt
+              }
+          : session.baseline!;
+        if (linkedRegistration) {
+          linkedBaselines.set(linkedBaselineKey, baseline);
+        }
+        let changes: WorkspaceChange[] | undefined;
+        let state: GitWorktreeState = {
+          repoRoot: baseline.repoRoot,
+          repositoryName: path.basename(session.baseline!.repoRoot),
+          commit: linkedRegistration?.commit ?? baseline.commit,
+          branch: linkedRegistration?.branch ?? baseline.branch
+        };
+        try {
+          changes = await listWorkspaceChanges(baseline);
+        } catch {
+          changes = undefined;
+        }
+        try {
+          state = await readGitWorktreeState(baseline.repoRoot);
+        } catch {
+          // Keep the launch baseline as an honest fallback while retaining changes.
+        }
+        return {
+          key,
+          session,
+          sessions: sorted,
+          baseline,
+          linked: entry.linked,
+          startedAt: linkedRegistration?.createdAt ?? sorted[0].createdAt,
+          agentLabels: sorted.map((attached) => attached.label),
+          agentDetails: sorted.map(
+            (attached) => `${attached.label} (${attached.kind})`
+          ),
+          changes,
+          state
+        };
       }
-      return {
-        key,
-        session,
-        sessions: sorted,
-        agentLabels: sorted.map((attached) => attached.label),
-        agentDetails: sorted.map(
-          (attached) => `${attached.label} (${attached.kind})`
-        ),
-        changes,
-        state
-      };
-      })
+    )
   );
 }
 
 async function findFilesAcrossAgentRoots(
   sessions: SessionManager,
+  worktrees: readonly WorktreeChanges[],
   includes: readonly string[],
   exclude: string,
   maxResultsPerRoot?: number
@@ -1213,6 +1380,10 @@ async function findFilesAcrossAgentRoots(
   for (const session of sessions.list()) {
     const root = session.baseline?.repoRoot ?? session.cwd;
     const resolved = path.resolve(root);
+    roots.set(normalizeRootKey(resolved), vscode.Uri.file(resolved));
+  }
+  for (const worktree of worktrees) {
+    const resolved = path.resolve(worktree.state.repoRoot);
     roots.set(normalizeRootKey(resolved), vscode.Uri.file(resolved));
   }
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
@@ -1398,9 +1569,6 @@ async function toChangedPlanItems(
     if (!worktree.changes || remaining <= 0) {
       continue;
     }
-    const earliestLaunch = Math.min(
-      ...worktree.sessions.map((attached) => attached.createdAt)
-    );
     const candidates = await Promise.all(
       worktree.changes.map(async (change) => {
         if (change.kind === 'deleted') {
@@ -1413,7 +1581,9 @@ async function toChangedPlanItems(
         }
         try {
           const stat = await vscode.workspace.fs.stat(uri);
-          return stat.mtime >= earliestLaunch ? { change, uri, stat } : undefined;
+          return stat.mtime >= worktree.startedAt
+            ? { change, uri, stat }
+            : undefined;
         } catch {
           return undefined;
         }
@@ -1450,8 +1620,14 @@ async function toChangedPlanItems(
         `${worktree.agentLabels.join(' + ')} · ${worktree.state.repositoryName}`,
         {
           worktreeKey: worktree.key,
-          description: `${worktree.state.branch} · ${items.length} artifacts`,
-          tooltip: `${worktree.state.repoRoot}\nAgents: ${worktree.agentDetails.join(', ')}`
+          description: `${worktree.state.branch}${
+            worktree.linked ? ' · delegated worktree' : ''
+          } · ${items.length} artifacts`,
+          tooltip: `${worktree.state.repoRoot}\nAgents: ${worktree.agentDetails.join(', ')}${
+            worktree.linked
+              ? '\nLinked worktree discovered while the attached agent was open; delegated-agent ownership is unavailable.'
+              : ''
+          }`
         }
       )
     );

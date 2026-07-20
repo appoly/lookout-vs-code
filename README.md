@@ -61,12 +61,15 @@ them.
   Agents template action appears only after at least one template is configured.
 - **Review** — open each session's Git changes as native diffs against its
   launch commit, grouped by worktree with branch-switch warnings and separately
-  classified plans and docs. Diagnostics, Tasks, Test Explorer, debugging,
-  Source Control, recent images, and a local browser stay VS Code-owned
-  surfaces, one step away. Bounded Git/diagnostic evidence and an explicit
-  native Task-backed verification run make ready/failed/stale claims visible
-  without parsing terminal output. Workspace Changes keeps only the useful
-  **Diff evidence** summary above the changed files.
+  classified plans and docs. If one agent creates linked worktrees for
+  delegated work, Review discovers each new physical worktree and labels it
+  separately without claiming file-level child-agent authorship. Diagnostics,
+  Tasks, Test Explorer, debugging, Source Control, recent images, and a local
+  browser stay VS Code-owned surfaces, one step away. Bounded Git/diagnostic
+  evidence and an explicit native Task-backed verification run make
+  ready/failed/stale claims visible without parsing terminal output. Workspace
+  Changes keeps only the useful **Diff evidence** summary above the changed
+  files.
 - **Usage Limits** — show authoritative Codex and Claude account windows and
   reset times. Unknown, stale, unsupported, and signed-out states stay distinct
   from zero usage.
@@ -241,7 +244,9 @@ stores and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
   never claimed as the work of one specific agent. Use isolated worktrees when
   per-agent attribution matters.
 - Provider-owned delegated agents are represented as lifecycle state, not as
-  separate terminal panes.
+  separate terminal panes. New linked worktrees they create are shown in Review,
+  but provider hooks do not expose a reliable delegated-agent-to-worktree
+  mapping, so attribution remains at the physical-worktree level.
 - Virtual workspaces such as `vscode.dev` are unsupported because Lookout needs
   native terminals, filesystem paths, and Git processes.
 - Live coordination is one-profile, one-execution-host only. It can coordinate

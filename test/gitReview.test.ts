@@ -7,10 +7,12 @@ import test from 'node:test';
 import {
   captureGitBaseline,
   excludeWorkspaceArtifacts,
+  listGitWorktrees,
   listUncommittedChanges,
   listWorkspaceChanges,
   parseNameStatus,
   parseNullList,
+  parseWorktreeList,
   readGitWorktreeState,
   readBaselineFile
 } from '../src/gitReview';
@@ -40,6 +42,32 @@ test('removes discovered plans and docs from ordinary workspace changes', () => 
       new Set(['/repo/docs/plan.md'])
     ),
     [changes[0]]
+  );
+});
+
+test('parses linked and detached worktrees from porcelain output', () => {
+  assert.deepEqual(
+    parseWorktreeList(
+      [
+        'worktree /repo',
+        'HEAD 1111111',
+        'branch refs/heads/main',
+        '',
+        'worktree /repo worktree',
+        'HEAD 2222222',
+        'detached',
+        '',
+        ''
+      ].join('\0')
+    ),
+    [
+      { repoRoot: path.normalize('/repo'), commit: '1111111', branch: 'main' },
+      {
+        repoRoot: path.normalize('/repo worktree'),
+        commit: '2222222',
+        branch: 'HEAD'
+      }
+    ]
   );
 });
 
@@ -92,6 +120,23 @@ test('captures a Git baseline and lists working tree changes', async () => {
     assert.equal(state.branch, 'agent/second-branch');
     assert.equal(state.repoRoot, directory);
     assert.equal(state.repositoryName, path.basename(directory));
+
+    const linked = `${directory}-linked`;
+    git(directory, ['worktree', 'add', '-qb', 'agent/linked', linked]);
+    try {
+      assert.deepEqual(
+        (await listGitWorktrees(directory)).map((worktree) => ({
+          repoRoot: worktree.repoRoot,
+          branch: worktree.branch
+        })),
+        [
+          { repoRoot: directory, branch: 'agent/second-branch' },
+          { repoRoot: linked, branch: 'agent/linked' }
+        ]
+      );
+    } finally {
+      git(directory, ['worktree', 'remove', '--force', linked]);
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

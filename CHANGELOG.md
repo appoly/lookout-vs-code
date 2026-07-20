@@ -64,7 +64,9 @@
   bar, notifications, and an optional volume-controlled attention bell.
 - Review Git changes against each session's launch baseline in native diffs,
   grouped by worktree with branch-switch warnings and separately classified
-  plans and documentation.
+  plans and documentation. Discover linked worktrees created while one open
+  agent delegates work, while keeping attribution at the physical-worktree
+  boundary.
 - Open native diagnostics, Tasks, Test Explorer, debugging, Source Control,
   images, and browser surfaces from the Review view.
 - Show authoritative Codex and Claude account usage windows while keeping

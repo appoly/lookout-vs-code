@@ -115,9 +115,11 @@ E. REVIEW VIEW (~15 min)
  19. Branch-switch honesty: git checkout -b other after launch ->
      group shows "launch-branch -> other", warning icon, stale-
      baseline wording.
- 20. Cross-worktree discovery: git worktree add outside the VS Code
-     workspace, launch an agent there -> its changes and artifacts
-     appear with canonical path labels.
+ 20. Cross-worktree discovery: with one Claude session open, have it
+     create a linked worktree outside the VS Code workspace and delegate
+     work there without launching another Lookout session. Its changes
+     and artifacts appear as a separate "delegated worktree" group with
+     canonical path labels and worktree-level (not child-agent) attribution.
  21. Files changed since an open agent launched and matching
      lookout.review.artifactGlobs appear under that worktree's agent
      labels in Plans & Docs and are EXCLUDED from Workspace Changes.

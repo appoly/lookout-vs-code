@@ -25,6 +25,12 @@ export interface GitWorktreeState {
   readonly branch: string;
 }
 
+export interface GitWorktreeRegistration {
+  readonly repoRoot: string;
+  readonly commit: string;
+  readonly branch: string;
+}
+
 export async function captureGitBaseline(
   cwd: string
 ): Promise<GitBaseline | undefined> {
@@ -63,6 +69,59 @@ export async function readGitWorktreeState(
     commit: commit.trim(),
     branch: branch.trim()
   };
+}
+
+/**
+ * Lists every physical worktree registered with the repository containing
+ * `cwd`. Claude and other providers can create these for delegated agents
+ * without creating another Lookout terminal session.
+ */
+export async function listGitWorktrees(
+  cwd: string
+): Promise<GitWorktreeRegistration[]> {
+  const output = await runGitText(cwd, [
+    'worktree',
+    'list',
+    '--porcelain',
+    '-z'
+  ]);
+  return parseWorktreeList(output);
+}
+
+export function parseWorktreeList(output: string): GitWorktreeRegistration[] {
+  const records: GitWorktreeRegistration[] = [];
+  let repoRoot: string | undefined;
+  let commit: string | undefined;
+  let branch = 'HEAD';
+
+  const finish = (): void => {
+    if (repoRoot && commit) {
+      records.push({ repoRoot: path.normalize(repoRoot), commit, branch });
+    }
+    repoRoot = undefined;
+    commit = undefined;
+    branch = 'HEAD';
+  };
+
+  for (const field of output.split('\0')) {
+    if (field === '') {
+      finish();
+    } else if (field.startsWith('worktree ')) {
+      // Be tolerant of output without the optional blank record separator.
+      if (repoRoot) {
+        finish();
+      }
+      repoRoot = field.slice('worktree '.length);
+    } else if (field.startsWith('HEAD ')) {
+      commit = field.slice('HEAD '.length);
+    } else if (field.startsWith('branch ')) {
+      branch = field.slice('branch '.length).replace(/^refs\/heads\//, '');
+    } else if (field === 'detached') {
+      branch = 'HEAD';
+    }
+  }
+  finish();
+  return records;
 }
 
 export async function listWorkspaceChanges(
