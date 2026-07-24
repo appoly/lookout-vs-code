@@ -251,6 +251,8 @@ export class ReviewTreeProvider
   private worktreeRefreshTimer: NodeJS.Timeout | undefined;
   private initialized = false;
   private visible = true;
+  private rendered = false;
+  private populated = false;
   public readonly onDidChangeTreeData = this.changedEmitter.event;
   public readonly onDidChange = this.contentChangedEmitter.event;
 
@@ -338,9 +340,28 @@ export class ReviewTreeProvider
     this.reconcileVerificationContexts();
     this.refreshRuntime();
     if (this.visible) {
+      this.populated = true;
       await this.refresh();
       this.startWorktreePolling();
+    } else {
+      // The view may already have rendered while initialization was in flight.
+      this.ensurePopulated();
     }
+  }
+
+  /**
+   * Populates the view once, without depending on a single visibility event
+   * arriving. `getChildren` only runs when the view genuinely renders, so
+   * pairing it with initialization covers both orderings while still doing no
+   * Git work for a view the user never opens.
+   */
+  private ensurePopulated(): void {
+    if (!this.initialized || !this.rendered || this.populated) {
+      return;
+    }
+    this.populated = true;
+    this.startWorktreePolling();
+    this.runBackground('initial-refresh', () => this.refresh());
   }
 
   public setVisible(visible: boolean): void {
@@ -365,6 +386,8 @@ export class ReviewTreeProvider
 
   public getChildren(element?: ReviewTreeItem): ReviewTreeItem[] {
     if (!element) {
+      this.rendered = true;
+      this.ensurePopulated();
       const groups = [
         new ReviewTreeItem('group', 'Workspace Changes', {
           group: 'changes',

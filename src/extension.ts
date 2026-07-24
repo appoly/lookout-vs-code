@@ -83,6 +83,13 @@ export async function activate(
   const reviewTreeView = vscode.window.createTreeView('lookout.review', {
     treeDataProvider: reviewTree
   });
+  // Subscribe before sampling `visible`. A freshly created tree view reports
+  // false until it renders, and the render event must not land in a gap before
+  // this listener exists: losing it leaves the view unpopulated and unpolled
+  // until the user manually toggles the container.
+  const reviewVisibility = reviewTreeView.onDidChangeVisibility((event) =>
+    reviewTree.setVisible(event.visible)
+  );
   reviewTree.setVisible(reviewTreeView.visible);
   const usage = new UsageManager(context, sessions);
   const usageTree = new UsageTreeProvider(usage, sessions);
@@ -144,9 +151,7 @@ export async function activate(
     doctorOutput,
     runtimeLog,
     reviewTreeView,
-    reviewTreeView.onDidChangeVisibility((event) =>
-      reviewTree.setVisible(event.visible)
-    ),
+    reviewVisibility,
     vscode.workspace.registerTextDocumentContentProvider(
       'lookout-baseline',
       reviewTree
