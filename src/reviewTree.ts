@@ -247,6 +247,7 @@ export class ReviewTreeProvider
   private evidenceGeneration = 0;
   private persistChain: Promise<void> = Promise.resolve();
   private refreshTimer: NodeJS.Timeout | undefined;
+  private changesRefreshTimer: NodeJS.Timeout | undefined;
   private worktreeRefreshTimer: NodeJS.Timeout | undefined;
   private initialized = false;
   private visible = true;
@@ -262,7 +263,15 @@ export class ReviewTreeProvider
       '**/*.{png,jpg,jpeg,gif,webp}'
     );
     const planWatcher = vscode.workspace.createFileSystemWatcher('**/*.{md,mdx,txt}');
-    this.watchers = [imageWatcher, planWatcher];
+    // Terminal agents edit files on disk directly, which produces no
+    // onDidSaveTextDocument event and matches neither watcher above. Without a
+    // general watcher, Workspace Changes only self-corrects on the 10s poll, so
+    // source-file edits look stale until a manual refresh. A source edit can
+    // only move git state, so these events take the cheap refreshChanges path
+    // rather than the full findFiles refresh. String globs only cover workspace
+    // folders; agents in worktrees outside the workspace still rely on the poll.
+    const codeWatcher = vscode.workspace.createFileSystemWatcher('**/*');
+    this.watchers = [imageWatcher, planWatcher, codeWatcher];
     // Agents stream writes into plan/doc files; every fs event running an
     // un-debounced refresh (findFiles plus git per worktree) would keep the
     // whole pipeline busy. The 250 ms debounce coalesces the bursts.
@@ -272,6 +281,9 @@ export class ReviewTreeProvider
     planWatcher.onDidCreate(() => this.scheduleRefresh());
     planWatcher.onDidChange(() => this.scheduleRefresh());
     planWatcher.onDidDelete(() => this.scheduleRefresh());
+    codeWatcher.onDidCreate((uri) => this.scheduleChangesRefreshFor(uri));
+    codeWatcher.onDidChange((uri) => this.scheduleChangesRefreshFor(uri));
+    codeWatcher.onDidDelete((uri) => this.scheduleChangesRefreshFor(uri));
     this.disposables.push(
       sessions.onDidSelectSession(() => this.scheduleRefresh()),
       sessions.onDidChange(() => {
@@ -507,6 +519,27 @@ export class ReviewTreeProvider
     }
   }
 
+  private scheduleChangesRefreshFor(uri: vscode.Uri): void {
+    // The general watcher fires on build output and dependency churn that never
+    // shows up as a workspace change; skip those so agent write bursts don't
+    // pin the refresh pipeline. Mirrors the excludes used by refresh()'s
+    // findFiles calls.
+    if (/(?:^|[/\\])(?:node_modules|\.git|out|dist)(?:[/\\]|$)/.test(uri.path)) {
+      return;
+    }
+    this.invalidateEvidenceForUri(uri);
+    if (!this.visible) {
+      return;
+    }
+    if (this.changesRefreshTimer) {
+      clearTimeout(this.changesRefreshTimer);
+    }
+    this.changesRefreshTimer = setTimeout(() => {
+      this.changesRefreshTimer = undefined;
+      this.runBackground('watch-refresh', () => this.refreshChanges());
+    }, 250);
+  }
+
   private scheduleRefresh(): void {
     if (!this.visible) {
       return;
@@ -713,6 +746,9 @@ export class ReviewTreeProvider
   public dispose(): void {
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
+    }
+    if (this.changesRefreshTimer) {
+      clearTimeout(this.changesRefreshTimer);
     }
     this.stopWorktreePolling();
     this.verification?.dispose();
