@@ -2,6 +2,8 @@
 
 ## 1.0.0 — Unreleased
 
+- Show Codex, Claude, or Custom directly on every local and cross-window agent
+  row while preserving status icons for activity and attention.
 - Clear stale attention indicators as soon as updates are read, prefer unread
   activity during navigation, synchronize the newest Claude usage observation
   across windows, and discard quota windows after their reset time.
