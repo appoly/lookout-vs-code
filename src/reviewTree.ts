@@ -14,6 +14,7 @@ import {
   type WorkspaceChange
 } from './gitReview';
 import type { SessionManager } from './sessionManager';
+import { anchoredSessions } from './reviewAnchor';
 import {
   boundedReviewItemLimit,
   normalizeReviewGlobs,
@@ -1371,7 +1372,12 @@ async function loadWorktreeChanges(
         // One physical worktree has one review context. Keep the earliest valid
         // launch baseline stable while more sessions attach; switching to the
         // newest session would make already-reviewed changes disappear.
-        const session = sorted[0];
+        //
+        // Closed sessions must never anchor a live context; see anchoredSessions.
+        const anchored = anchoredSessions(sorted, (sessionId) =>
+          sessions.isOpen(sessionId)
+        );
+        const session = anchored[0];
         const linkedRegistration = 'registration' in entry
           ? entry.registration
           : undefined;
@@ -1412,12 +1418,12 @@ async function loadWorktreeChanges(
         return {
           key,
           session,
-          sessions: sorted,
+          sessions: anchored,
           baseline,
           linked: entry.linked,
-          startedAt: linkedRegistration?.createdAt ?? sorted[0].createdAt,
-          agentLabels: sorted.map((attached) => attached.label),
-          agentDetails: sorted.map(
+          startedAt: linkedRegistration?.createdAt ?? anchored[0].createdAt,
+          agentLabels: anchored.map((attached) => attached.label),
+          agentDetails: anchored.map(
             (attached) => `${attached.label} (${attached.kind})`
           ),
           changes,
