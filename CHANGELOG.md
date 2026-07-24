@@ -2,6 +2,12 @@
 
 ## 1.0.0 — Unreleased
 
+- Populate Review on first render so Workspace Changes, Problems, Running, and
+  Plans & Docs are no longer left empty and unpolled when the view is already
+  open as the extension activates.
+- Anchor each Review context on its earliest open agent, so a closed session can
+  no longer impose a stale baseline branch, an inflated change count, or
+  unrelated documents as agent artifacts.
 - Show Codex, Claude, or Custom directly on every local and cross-window agent
   row while preserving status icons for activity and attention.
 - Clear stale attention indicators as soon as updates are read, prefer unread

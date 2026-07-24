@@ -14,6 +14,7 @@ import {
   type WorkspaceChange
 } from './gitReview';
 import type { SessionManager } from './sessionManager';
+import { anchoredSessions } from './reviewAnchor';
 import {
   boundedReviewItemLimit,
   normalizeReviewGlobs,
@@ -251,6 +252,8 @@ export class ReviewTreeProvider
   private worktreeRefreshTimer: NodeJS.Timeout | undefined;
   private initialized = false;
   private visible = true;
+  private rendered = false;
+  private populated = false;
   public readonly onDidChangeTreeData = this.changedEmitter.event;
   public readonly onDidChange = this.contentChangedEmitter.event;
 
@@ -338,9 +341,28 @@ export class ReviewTreeProvider
     this.reconcileVerificationContexts();
     this.refreshRuntime();
     if (this.visible) {
+      this.populated = true;
       await this.refresh();
       this.startWorktreePolling();
+    } else {
+      // The view may already have rendered while initialization was in flight.
+      this.ensurePopulated();
     }
+  }
+
+  /**
+   * Populates the view once, without depending on a single visibility event
+   * arriving. `getChildren` only runs when the view genuinely renders, so
+   * pairing it with initialization covers both orderings while still doing no
+   * Git work for a view the user never opens.
+   */
+  private ensurePopulated(): void {
+    if (!this.initialized || !this.rendered || this.populated) {
+      return;
+    }
+    this.populated = true;
+    this.startWorktreePolling();
+    this.runBackground('initial-refresh', () => this.refresh());
   }
 
   public setVisible(visible: boolean): void {
@@ -365,6 +387,8 @@ export class ReviewTreeProvider
 
   public getChildren(element?: ReviewTreeItem): ReviewTreeItem[] {
     if (!element) {
+      this.rendered = true;
+      this.ensurePopulated();
       const groups = [
         new ReviewTreeItem('group', 'Workspace Changes', {
           group: 'changes',
@@ -1348,7 +1372,12 @@ async function loadWorktreeChanges(
         // One physical worktree has one review context. Keep the earliest valid
         // launch baseline stable while more sessions attach; switching to the
         // newest session would make already-reviewed changes disappear.
-        const session = sorted[0];
+        //
+        // Closed sessions must never anchor a live context; see anchoredSessions.
+        const anchored = anchoredSessions(sorted, (sessionId) =>
+          sessions.isOpen(sessionId)
+        );
+        const session = anchored[0];
         const linkedRegistration = 'registration' in entry
           ? entry.registration
           : undefined;
@@ -1389,12 +1418,12 @@ async function loadWorktreeChanges(
         return {
           key,
           session,
-          sessions: sorted,
+          sessions: anchored,
           baseline,
           linked: entry.linked,
-          startedAt: linkedRegistration?.createdAt ?? sorted[0].createdAt,
-          agentLabels: sorted.map((attached) => attached.label),
-          agentDetails: sorted.map(
+          startedAt: linkedRegistration?.createdAt ?? anchored[0].createdAt,
+          agentLabels: anchored.map((attached) => attached.label),
+          agentDetails: anchored.map(
             (attached) => `${attached.label} (${attached.kind})`
           ),
           changes,
