@@ -36,6 +36,8 @@ The Lookout sidebar groups agents in the current workspace separately from live
 agents in other windows, with review evidence, plans, and usage limits alongside
 them.
 
+![The Lookout sidebar showing three agents under Current Workspace with their repository, branch, and status, a live agent from another window under Live in Other Windows, a Review view listing Workspace Changes for the attached agents alongside Problems, Running, and Plans and Docs, and a Usage Limits view with per-agent context plus Codex and Claude quota windows](assets/screenshots/lookout-overview.png)
+
 ## What Lookout adds
 
 - **Agents** — launch Codex, Claude Code, or a custom command in a named native
