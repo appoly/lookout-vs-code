@@ -148,6 +148,25 @@ suite('Lookout extension-host integration', () => {
     );
   });
 
+  test('shows each agent provider directly on Agents rows', () => {
+    const descriptions = (['codex', 'claude', 'custom'] as const).map(
+      (kind) => new SessionTreeItem({ ...session, kind }).description
+    );
+    assert.deepEqual(
+      descriptions.map((description) => String(description).split(' · ')[0]),
+      ['Codex', 'Claude', 'Custom']
+    );
+
+    const remoteWindow = coordinatedWindow([
+      { ...coordinatedSession('remote-claude', 'running', false, 1), kind: 'claude' }
+    ]);
+    const remoteRow = new LiveSessionTreeItem(
+      remoteWindow,
+      remoteWindow.sessions[0]
+    );
+    assert.match(String(remoteRow.description), /^Claude · Remote Workspace · /);
+  });
+
   test('projects current metadata into host-local global history', async () => {
     const record = await waitForValue(
       () => api.globalHistory

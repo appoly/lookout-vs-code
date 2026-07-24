@@ -8,6 +8,7 @@ import type { CoordinationService } from './coordinationService';
 import { dedupeCoordinatedSessions } from './historyQuery';
 import type { SessionEvent } from './sessionEvents';
 import type { SessionManager } from './sessionManager';
+import { providerDisplayName } from './sessionNaming';
 import {
   normalizeSessionOrder,
   reorderSessionIds
@@ -80,7 +81,7 @@ export class SessionTreeItem extends vscode.TreeItem {
     this.description = sessionDescription(session);
     this.tooltip = [
       session.label,
-      `Agent: ${session.kind}`,
+      `Provider: ${providerDisplayName(session.kind)}`,
       `Status: ${session.status}`,
       `Directory: ${session.cwd}`,
       ...(session.baseline ? [`Branch: ${session.baseline.branch}`] : []),
@@ -109,7 +110,9 @@ export class SessionTreeItem extends vscode.TreeItem {
       arguments: [this]
     };
     this.accessibilityInformation = {
-      label: `${session.label}, ${session.status}${session.unread ? ', unread' : ''}`
+      label: `${session.label}, ${providerDisplayName(session.kind)}, ${session.status}${
+        session.unread ? ', unread' : ''
+      }`
     };
   }
 }
@@ -122,7 +125,11 @@ export class LiveSessionTreeItem extends vscode.TreeItem {
     super(coordinatedSession.label, vscode.TreeItemCollapsibleState.None);
     this.id = `live-${coordinatedWindow.windowId}-${coordinatedSession.sessionId}`;
     this.contextValue = 'lookout.liveSession';
-    this.description = `${coordinatedWindow.workspaceLabel} · ${coordinatedSession.status}${coordinatedSession.unread ? ' · unread' : ''}`;
+    this.description = `${providerDisplayName(coordinatedSession.kind)} · ${
+      coordinatedWindow.workspaceLabel
+    } · ${coordinatedSession.status}${
+      coordinatedSession.unread ? ' · unread' : ''
+    }`;
     this.iconPath = coordinatedSession.status === 'attention' &&
       coordinatedSession.unread
       ? new vscode.ThemeIcon(
@@ -133,7 +140,7 @@ export class LiveSessionTreeItem extends vscode.TreeItem {
     this.tooltip = [
       coordinatedSession.label,
       `Owning project: ${coordinatedWindow.workspaceLabel}`,
-      `Provider: ${coordinatedSession.kind}`,
+      `Provider: ${providerDisplayName(coordinatedSession.kind)}`,
       `Live status: ${coordinatedSession.status}`,
       `Execution host: ${hostLabel(coordinatedWindow.hostKind)}`,
       `Lease expires: ${new Date(coordinatedWindow.leaseExpiresAt).toLocaleTimeString()}`,
@@ -145,7 +152,9 @@ export class LiveSessionTreeItem extends vscode.TreeItem {
       arguments: [this]
     };
     this.accessibilityInformation = {
-      label: `${coordinatedSession.label}, ${coordinatedWindow.workspaceLabel}, live ${coordinatedSession.status}`
+      label: `${coordinatedSession.label}, ${providerDisplayName(
+        coordinatedSession.kind
+      )}, ${coordinatedWindow.workspaceLabel}, live ${coordinatedSession.status}`
     };
   }
 }
@@ -366,10 +375,11 @@ export class SessionStatusBar implements vscode.Disposable {
 function sessionDescription(session: AgentSession): string {
   const directory = path.basename(session.cwd);
   const unread = session.unread ? '● ' : '';
+  const provider = providerDisplayName(session.kind);
   const detail = statusLabel(session.status);
   const branch = session.baseline?.branch ? ` · ${session.baseline.branch}` : '';
   const tokens = sessionTokenSummary(session);
-  return `${unread}${directory}${branch} · ${detail}${
+  return `${unread}${provider} · ${directory}${branch} · ${detail}${
     tokens ? ` · ${tokens}` : ''
   }`;
 }
